@@ -11,6 +11,7 @@ publish.workspace = true
 [dependencies]
 model-provider = { workspace = true }
 model-http = { workspace = true }
+speech-provider = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 

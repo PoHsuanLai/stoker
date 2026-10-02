@@ -2,6 +2,7 @@
 //! interaction.
 
 use model_provider::{ModelName, ProviderError, TurnEnd, TurnEvent};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::RequestPrint;
@@ -64,41 +65,53 @@ pub enum CassetteError {
 impl Cassette {
     /// The file's text: the header, then one line per interaction.
     pub fn to_jsonl(&self) -> String {
-        let mut out = String::new();
-        // Serialising these types cannot fail: no map has non-string keys.
-        out.push_str(&serde_json::to_string(&self.header).unwrap_or_default());
-        out.push('\n');
-        for interaction in &self.interactions {
-            out.push_str(&serde_json::to_string(interaction).unwrap_or_default());
-            out.push('\n');
-        }
-        out
+        write_jsonl(&self.header, &self.interactions)
     }
 
     pub fn from_jsonl(text: &str) -> Result<Cassette, CassetteError> {
-        let mut lines = text
-            .lines()
-            .enumerate()
-            .filter(|(_, l)| !l.trim().is_empty());
-        let (_, first) = lines.next().ok_or(CassetteError::Empty)?;
-        let header: CassetteHeader =
-            serde_json::from_str(first).map_err(|_| CassetteError::BadLine { line: 1 })?;
-        if header.vocab != CassetteVersion::CURRENT {
-            return Err(CassetteError::Version {
-                found: header.vocab,
-                want: CassetteVersion::CURRENT,
-            });
-        }
-        let interactions = lines
-            .map(|(at, line)| {
-                serde_json::from_str(line).map_err(|_| CassetteError::BadLine {
-                    line: u32::try_from(at + 1).unwrap_or(u32::MAX),
-                })
-            })
-            .collect::<Result<Vec<Interaction>, _>>()?;
+        let (header, interactions) = read_jsonl(text)?;
         Ok(Cassette {
             header,
             interactions,
         })
     }
+}
+
+/// The JSON Lines text of a header and its lines, shared by the chat and speech cassettes.
+pub(crate) fn write_jsonl<I: Serialize>(header: &CassetteHeader, lines: &[I]) -> String {
+    let mut out = String::new();
+    // Serialising these types cannot fail: no map has non-string keys.
+    out.push_str(&serde_json::to_string(header).unwrap_or_default());
+    out.push('\n');
+    for line in lines {
+        out.push_str(&serde_json::to_string(line).unwrap_or_default());
+        out.push('\n');
+    }
+    out
+}
+
+pub(crate) fn read_jsonl<I: DeserializeOwned>(
+    text: &str,
+) -> Result<(CassetteHeader, Vec<I>), CassetteError> {
+    let mut lines = text
+        .lines()
+        .enumerate()
+        .filter(|(_, l)| !l.trim().is_empty());
+    let (_, first) = lines.next().ok_or(CassetteError::Empty)?;
+    let header: CassetteHeader =
+        serde_json::from_str(first).map_err(|_| CassetteError::BadLine { line: 1 })?;
+    if header.vocab != CassetteVersion::CURRENT {
+        return Err(CassetteError::Version {
+            found: header.vocab,
+            want: CassetteVersion::CURRENT,
+        });
+    }
+    let items = lines
+        .map(|(at, line)| {
+            serde_json::from_str(line).map_err(|_| CassetteError::BadLine {
+                line: u32::try_from(at + 1).unwrap_or(u32::MAX),
+            })
+        })
+        .collect::<Result<Vec<I>, _>>()?;
+    Ok((header, items))
 }
