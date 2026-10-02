@@ -2,6 +2,8 @@
 resolver = "3"
 members = [
   "crates/cua-action",
+  "crates/vision-prep",
+  "crates/model-provider",
 ]
 
 [workspace.package]
@@ -15,13 +17,27 @@ publish = false
 
 [workspace.dependencies]
 cua-action          = { path = "crates/cua-action" }
+vision-prep         = { path = "crates/vision-prep" }
+model-provider      = { path = "crates/model-provider" }
+cua-parse           = { path = "crates/cua-parse" }
+cua-vendors         = { path = "crates/cua-vendors" }
+cua-session         = { path = "crates/cua-session" }
+model-replay        = { path = "crates/model-replay" }
+model-catalog       = { path = "crates/model-catalog" }
+engine-supervisor   = { path = "crates/engine-supervisor" }
+model-http          = { path = "crates/model-http" }
+model-openai-compat = { path = "crates/model-openai-compat" }
 
 # From quire's pinned block (`docs/workspace-deps.toml`) and the adopted lines of SPEC.md 1.4,
 # copied verbatim: only the lines stoker names itself.
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }
-keyboard-types = { version = "0.7", features = ["serde"] }
 serde_json = "1"
+toml = "1"
+keyboard-types = { version = "0.7", features = ["serde"] }
+base64 = "0.22"
+image = { version = "0.25.6", default-features = false, features = ["png", "jpeg"] }
+fast_image_resize = "6.1.0"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

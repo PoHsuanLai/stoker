@@ -1,0 +1,26 @@
+[package]
+name = "vision-prep"
+description = "Image preparation for vision models: resize rules, token estimates, and the FrameMap between window, image and grid coordinates."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+cua-action = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+image = { workspace = true, optional = true }
+fast_image_resize = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true
+
+[features]
+# CPU resize and encode. Off by default so the pure crates never reach the image stack.
+pixels = ["dep:image", "dep:fast_image_resize"]

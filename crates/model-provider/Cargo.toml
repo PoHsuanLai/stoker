@@ -1,0 +1,27 @@
+[package]
+name = "model-provider"
+description = "One trait for chat, tool-calling, vision and computer-use models: requests, streaming events, capabilities and errors."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+cua-action = { workspace = true }
+vision-prep = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+base64 = { workspace = true }
+
+[dev-dependencies]
+
+
+[lints]
+workspace = true
+
+[features]
+# `ScriptedProvider`: a provider that plays scripted turns and records every request.
+testing = []
