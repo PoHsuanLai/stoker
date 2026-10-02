@@ -1,0 +1,20 @@
+[package]
+name = "speech-vad"
+description = "Voice-activity helpers that need no model: the energy gate, the framer, the level meter and the endpointing machine."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+speech-provider = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

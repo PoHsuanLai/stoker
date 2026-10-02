@@ -244,6 +244,8 @@ dependencies = [
  "cua-action",
  "model-provider",
  "serde",
+ "serde_json",
+ "speech-provider",
  "thiserror",
  "toml",
  "vision-prep",
@@ -407,6 +409,38 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a219298ac11a56ea9a6d2120044824d6f01aeb034955e7af7bc16858527deea"
 
 [[package]]
+name = "speech-host-client"
+version = "0.1.0"
+dependencies = [
+ "model-provider",
+ "serde",
+ "serde_json",
+ "speech-provider",
+]
+
+[[package]]
+name = "speech-provider"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "model-provider",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "zeroize",
+]
+
+[[package]]
+name = "speech-vad"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "speech-provider",
+ "thiserror",
+]
+
+[[package]]
 name = "syn"
 version = "3.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -505,6 +539,12 @@ name = "winnow"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
+
+[[package]]
+name = "zeroize"
+version = "1.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e13c156562582aa81c60cb29407084cdb54c4164760106ab78e6c5b0858cf64e"
 
 [[package]]
 name = "zlib-rs"
