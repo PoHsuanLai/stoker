@@ -10,6 +10,8 @@ members = [
   "crates/model-replay",
   "crates/model-catalog",
   "crates/engine-supervisor",
+  "crates/model-http",
+  "crates/model-openai-compat",
 ]
 
 [workspace.package]

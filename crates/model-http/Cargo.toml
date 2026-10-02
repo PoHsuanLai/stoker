@@ -1,0 +1,19 @@
+[package]
+name = "model-http"
+description = "HTTP for model endpoints over TCP, Unix sockets and TLS: targets, auth, a pure SSE decoder, and the client seam."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true
