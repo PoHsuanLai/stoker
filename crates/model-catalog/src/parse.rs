@@ -28,6 +28,10 @@ pub enum CatalogError {
     SpeechDirectionMismatch { role: CatalogKind },
     #[error("the entry has chat capability fields but no chat role")]
     ChatFieldsWithoutChatRole,
+    #[error("a chat role needs the `sampling` table")]
+    ChatRoleWithoutSampling,
+    #[error("the `sampling` table needs a chat role")]
+    SamplingWithoutChatRole,
     #[error("a vLLM engine needs a GPU memory estimate; the entry's is all zeros")]
     VllmWithoutVram,
 }
@@ -78,6 +82,7 @@ fn check_speech(entry: &ModelEntry) -> Result<(), CatalogError> {
 fn check_chat(entry: &ModelEntry, text: &str) -> Result<(), CatalogError> {
     let chat_role = entry.roles.iter().any(|r| r.speech_dir().is_none());
     match (chat_role, &entry.caps) {
+        (false, _) if entry.sampling.is_some() => Err(CatalogError::SamplingWithoutChatRole),
         (false, Some(_)) => Err(CatalogError::ChatFieldsWithoutChatRole),
         (false, None) => Ok(()),
         (true, caps) => {
@@ -87,6 +92,9 @@ fn check_chat(entry: &ModelEntry, text: &str) -> Result<(), CatalogError> {
             let caps = caps.as_ref().unwrap_or(&read);
             if caps.max_output > caps.context {
                 return Err(CatalogError::OutputExceedsContext);
+            }
+            if entry.sampling.is_none() {
+                return Err(CatalogError::ChatRoleWithoutSampling);
             }
             Ok(())
         }

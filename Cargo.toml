@@ -11,6 +11,9 @@ members = [
   "crates/model-catalog",
   "crates/engine-supervisor",
   "crates/model-http",
+  "crates/model-wire",
+  "crates/model-extract",
+  "crates/genai-names",
   "crates/model-openai-compat",
   "crates/speech-provider",
   "crates/speech-vad",
@@ -44,6 +47,9 @@ model-replay        = { path = "crates/model-replay" }
 model-catalog       = { path = "crates/model-catalog" }
 engine-supervisor   = { path = "crates/engine-supervisor" }
 model-http          = { path = "crates/model-http" }
+model-wire          = { path = "crates/model-wire" }
+model-extract       = { path = "crates/model-extract" }
+genai-names         = { path = "crates/genai-names" }
 model-openai-compat = { path = "crates/model-openai-compat" }
 speech-provider     = { path = "crates/speech-provider" }
 speech-vad          = { path = "crates/speech-vad" }

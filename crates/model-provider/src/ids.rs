@@ -104,3 +104,27 @@ impl fmt::Debug for JsonText {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct SchemaText(pub JsonText);
+
+/// A model's signature over a thought, to be handed back unchanged (Anthropic `signature`,
+/// OpenRouter `reasoning_details`). Opaque.
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SignatureText(pub String);
+
+impl fmt::Debug for SignatureText {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SignatureText(<{} bytes>)", self.0.len())
+    }
+}
+
+/// A thought the provider returned encrypted ("redacted thinking"), to be handed back unchanged.
+/// Opaque.
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct OpaqueText(pub String);
+
+impl fmt::Debug for OpaqueText {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "OpaqueText(<{} bytes>)", self.0.len())
+    }
+}

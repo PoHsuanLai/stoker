@@ -19,15 +19,18 @@ trait), section 6 (copy the recipe).
 | --- | --- | --- |
 | `cua-action` | the provider-neutral action vocabulary: coordinate spaces (`CoordSpace`, `WindowSpace`, `ImageSpace`, `GridSpace`), `Point`/`Size`/`Rect`/`Length`, `Target`, `CuaAction<S>`, `ActionClass`, keys and chords, bounded text, dialect names (`CuaDialect`, `ModelSpace`) | none |
 | `vision-prep` | `ResizeRule`, `fit`, `image_tokens`, `FrameMap`, `RawFrame`, `prepare` (feature `pixels`) | none; `pixels` is CPU only |
-| `model-provider` | `TurnRequest`, `Message`, `Part`, `ToolSpec`, `TurnEvent`, `TurnSink`, `Caps`, the `Provider` trait, `ProviderError`; feature `testing`: `ScriptedProvider` | none |
+| `model-provider` | `TurnRequest`, `Message`, `Part`, `ToolSpec`, `TurnEvent`, `TurnSink`, `Caps`, the `Provider` trait, `ProviderError`; the controls (`Sampling`, `ToolParallelism`, `EngineExtras`, `ThoughtSeal`, `Knob`); `embed` (`Embedder`, `EmbedTurn`, `EmbedRole`, `plan_batches`); `shape` (`Shape`, `Extract`, the schema, GBNF and regex conversions); `retry` (`RetryClass`, `next_wait`, `Retrying`); `sequence` (`check`); feature `testing`: `ScriptedProvider` | none |
 | `cua-parse` | `parse_text`, `parse_tool_calls`, `Parsed`, `Dropped`, `ParseLimits` | none |
 | `cua-vendors` | the `WireCodec` trait and one codec per `WireDialect` (formerly `cua-wire`) | none |
 | `cua-session` | `CuaSession`: history window, prompt assembly, parse with one repair, mapping to window space | none |
-| `model-replay` | cassette format, `ReplayProvider`, `RecordingProvider` over a `CassetteSink`; `speech`: speech cassettes (audio as digests), `SpeechReplay`, `RecordingSpeech` | an injected sink |
-| `model-catalog` | `ModelEntry` (chat caps or the `speech` table), `EngineProfile`, `parse_entry`, `merge_catalogs`; the shipped `catalog/*.toml` | none |
+| `model-replay` | cassette format, `ReplayProvider`, `RecordingProvider` over a `CassetteSink`; `wire`: wire cassettes recorded and replayed at the `Transport` seam (`RecordingTransport`, `ReplayTransport`, `ChunkPlan`); `check_sequence`; `speech`: speech cassettes (audio as digests), `SpeechReplay`, `RecordingSpeech` | an injected sink |
+| `model-catalog` | `ModelEntry` (chat caps and `SamplingDefaults`, or the `speech` table), `EngineProfile`, `parse_entry`, `merge_catalogs`; the shipped `catalog/*.toml` | none |
 | `engine-supervisor` | the pure `step` and `budget`; `command` (catalog entry to `UnitSpec`); the seams `EngineHost`, `ReadyProbe`, `GpuProbe`; feature `testing`: fakes | none; the daemon fills the seams |
-| `model-http` | `HttpEndpoint`, `HttpTarget` (Tcp, Unix, Tls), `AuthHeader`, the pure `SseDecoder`, `HttpClient` | yes (the client) |
-| `model-openai-compat` | pure `encode_request` and `StreamDecoder`, plus `OpenAiCompat: Provider`; `audio`: `encode_speech_request`, `encode_transcription`, `PcmDecoder`, and `OpenAiSpeech` (both speech traits) | yes, through `model-http` |
+| `model-http` | `HttpEndpoint` (with `Timeouts` and `ExtraHeader`s), `HttpTarget` (Tcp, Unix, Tls), `AuthHeader`, the pure `SseDecoder` and `NdjsonDecoder`, `ResponseHead`, `BodySink` (head, then chunks), `Exchange`, the `Transport` seam and `HttpClient: Transport` | yes (the transport) |
+| `model-wire` | the wire half of an endpoint: `ChatCodec`, `ChatDecoder`, `EmbedCodec`, `ErrorWire`, `CodecError`, and `Driver<C, T>`, the `Provider` (and `Embedder`) made of a codec and a transport | none (pure over the `Transport` trait) |
+| `model-extract` | structured extraction as a pure machine: `choose` (native constraint, synthetic tool call or prompted), `ExtractSession`, `Extracted`, `ExtractFailure` | none |
+| `genai-names` | the OpenTelemetry GenAI attribute, metric, operation and finish-reason names as constants; zero dependencies; no content attribute exists | none |
+| `model-openai-compat` | the chat-completions codec `OpenAiCodec` (pure `encode_request`, `StreamDecoder`), `Flavor::quirks` (the table of what differs between servers), `OpenAiCompat = Driver<OpenAiCodec, HttpClient>`; `audio`: `encode_speech_request`, `encode_transcription`, `PcmDecoder`, and `OpenAiSpeech` (both speech traits) | none of its own: the HTTP is `model-http`'s `Transport` (the speech provider still holds an `HttpClient`) |
 | `speech-provider` | audio and text types, `SpeechToText`, `TextToSpeech`, `AudioSource`/`AudioSink`, `VoiceActivity`, `SpeechCaps`, the host wire and its framing; feature `testing`: `ScriptedStt`, `ScriptedTts`, `ScriptedVad` | none |
 | `speech-vad` | `EnergyGate`, `Framer`, `level_of`, the `endpoint` machine | none |
 | `speech-host-client` | `SpeechHostClient: SpeechToText` over the host's Unix socket | yes (the socket, when filled) |
@@ -38,28 +41,32 @@ Allowed direct edges (checked by `scripts/check-boundary.sh`; dev-dependencies a
 
 | Crate | May depend on |
 | --- | --- |
-| `cua-action`, `model-http` | nothing of ours |
+| `cua-action`, `model-http`, `genai-names` | nothing of ours |
 | `vision-prep` | `cua-action` |
-| `model-provider` | `cua-action`, `vision-prep` |
+| `model-provider` | `cua-action`, `genai-names`, `vision-prep` |
+| `model-wire` | `model-http`, `model-provider` |
+| `model-extract` | `model-provider` |
 | `cua-parse` | `cua-action`, `model-provider` |
 | `cua-vendors` | `cua-action`, `cua-parse`, `model-provider` |
 | `cua-session` | `cua-action`, `cua-parse`, `cua-vendors`, `model-provider`, `vision-prep` |
-| `model-replay` | `model-provider`, `speech-provider`, `vision-prep` |
+| `model-replay` | `model-http`, `model-provider`, `speech-provider`, `vision-prep` |
 | `model-catalog` | `model-provider`, `speech-provider` |
 | `engine-supervisor` | `model-catalog` |
-| `model-openai-compat` | `model-http`, `model-provider`, `speech-provider` |
+| `model-openai-compat` | `model-http`, `model-provider`, `model-wire`, `speech-provider` |
 | `speech-provider` | `model-provider` |
 | `speech-vad` | `speech-provider` |
 | `speech-host-client` | `model-provider`, `speech-provider` |
 | `speech-vad-silero` (excluded) | `speech-provider`, `speech-vad` |
 | `speech-host` (excluded) | `speech-provider` |
 
-External boundaries: the pure crates (everything but the two io crates) never reach `tokio`,
+External boundaries: the pure crates (everything but `model-http`, the one io crate) never reach `tokio`,
 `hyper`, `hyper-util`, `rustls`, `zbus`, `zvariant`, `reqwest`, `ureq`, `wayland-client`,
 `wayland-backend`, `reis`, `atspi`, `oo7`, `ort`, `fastembed`, `rusqlite`, `notify`,
 `cedar-policy` or `rmcp` (default features); `vision-prep` reaches `image` and `fast_image_resize`
-only through `pixels`. The io crates never reach the second half of that list (a bus, a
-compositor, a database, an inference runtime). No crate reaches a `porter-*` crate. No speech
+only through `pixels`. `model-wire`, `model-extract` and `model-openai-compat` are pure over the `Transport` trait: they
+reach no HTTP stack and no runtime, so when `HyperTransport` lands in `model-http` it sits behind
+a feature that only a daemon turns on, and their rows keep checking default features. `model-http`
+never reaches the second half of that list (a bus, a compositor, a database, an inference runtime). No crate reaches a `porter-*` crate. No speech
 crate reaches an audio device crate (`pipewire`, `libpulse-binding`, `libpulse-simple-binding`,
 `cpal`: capture and playback belong to docket's `voiced`) or a TTS stack with a GPL grapheme
 step (`espeak-rs`, `espeak-ng`, `espeak-ng-sys`, `piper-rs`): text to speech is a separate engine
@@ -68,8 +75,8 @@ excluded crates are not workspace members; `check-boundary.sh` checks them from 
 manifests (their direct edges and the same lists), and they alone may reach `ort` and `sherpa-onnx`.
 
 Downstream, porter's `inferd` takes `cua-action`, `vision-prep`, `model-provider`,
-`cua-session`, `model-catalog`, `engine-supervisor`, `model-http`, `model-openai-compat`,
-`speech-provider` and `speech-host-client` (SPEC.md 1.3, voice.md 2.2); docket's `voiced` takes
+`cua-session`, `model-catalog`, `engine-supervisor`, `model-http`, `model-wire`,
+`model-openai-compat`, `model-extract`, `speech-provider` and `speech-host-client` (SPEC.md 1.3, voice.md 2.2); docket's `voiced` takes
 `speech-vad` and `speech-vad-silero`; porter-infer takes `cua-action` only. cuad, almanac, docket and sill do not name
 stoker.
 
@@ -79,15 +86,18 @@ stoker.
 | --- | --- |
 | `cua-action` | `space` < `geometry`, `target`, `text`, `keys` < `dialect`, `action` |
 | `vision-prep` | `rule` < `frame_map` < `pixels` |
-| `model-provider` | `units`, `ids` < `request` < `caps`, `event` < `provider` < `scripted` (feature `testing`) |
+| `model-provider` | `units`, `ids` < `control`, `request` < `caps`, `event` < `provider` < `embed`, `shape`, `sequence` < `retry` < `scripted` (feature `testing`) |
 | `cua-parse` | `limits` < `outcome` < `parse` |
 | `cua-vendors` | `step_result` < `codec` |
 | `cua-session` | `model` < `session` |
-| `model-replay` | `print` < `cassette` < `provider`, `speech` |
+| `model-replay` | `print` < `cassette` < `sequence` < `provider`, `speech`, `wire` |
 | `model-catalog` | `engine`, `entry` < `parse` |
 | `engine-supervisor` | `state` < `unit`, `budget` < `step` < `host` < `fakes` (feature `testing`) |
-| `model-http` | `target`, `auth` < `sse` < `client` |
-| `model-openai-compat` | `codec` < `provider`; `audio` (`codec` < `provider`) |
+| `model-http` | `target`, `auth`, `head` < `sse`, `ndjson` < `client` < `exchange` |
+| `model-wire` | `codec` < `driver` |
+| `model-extract` | `mode` < `session` |
+| `genai-names` | `lib` |
+| `model-openai-compat` | `quirks`, `codec` < `provider`; `audio` (`codec` < `provider`) |
 | `speech-provider` | `audio`, `text` < `vad`, `stt`, `tts`, `caps` < `host_wire` < `testing` (feature `testing`) |
 | `speech-vad` | `level` < `energy`, `framer` < `endpoint` |
 | `speech-host-client` | `lib` |
@@ -116,6 +126,20 @@ stoker.
 | turning a catalog entry into a unit to run | `engine-supervisor::command` |
 | engine lifecycle and the VRAM budget | `engine-supervisor::step`, `budget` (the only place) |
 | the SSE framing | `model-http::SseDecoder` |
+| the NDJSON framing | `model-http::NdjsonDecoder` |
+| a response's status and the few headers a codec reads | `model-http::ResponseHead` (delivered by `BodySink::head` before any chunk) |
+| delivery of one exchange (TCP, Unix, TLS, in process, record, replay) | `model-http::Transport` |
+| a wire's request, reply and error format | `model-wire::{ChatCodec, EmbedCodec}`; the OpenAI-compatible one is `model-openai-compat::OpenAiCodec` |
+| what differs between OpenAI-compatible servers | `model-openai-compat::Flavor::quirks` |
+| sampling, tool parallelism, per-flavor engine knobs | `model-provider::control` (no untyped parameter bag) |
+| embeddings through a provider, roles, batch plan | `model-provider::embed` |
+| the vocabulary of structured outputs and its conversions | `model-provider::shape` |
+| how to ask for a typed output and repair it | `model-extract` (inferd runs it) |
+| retry classes and backoff | `model-provider::retry` (inferd runs it) |
+| the order a conversation must be in | `model-provider::sequence` |
+| OpenTelemetry GenAI names | `genai-names` (our own `quire.*` names are porter's `prov::trace`) |
+| wire cassettes (HTTP exchanges at the `Transport`) | `model-replay::wire` |
+| default sampling of a model | `model-catalog::SamplingDefaults` |
 | audio formats, positions and durations; the bytes of PCM | `speech-provider::audio` (`AudioFormat`, `SampleIndex`, `AudioMs`, `PcmBytes`) |
 | recognised and spoken text, languages and voices | `speech-provider::text` (`HeardText`, `SpokenText`, `Lang`, `VoiceId`) |
 | what a speech model can do | `speech-provider::SpeechCaps` |
@@ -179,8 +203,44 @@ pub trait VoiceActivity: Send { fn push(&mut self, frame: &Frame512) -> (Voiced,
 pub trait CassetteSink: Send + Sync { fn write(&self, line: &Interaction) -> Result<(), SinkError>; }
 pub trait SpeechCassetteSink: Send + Sync { fn write(&self, line: &SpeechInteraction) -> Result<(), SinkError>; }
 
-// model-http: where a response body goes as it arrives.
-pub trait BodySink: Send { fn chunk(&mut self, bytes: &[u8]) -> ChunkFlow; }
+// model-http: where a response goes as it arrives (the head first), and what delivers an exchange.
+pub trait BodySink: Send {
+    fn head(&mut self, head: &ResponseHead) -> ChunkFlow;
+    fn chunk(&mut self, bytes: &[u8]) -> ChunkFlow;
+}
+pub trait Transport: Send + Sync {
+    fn exchange<K: BodySink>(&self, ex: &Exchange, sink: &mut K)
+        -> impl Future<Output = Result<HttpStatus, HttpError>> + Send;
+}
+
+// model-wire: the wire of an endpoint, apart from how bytes travel. `Driver<C, T>` is the
+// Provider; inferd keeps a closed enum of the instantiations.
+pub trait ErrorWire { fn classify(&self, head: &ResponseHead, body: &[u8]) -> ProviderError; }
+pub trait ChatCodec: ErrorWire + Send + Sync {
+    type Decoder: ChatDecoder + Send;
+    fn encode(&self, request: &TurnRequest) -> Result<Exchange, CodecError>;
+    fn decoder(&self, served: ModelName) -> Self::Decoder;
+    fn describe(&self) -> Exchange;
+    fn parse_models(&self, body: &[u8]) -> Result<Vec<ModelInfo>, CodecError>;
+}
+pub trait ChatDecoder {
+    fn feed(&mut self, frame: &str) -> Result<Vec<TurnEvent>, CodecError>;
+    fn finish(self) -> Result<TurnEnd, CodecError>;
+}
+pub trait EmbedCodec: ErrorWire + Send + Sync {
+    fn encode_embed(&self, turn: &EmbedTurn) -> Result<Exchange, CodecError>;
+    fn decode_embed(&self, served: ModelName, body: &[u8]) -> Result<EmbedEnd, CodecError>;
+}
+
+// model-provider: an embedding backend; where a retry waits; a typed output.
+pub trait Embedder: Send + Sync {
+    fn embed(&self, turn: &EmbedTurn) -> impl Future<Output = Result<EmbedEnd, ProviderError>> + Send;
+}
+pub trait Sleeper: Send + Sync { fn sleep(&self, wait: WaitMs) -> impl Future<Output = ()> + Send; }
+pub trait Extract: Sized { fn shape() -> Shape; fn read(json: &JsonText) -> Result<Self, ShapeFault>; }
+
+// model-replay: where recorded wire exchanges go.
+pub trait WireSink: Send + Sync { fn write(&self, exchange: &WireExchange) -> Result<(), SinkError>; }
 ```
 
 Closed sets stay enums: `CuaAction`, `Target`, `CuaDialect` (`WireDialect`, `TextDialect`,
@@ -188,7 +248,7 @@ Closed sets stay enums: `CuaAction`, `Target`, `CuaDialect` (`WireDialect`, `Tex
 `EngineState`, `SupervisorIn`, `SupervisorOut`, `HttpTarget`, `AuthHeader`, `Flavor`,
 `WireCodecs`, `WeightFiles`, `Licence`, `EngineKind`, `CatalogKind`, `PcmFormat`, `SttMode`,
 `TranscriptEvent`, `LangChoice`, `LangSet`, `SpeechIo`, `HostIn`, `HostOut`, `Voiced`, `Endpoint`,
-`SpeechFlavor`, `SpeechInteraction`.
+`SpeechFlavor`, `SpeechInteraction`, `Framing`, `Verb`, `BodyKind`, `RouteRoot`, `Knob`, `EngineExtras`, `ThoughtSeal`, `ToolParallelism`, `Shape`, `ExtractMode`, `RetryClass`, `WireBody`, `WireEnd`, `ChunkPlan`, `UsageAsk`, `ToolNaming`, `ToolImages`, `DimensionsField`, `ShapeWithTools`.
 
 ## 5. What is frozen, what is built, what is stubbed
 
@@ -204,11 +264,15 @@ on; a change is an edit of SPEC.md first. Every `todo!()` is listed in `FINDINGS
 | `cua-parse`: types and limits | built, tested; `parse_text`, `parse_tool_calls` stubbed |
 | `cua-vendors`: trait, enum, `StepResult` | built; the codec bodies stubbed |
 | `cua-session`: types, `begin` | built; `request`, `absorb` stubbed |
-| `model-replay`: cassette format, round trip | built, tested; the providers and `RequestPrint::of` stubbed |
-| `model-catalog`: types, `parse_entry`, `merge_catalogs`, `VramEstimate::need`, `gpu_need`, `holo-3.1-4b`, the five speech entries | built, tested |
+| `model-replay`: cassette format (engine stamp, interaction id and hash, `Strict` mode), round trip; wire cassette format and round trip | built, tested; the providers, `RequestPrint::{of, hash}`, `check_sequence`, `Cassette::check_sequences`, `RecordingTransport` and `ReplayTransport` stubbed |
+| `model-catalog`: types, `parse_entry`, `merge_catalogs`, `VramEstimate::need`, `gpu_need`, `SamplingDefaults`, `holo-3.1-4b`, the five speech entries | built, tested |
 | `engine-supervisor`: types, `Supervisor::new`, config defaults, fakes | built, tested; `step`, `budget`, `command` stubbed |
-| `model-http`: types; the SSE decoder and client | types built; both bodies stubbed |
-| `model-openai-compat`: types | built; codec and provider stubbed; `audio` types and signatures only, every body stubbed |
+| `model-http`: types, `ResponseHead`, `BodySink::head`, `Exchange`, `Transport`, `Timeouts`, `ExtraHeader`, `HttpError::Rejected` | built, round-trip and pinned-JSON tested; the SSE and NDJSON decoders and `Transport for HttpClient` stubbed |
+| `model-wire`: `ChatCodec`, `ChatDecoder`, `EmbedCodec`, `ErrorWire`, `CodecError`, `Driver` | types and signatures built, tested with a hand-written codec; the `Driver` bodies stubbed |
+| `model-extract`: `ExtractMode`, `ToolsPresent`, `ExtractSession`, `Extracted`, `ExtractFailure` | types built; `choose`, `request`, `absorb` stubbed |
+| `genai-names`: every name, `Operation`, `Finish` | built, tested (names are values, so there is no stub) |
+| `model-provider` amendment: `Sampling`, `EngineExtras`, `Knob`, `ThoughtSeal`, the `embed`, `shape`, `retry` and `sequence` types, `OutputShape::{Gbnf, Choice}`, `Constraint::{Gbnf, Choice}`, `ProviderError::Server`, `TurnUsage.cached`, `ModelInfo.{loaded_context, trained_context}` | built, round-trip and pinned-JSON tested; `plan_batches`, `EmbedEnd::check`, the `Shape` conversions and checker, `retry_class`, `next_wait`, `Retrying`, `sequence::check` stubbed |
+| `model-openai-compat`: types, `Flavor::quirks` | built, table-pinned; `OpenAiCodec` bodies stubbed (`encode_request`, `encode`, `classify`, `describe`, `parse_models`, `encode_embed`, `decode_embed`, `StreamDecoder`); `audio` types and signatures only, every body stubbed |
 | `speech-provider`: every type, the checked names, `AudioChunk::{samples, duration}`, the host framing | built, tested (round trips, pinned JSON, redaction, duration table); the `testing` fakes' bodies stubbed |
 | `speech-vad`: types, defaults | built, tested; `level_of`, `EnergyGate`, `Framer::push`, `endpoint` stubbed |
 | `speech-host-client`: types | built; both trait bodies stubbed |
@@ -217,9 +281,10 @@ on; a change is an edit of SPEC.md first. Every `todo!()` is listed in `FINDINGS
 
 ## 6. Recipes
 
-**Add a backend** (a `Provider`): a crate `model-<name>` depending on `model-provider` and
-`model-http`; a pure `codec` module (request JSON, stream to `TurnEvent`) tested against recorded
-fixtures in `fixtures/<name>/` made by a dev script; the provider over `HttpClient`; its row in
+**Add a backend** (a `Provider`): a crate `model-<name>` depending on `model-wire`, `model-http` and
+`model-provider`; a pure codec (`ChatCodec` and its `ChatDecoder`, `ErrorWire::classify`, and
+`EmbedCodec` if it embeds) tested against wire fixtures in `fixtures/<name>/` recorded at the
+`Transport` by a dev script; the provider is `Driver<YourCodec, HttpClient>`; its row in
 `scripts/check-boundary.sh` (RULES and EDGES) and in section 1; its variant in porter's
 `inferd::AdapterModel`.
 
@@ -294,8 +359,11 @@ run by hand against the user's own engine.
 - **The wire is serde.** Every stored or wire type has a round-trip test; enums with data are
   adjacently tagged (`kind`/`v`); the catalog file is `ModelEntry`'s serde form and the
   cassette file is `Cassette::to_jsonl`.
-- **Floats** appear nowhere: coordinates are `Coord(u32)`, scale is `Scale120`, temperature is
-  `Milli`.
+- **Floats** appear nowhere: coordinates are `Coord(u32)`, scale is `Scale120`, temperature and
+  every other sampling knob is `Milli` (inside a `Knob` when it may be left to the engine). The one
+  exception is an embedding vector (`EmbedVector`, `f32`), which is floats end to end.
+- **No untyped parameter bag.** Engine-specific knobs are fields of `EngineExtras` (one arm per
+  flavor), never a JSON value merged into a request.
 - **A model's words are untrusted.** Parsers drop what they do not know, and a point outside
   the frame is refused, never clamped.
 - **No hard-coded proposed values.** The six `ai.engine.*` values and `ai.cua.history_frames`,

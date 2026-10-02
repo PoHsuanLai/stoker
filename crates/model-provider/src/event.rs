@@ -2,13 +2,17 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{CallIndex, ImageCount, ModelName, Tokens, ToolCall, ToolCallId, ToolName};
+use crate::{
+    CallIndex, ImageCount, ModelName, ThoughtSeal, Tokens, ToolCall, ToolCallId, ToolName,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "v", rename_all = "snake_case")]
 pub enum TurnEvent {
     TextDelta(String),
     ThoughtDelta(String),
+    /// The seal of the thought just streamed (a signature arrives after its text).
+    ThoughtSealed(ThoughtSeal),
     ToolCallStarted {
         index: CallIndex,
         id: ToolCallId,
@@ -37,6 +41,9 @@ pub enum SafetySignal {
 pub struct TurnUsage {
     pub input: Tokens,
     pub output: Tokens,
+    /// Input tokens the server served from its prompt cache (llama.cpp `cache_n`); a subset of
+    /// `input`.
+    pub cached: Tokens,
     pub images: ImageCount,
 }
 
@@ -67,4 +74,15 @@ pub enum Flow {
 /// Where a provider pushes a turn's events.
 pub trait TurnSink: Send {
     fn event(&mut self, event: TurnEvent) -> Flow;
+}
+
+impl From<StopReason> for genai_names::Finish {
+    fn from(stop: StopReason) -> Self {
+        match stop {
+            StopReason::EndTurn | StopReason::StopSequence => genai_names::Finish::Stop,
+            StopReason::ToolUse => genai_names::Finish::ToolCalls,
+            StopReason::MaxTokens => genai_names::Finish::Length,
+            StopReason::ContentFilter => genai_names::Finish::ContentFilter,
+        }
+    }
 }

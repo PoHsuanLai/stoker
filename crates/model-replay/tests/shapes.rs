@@ -1,10 +1,12 @@
 use model_provider::{
-    ImageDetail, Limits, Milli, ModelName, OutputShape, ProviderError, Reasoning, Role, StopReason,
-    Tokens, ToolChoice, TurnEnd, TurnEvent, TurnUsage,
+    EngineExtras, ImageDetail, Knob, Limits, Milli, ModelName, OutputShape, ProviderError,
+    Reasoning, Role, Sampling, StopReason, Tokens, ToolChoice, ToolParallelism, TurnEnd, TurnEvent,
+    TurnUsage,
 };
 use model_replay::{
-    BackendLabel, ByteCount, Cassette, CassetteError, CassetteHeader, CassetteVersion, ImageDigest,
-    ImagePrint, Interaction, MessagePrint, PartPrint, RecordedAt, RequestPrint,
+    BuildLabel, ByteCount, Cassette, CassetteError, CassetteHeader, CassetteVersion, EngineLabel,
+    EngineStamp, ImageDigest, ImagePrint, Interaction, InteractionId, MessagePrint, PartPrint,
+    PrintHash, RecordedAt, RequestPrint,
 };
 use vision_prep::MediaType;
 
@@ -25,13 +27,29 @@ fn print() -> RequestPrint {
         }],
         tools: vec![],
         tool_choice: ToolChoice::Auto,
+        tool_calls: ToolParallelism::One,
         output: OutputShape::Free,
         limits: Limits {
             max_output: Tokens(256),
-            temperature: Milli(0),
             stop: vec![],
         },
+        sampling: Sampling {
+            temperature: Milli(0),
+            top_p: Knob::Off,
+            top_k: Knob::Off,
+            min_p: Knob::Off,
+            repeat_penalty: Knob::Off,
+            seed: Knob::Off,
+        },
         reasoning: Reasoning::Off,
+        engine: EngineExtras::None,
+    }
+}
+
+fn stamp(kind: &str, build: &str) -> EngineStamp {
+    EngineStamp {
+        kind: EngineLabel(kind.into()),
+        build: BuildLabel(build.into()),
     }
 }
 
@@ -44,18 +62,22 @@ fn cassette() -> Cassette {
     Cassette {
         header: CassetteHeader {
             vocab: CassetteVersion::CURRENT,
-            backend: BackendLabel("vllm".into()),
+            engine: stamp("vllm", "v0.12.0"),
             model: ModelName("holo".into()),
             recorded: RecordedAt(1_790_000_000),
         },
         interactions: vec![
             Interaction {
+                id: InteractionId(0),
                 request: print(),
+                print: PrintHash("cd".repeat(32)),
                 events: vec![TurnEvent::TextDelta("hi".into())],
                 end: Ok(end),
             },
             Interaction {
+                id: InteractionId(1),
                 request: print(),
+                print: PrintHash("ef".repeat(32)),
                 events: vec![],
                 end: Err(ProviderError::Timeout),
             },
@@ -79,7 +101,7 @@ fn header_line_is_pinned() {
     let text = cassette().to_jsonl();
     assert_eq!(
         text.lines().next().unwrap(),
-        r#"{"vocab":1,"backend":"vllm","model":"holo","recorded":1790000000}"#
+        r#"{"vocab":1,"engine":{"kind":"vllm","build":"v0.12.0"},"model":"holo","recorded":1790000000}"#
     );
 }
 
@@ -113,11 +135,11 @@ fn bad_files_name_the_line() {
 }
 
 mod speech {
+    use super::stamp;
     use model_provider::{ModelName, ProviderError};
     use model_replay::{
-        AudioDigest, AudioPrint, BackendLabel, ByteCount, CassetteError, CassetteHeader,
-        CassetteVersion, RecordedAt, SpeechCassette, SpeechInteraction, SttPrint, TextDigest,
-        TextPrint, TtsPrint,
+        AudioDigest, AudioPrint, ByteCount, CassetteError, CassetteHeader, CassetteVersion,
+        RecordedAt, SpeechCassette, SpeechInteraction, SttPrint, TextDigest, TextPrint, TtsPrint,
     };
     use speech_provider::{
         AudioFormat, AudioMs, HeardText, Lang, LangChoice, PcmFormat, SampleIndex, SampleRate,
@@ -142,7 +164,7 @@ mod speech {
         SpeechCassette {
             header: CassetteHeader {
                 vocab: CassetteVersion::CURRENT,
-                backend: BackendLabel("speech_host".into()),
+                engine: stamp("speech_host", "0.1.0"),
                 model: ModelName("nemotron-3.5-asr-streaming".into()),
                 recorded: RecordedAt(1_790_000_000),
             },
@@ -231,7 +253,7 @@ mod speech {
         assert_eq!(SpeechCassette::from_jsonl(&text).unwrap(), cassette());
         assert_eq!(
             text.lines().next().unwrap(),
-            r#"{"vocab":1,"backend":"speech_host","model":"nemotron-3.5-asr-streaming","recorded":1790000000}"#
+            r#"{"vocab":1,"engine":{"kind":"speech_host","build":"0.1.0"},"model":"nemotron-3.5-asr-streaming","recorded":1790000000}"#
         );
     }
 

@@ -32,3 +32,10 @@ pub enum AuthHeader {
         value: Secret,
     },
 }
+
+/// A header sent on every request beside the authenticating one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExtraHeader {
+    pub name: HeaderName,
+    pub value: Secret,
+}

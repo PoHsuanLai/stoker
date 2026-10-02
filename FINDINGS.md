@@ -76,7 +76,7 @@ Decisions taken from it:
 
 ## Stubs behind frozen interfaces
 
-Every `todo!()` in the repo (64: 59 in the workspace, 5 in the two excluded crates). Each is a signature other repos build on; the body arrives with
+Every `todo!()` in the repo (91: 86 in the workspace, 5 in the two excluded crates; the rig amendment added 27, see `The rig amendment` below). Each is a signature other repos build on; the body arrives with
 the work in the "Closes when" line of its crate.
 
 ### `cua-parse` (2)
@@ -109,22 +109,27 @@ Closes when the first cloud backend is turned on (the user chose open models onl
 
 Closes when `step` passes the table of every row of models.md 4.1, `budget` its table (Fits, LRU eviction, never an active engine, NoRoom with numbers), `command` its table for Holo under vLLM.
 
-### `model-http` (4)
+### `model-http` (5)
 
-- `src/client.rs`: HttpClient::get over hyper
-- `src/client.rs`: HttpClient::post_json over hyper
+- `src/exchange.rs`: `Transport for HttpClient`: exchange over hyper (Tcp, Unix or Tls by target, proxy)
 - `src/sse.rs`: SseDecoder::feed: lines, fields, blank line dispatches
 - `src/sse.rs`: SseDecoder::finish
+- `src/ndjson.rs`: NdjsonDecoder::feed: split on newline, skip blank lines, cap the line
+- `src/ndjson.rs`: NdjsonDecoder::finish
 
-Closes when hyper, hyper-util and http-body-util join the pinned block, then the decoder passes `sse_decoder_any_chunking` and the client a loopback Unix-socket test.
+Closes when hyper, hyper-util and http-body-util join the pinned block, then the decoders pass `sse_decoder_any_chunking` (and its NDJSON twin) and the transport a loopback Unix-socket test that checks the head (status, `Content-Type` kind, `Retry-After`, request id) arrives before the first chunk and that a non-success answer is `Rejected` with its body in the sink. The SSE edge cases to port are the list in `research-rig.md` section 3.1 (CR, LF and CRLF split across chunks, a BOM split across chunks, comment lines, an event reset by a blank line, a multibyte code point split across chunks, a line cap and a per-event data cap, a truncated trailing event never delivered).
 
-### `model-openai-compat` (13)
+### `model-openai-compat` (17)
 
-- `src/codec.rs`: encode_request: messages, images, tools, constraints, stream_options
+- `src/codec.rs`: encode_request: messages, images, tools, constraints, sampling, engine extras, stream_options
+- `src/codec.rs`: OpenAiCodec::classify: status classes, the error envelope, an HTML 200
+- `src/codec.rs`: OpenAiCodec::encode: POST /chat/completions, Framing::Sse
+- `src/codec.rs`: OpenAiCodec::describe: GET /models, or /props at the server root for llama-server
+- `src/codec.rs`: OpenAiCodec::parse_models: loaded and trained context per flavor
+- `src/codec.rs`: OpenAiCodec::encode_embed: POST /embeddings, no `dimensions` where the quirk says Ignored
+- `src/codec.rs`: OpenAiCodec::decode_embed: data[].embedding in index order
 - `src/codec.rs`: StreamDecoder::feed: deltas, reasoning, tool-call fragments, usage
 - `src/codec.rs`: StreamDecoder::finish: stop reason and usage
-- `src/provider.rs`: OpenAiCompat::describe: GET /models
-- `src/provider.rs`: OpenAiCompat::turn: encode, post, decode the stream into the sink
 - `src/audio/codec.rs`: encode_speech_request: model, input, voice, response_format pcm, stream true
 - `src/audio/codec.rs`: encode_transcription: WAV header over the samples, form fields, boundary
 - `src/audio/codec.rs`: decode_transcription: the `text` field of the JSON
@@ -134,11 +139,16 @@ Closes when hyper, hyper-util and http-body-util join the pinned block, then the
 - `src/audio/provider.rs`: OpenAiSpeech::describe (out): GET /models and /audio/voices
 - `src/audio/provider.rs`: OpenAiSpeech::speak: POST /audio/speech, PcmDecoder into the sink
 
-Closes when `encode_request` passes its golden request and `StreamDecoder` the recorded SSE fixtures from vLLM and llama-server (`dev/record-engine.sh`, run by hand); the `audio` bodies close with `model-http` gaining a multipart or raw-bytes POST (`post_json` cannot carry a WAV file), then `encode_speech_request` and `encode_transcription` pass golden bodies, `PcmDecoder` its chunking proptest, and `OpenAiSpeech` a loopback test against fixtures recorded by `dev/record-speech.sh` (by hand, against the user's own vLLM and Kokoro).
+Closes when `encode_request` passes its golden request and `StreamDecoder` the recorded wire fixtures from vLLM and llama-server (`dev/record-engine.sh`, run by hand, recorded at the `Transport`) and the conformance list in `research-rig.md` sections 3.2, 3.3 and 3.7 (the quirk table, tool-call delta assembly with its four `IfMalformed` outcomes, an index reused for a second call, a call delivered in one chunk, an empty arguments string meaning `{}`, an error envelope inside a 200, a bare `[DONE]` that fabricates nothing, every chunk split offset); `Flavor::quirks` is a pinned table whose rows marked "to verify" in `quirks.rs` are settled by the first recorded fixture of that engine; the `audio` bodies close with `model-http` gaining a multipart or raw-bytes POST (`post_json` cannot carry a WAV file), then `encode_speech_request` and `encode_transcription` pass golden bodies, `PcmDecoder` its chunking proptest, and `OpenAiSpeech` a loopback test against fixtures recorded by `dev/record-speech.sh` (by hand, against the user's own vLLM and Kokoro).
 
-### `model-replay` (13)
+### `model-replay` (18)
 
 - `src/print.rs`: RequestPrint::of: blake3 over image bytes
+- `src/print.rs`: RequestPrint::hash: canonical JSON, blake3
+- `src/cassette.rs`: Cassette::check_sequences: check_sequence per interaction, then `from_jsonl` calls it
+- `src/sequence.rs`: check_sequence: the per-index state of every tool call
+- `src/wire.rs`: RecordingTransport::exchange: tee head and frames into a WireExchange, scrub, write
+- `src/wire.rs`: ReplayTransport::exchange: match the request, deliver head then chunks, `WireEnd` as the error
 - `src/provider.rs`: ReplayProvider::describe: the cassette's model
 - `src/provider.rs`: ReplayProvider::turn: match, push events, return the end
 - `src/provider.rs`: RecordingProvider::turn: tee events into an Interaction, write it
@@ -151,7 +161,35 @@ Closes when `encode_request` passes its golden request and `StreamDecoder` the r
 - `src/speech.rs`: RecordingSpeech::transcribe: tee audio and events into an interaction
 - `src/speech.rs`: RecordingSpeech::speak: tee the audio into a print, write the interaction
 
-Closes when `blake3` joins quire `docs/workspace-deps.toml`, then the providers replay and record against a cassette (chat and speech alike; a speech replay answers silence of the recorded duration, and no audio is ever in a cassette).
+Closes when `blake3` joins quire `docs/workspace-deps.toml`, then the providers and transports replay and record against a cassette (chat and speech alike; a speech replay answers silence of the recorded duration, and no audio is ever in a cassette).
+
+### `model-wire` (3)
+
+- `src/driver.rs`: Driver::describe: exchange codec.describe(), parse_models
+- `src/driver.rs`: Driver::turn: encode, exchange, classify on a bad head, framer into decoder into the sink
+- `src/driver.rs`: Driver::embed: encode_embed, exchange, decode_embed, the per-reply count and width check
+
+Closes with `model-http`'s transport and decoders: the sink adapter buffers a non-success or `Html` body (64 KiB at most) and maps it with `classify`; otherwise the framer the exchange named feeds `ChatDecoder`; `Flow::Stop` answers `ChunkFlow::Stop`; a scripted `Transport` drives it in tests.
+
+### `model-provider` (11)
+
+- `src/embed.rs`: EmbedEnd::check: the count, then every width
+- `src/embed.rs`: plan_batches: chunks of max(1, max), covering 0..n exactly
+- `src/sequence.rs`: check: port of rig's validate_canonical
+- `src/retry.rs`: ProviderError::retry_class: rig's retryable_status and transient_transport, ported
+- `src/retry.rs`: next_wait: exponent clamped at 31, cap, Overload takes the larger of server and backoff
+- `src/retry.rs`: Retrying::describe and Retrying::turn (2)
+- `src/shape.rs`: Shape::to_json_schema, to_gbnf, to_regex, check (4)
+
+Closes when `plan_batches` passes a table and a property (the ranges cover 0..n exactly, in order, none over the cap), `check` the rig scenarios (consecutive assistant, unanswered call, orphan result), `next_wait` a table with an injected jitter and a fake `Sleeper`, `Retrying` a test that never retries after the first event, and the `Shape` conversions the round-trip property of `research-rig.md` section 6d.5 (any value accepted by `check` is accepted by the generated GBNF, through a tiny matcher in tests only).
+
+### `model-extract` (3)
+
+- `src/mode.rs`: choose: the four rules, in order
+- `src/session.rs`: ExtractSession::request: output, synthetic tool, tool_choice, limits
+- `src/session.rs`: ExtractSession::absorb: Truncated before anything, then T::read, then one repair
+
+Closes when the seven tests of `research-rig.md` section 6d.5 pass (`choose_picks_native_choice_on_llama_server`, `choose_falls_back_to_tool_when_schema_and_tools_conflict`, `repair_message_never_echoes_output`, `one_repair_then_failed`, `max_tokens_is_failed_not_repaired`, `shape_to_gbnf_roundtrip_checks`, `named_tool_refused_on_llama_server`).
 
 ### `speech-host` (2, excluded crate)
 
@@ -228,6 +266,72 @@ Also not yet present, and not `todo!()`:
 - Wire fixtures under `fixtures/`. Recorded by a dev script against the user's own engine, never
   generated in CI.
 
+## The rig amendment (2026-10-03)
+
+Interface changes made before any fill wave, from `research-rig.md` section 7 items 1 to 6.
+Types, traits, signatures, docs, pure tables and tests only; the new bodies are the 27 stubs above.
+
+- **Wire and Transport split.** `model-http` gains `ResponseHead`, `BodyKind`, `BodySink::head`,
+  `Exchange`, `Framing`, `Verb`, `RouteRoot`, `Timeouts`, `ExtraHeader`, `HttpError::Rejected`,
+  `NdjsonDecoder` and the `Transport` trait (it replaces `HttpClient::{get, post_json}`);
+  `HttpEndpoint` gains `headers` and `timeouts` (no defaults: the daemon reads them from
+  settings). New pure crate `model-wire` (`ChatCodec`, `ChatDecoder`, `EmbedCodec`, `ErrorWire`,
+  `Driver`). `model-openai-compat` is re-based on it: `OpenAiCodec`, `Flavor::quirks()`,
+  `OpenAiCompat = Driver<OpenAiCodec, HttpClient>`. The spec's `pub type OpenAiCompat` cannot keep
+  its inherent `new` (a foreign generic type), so the constructor is `OpenAiCodec::provider(client)`.
+  `StreamDecoder::feed` takes the frame text (`&str`), not an `SseEvent`.
+- **`model-provider`.** `Sampling` (temperature, top_p, top_k, min_p, repeat_penalty, seed, each a
+  `Milli` or a `Count`, optional ones as `Knob`), `ToolParallelism`, `EngineExtras` (one arm per
+  flavor: `LlamaServer`, `Vllm`, `Ollama`), `ThoughtSeal` and `Part::Thought { text, seal }`,
+  `TurnEvent::ThoughtSealed`, `OutputShape::{Gbnf, Choice}`, `Constraint::{Gbnf, Choice}`,
+  `ProviderError::Server(ServerStatus)`, `TurnUsage.cached`, `ModelInfo.{loaded_context,
+  trained_context}` (replacing `context`), `Limits` without `temperature` (it moved into
+  `Sampling`), the `embed`, `shape`, `retry` and `sequence` modules, and `From<StopReason> for
+  genai_names::Finish`. `InputKind::Audio` is dropped: voice goes through `speech-provider`, and
+  there is no `Part::Audio`.
+- **`model-catalog`.** Every chat entry writes `sampling = { reasoning_on, reasoning_off }`
+  (`SamplingDefaults`); a chat role without it, or a speech entry with it, is refused. `output`
+  accepts `gbnf` and `choice`. `holo-3.1-4b` writes proposals (0.6, top_p 0.95, top_k 20 with
+  reasoning on; greedy with it off) that a recorded step confirms or corrects.
+- **`model-replay`.** The header carries `engine: EngineStamp { kind, build }` where it carried a
+  `backend` label (`BackendLabel` stays as a type alias, not a constructor); `Interaction` gains
+  `id` and `print: PrintHash`; `ReplayMode::Strict`; `RequestPrint` carries `tool_calls`,
+  `sampling` and `engine`; `CassetteError::BadSequence`; the wire cassette types and
+  `RecordingTransport`/`ReplayTransport`; `check_sequence`. `CassetteVersion` stays 1: no
+  cassette file exists yet, so nothing needs migrating; the first recorded file is the first to
+  carry version 1 of this shape.
+- **New crates.** `model-extract` and `genai-names` (zero dependencies; `model-provider`
+  depends on it for the `Finish` conversion). Boundary rows for all three.
+- **Decided.** No untyped JSON escape hatch: sampling is typed and engine knobs are per-flavor
+  enum arms. inferd owns retry and structured-output validate-and-repair (porter's
+  ARCHITECTURE.md section 7); `ExtractSession` and `Retrying` are the machines it runs.
+  `ShapeWithTools` is a `Quirks` field of the flavor and a parameter of `choose`, since
+  `Caps` is catalog data.
+
+Left to fill, with the reason (the type is frozen, the spelling is not):
+
+- **Engine constraint syntax.** The parameter names for llama-server's grammar and
+  `response_format`, vLLM's structured-output parameter and its backends (`GuidedBackend`; the
+  spelling changed across vLLM versions), and Ollama's `format` are not verified: they need the
+  engines' current docs or a recorded request. `OutputShape` and `EngineExtras` hold the intent.
+- **OpenTelemetry attribute names.** `genai-names` copies the names the research read from rig and
+  the convention; the conventions are development-status upstream and have been renamed (`gen_ai.system`
+  to `gen_ai.provider.name`). They are checked against the registry when the span macros are
+  written. Names are values here, so no stub guards them.
+- **`Flavor::quirks()` rows marked "to verify".** Whether `response_format` suppresses tool calls on
+  llama-server and vLLM (`shape_with_tools`) is a guess (the conservative `AfterResult` for
+  llama-server, `Together` for vLLM); the first recorded fixture decides.
+- **The catalog has no embedding table.** `EmbedCaps` exists in `model-provider::embed` (dims, max
+  batch, max input, prompts), but a catalog entry for an embedding model still carries only the
+  chat `Caps`; the table joins with the first embedding entry, together with the width the
+  catalog states for engines that ignore a `dimensions` field.
+- **Batching `Ollama` and Anthropic.** `model-ollama` (NDJSON, `EngineExtras::Ollama`) and
+  `model-anthropic` (signed thoughts) are later crates; the seams they need (`Framing::Ndjson`,
+  `NdjsonDecoder`, `ThoughtSeal`) are frozen here.
+- **Rig attribution.** No rig code is copied. Porting its SSE framer tests or its tool-call
+  assembly in the fill puts the attribution header of `research-rig.md` in that file and one
+  `THIRD-PARTY-NOTICES` entry in the repo.
+
 ## Open
 
 - **Deviations from models.md that SPEC.md left open**, each forced by the crate order:
@@ -274,5 +378,5 @@ Also not yet present, and not `todo!()`:
 - `todo!()` is allowed only behind a frozen interface; every such stub is listed above.
 - The catalog file is `ModelEntry`'s serde form: every field is written, none defaulted, and the
   capability fields sit at the top level beside `id` and `label`.
-- The cassette file is JSON Lines: a header line, then one `Interaction` per line.
+- The cassette file is JSON Lines: a header line, then one `Interaction` per line; a wire cassette (`<name>.wire.jsonl`) is the same header and one `WireExchange` per line.
 - Nothing here records, downloads or starts anything; the dev scripts that do are run by hand.

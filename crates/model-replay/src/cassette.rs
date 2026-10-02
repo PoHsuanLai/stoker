@@ -5,7 +5,7 @@ use model_provider::{ModelName, ProviderError, TurnEnd, TurnEvent};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::RequestPrint;
+use crate::{PrintHash, RequestPrint};
 
 /// The format version of a cassette file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -21,23 +21,49 @@ impl CassetteVersion {
 #[serde(transparent)]
 pub struct RecordedAt(pub i64);
 
-/// Which backend produced the interactions (`vllm`, `llama_server`, ...).
+/// Which engine produced the interactions (`vllm`, `llama_server`, ...).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct BackendLabel(pub String);
+pub struct EngineLabel(pub String);
 
+/// The label of a backend before the header carried a stamp.
+pub type BackendLabel = EngineLabel;
+
+/// The build of the engine (`b10964-b29c606e2`): a fixture is only as good as the build it came
+/// from, and a replay that fails says which build to record again.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct BuildLabel(pub String);
+
+/// What a cassette was recorded from.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct EngineStamp {
+    pub kind: EngineLabel,
+    pub build: BuildLabel,
+}
+
+/// The header of every cassette file, chat, speech and wire.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CassetteHeader {
     pub vocab: CassetteVersion,
-    pub backend: BackendLabel,
+    pub engine: EngineStamp,
     pub model: ModelName,
     pub recorded: RecordedAt,
 }
 
+/// The index of an interaction in its cassette, from 0: what a `Mismatch` names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct InteractionId(pub u32);
+
 /// One turn: the request's fingerprint, the events it produced, how it ended.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Interaction {
+    pub id: InteractionId,
     pub request: RequestPrint,
+    /// `request.hash()`, stored beside the readable print so `ByRequest` matches in O(1) and
+    /// tolerates field order.
+    pub print: PrintHash,
     pub events: Vec<TurnEvent>,
     pub end: Result<TurnEnd, ProviderError>,
 }
@@ -55,6 +81,9 @@ pub enum CassetteError {
     Empty,
     #[error("line {line} does not parse")]
     BadLine { line: u32 },
+    /// The events of an interaction are not a possible stream (`check_sequence`).
+    #[error("line {line} holds events that are not a possible stream")]
+    BadSequence { line: u32 },
     #[error("the cassette is version {found:?}, this build reads {want:?}")]
     Version {
         found: CassetteVersion,
@@ -74,6 +103,13 @@ impl Cassette {
             header,
             interactions,
         })
+    }
+
+    /// Runs `check_sequence` over every interaction's events: `BadSequence` names the line. The
+    /// loader calls it once it is built (`from_jsonl` does not yet).
+    pub fn check_sequences(&self) -> Result<(), CassetteError> {
+        let _ = &self.interactions;
+        todo!("Cassette::check_sequences: check_sequence per interaction, line = index + 2")
     }
 }
 

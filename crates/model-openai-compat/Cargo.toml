@@ -1,6 +1,6 @@
 [package]
 name = "model-openai-compat"
-description = "A Provider for OpenAI-compatible chat-completions servers (llama-server, vLLM, LiteLLM, OpenRouter): a pure request and stream codec, and the provider over model-http."
+description = "The OpenAI-compatible chat-completions wire (llama-server, vLLM, LiteLLM, OpenRouter) as a model-wire codec, its quirk table, and the speech wire over model-http."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,6 +11,7 @@ publish.workspace = true
 [dependencies]
 model-provider = { workspace = true }
 model-http = { workspace = true }
+model-wire = { workspace = true }
 speech-provider = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }

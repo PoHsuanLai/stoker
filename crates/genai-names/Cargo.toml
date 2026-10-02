@@ -1,0 +1,16 @@
+[package]
+name = "genai-names"
+description = "The OpenTelemetry GenAI semantic-convention names as constants: attribute keys, metric names, operation names and finish reasons. Zero dependencies; no content attribute exists here."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+
+[lints]
+workspace = true

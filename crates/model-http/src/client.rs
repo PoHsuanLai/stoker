@@ -1,8 +1,9 @@
-//! The client seam: one request, the response body pushed into a sink as it arrives.
+//! The client: one endpoint, and the types a transport and a sink share. The request seam is
+//! `Transport` (`exchange`); the response body is pushed into a sink as it arrives.
 
 use serde::{Deserialize, Serialize};
 
-use crate::{HttpEndpoint, UrlPath};
+use crate::{HttpEndpoint, ResponseHead};
 
 /// An HTTP status code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -27,8 +28,11 @@ pub enum ChunkFlow {
     Stop,
 }
 
-/// Receives the response body in chunks.
+/// Receives a response: its head once, then the body in chunks (already split into frames when
+/// the exchange asked for `Framing::Sse` or `Ndjson`).
 pub trait BodySink: Send {
+    /// Once, before any chunk. `Stop` closes the connection without reading the body.
+    fn head(&mut self, head: &ResponseHead) -> ChunkFlow;
     fn chunk(&mut self, bytes: &[u8]) -> ChunkFlow;
 }
 
@@ -45,9 +49,13 @@ pub enum HttpError {
     Broken,
     #[error("the server answered {0:?}")]
     Status(HttpStatus),
+    /// The server answered non-success. The head and the body already went to the sink, so the
+    /// codec classifies them; the error carries nothing (a body can echo the prompt).
+    #[error("the server rejected the request")]
+    Rejected,
 }
 
-/// One endpoint's HTTP client. Dropping a request future closes the connection.
+/// One endpoint's HTTP client; it is a [`crate::Transport`].
 #[derive(Debug, Clone)]
 pub struct HttpClient {
     endpoint: HttpEndpoint,
@@ -60,26 +68,5 @@ impl HttpClient {
 
     pub fn endpoint(&self) -> &HttpEndpoint {
         &self.endpoint
-    }
-
-    /// `GET path`, the body pushed into `sink`. A non-2xx answer is `HttpError::Status`.
-    pub fn get<K: BodySink>(
-        &self,
-        path: &UrlPath,
-        sink: &mut K,
-    ) -> impl Future<Output = Result<HttpStatus, HttpError>> + Send {
-        let _ = (&self.endpoint, path, &mut *sink);
-        async { todo!("HttpClient::get over hyper") }
-    }
-
-    /// `POST path` with a JSON body, the response body pushed into `sink`.
-    pub fn post_json<K: BodySink>(
-        &self,
-        path: &UrlPath,
-        body: &JsonBody,
-        sink: &mut K,
-    ) -> impl Future<Output = Result<HttpStatus, HttpError>> + Send {
-        let _ = (&self.endpoint, path, body, &mut *sink);
-        async { todo!("HttpClient::post_json over hyper") }
     }
 }

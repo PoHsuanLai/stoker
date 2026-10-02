@@ -7,6 +7,7 @@ use model_provider::{
     ToolCall, ToolCallId, ToolChoice, ToolName, ToolResult, ToolSpec, ToolStatus, ToolSupport,
     TurnEnd, TurnEvent, TurnRequest, TurnSink, TurnUsage, Zoom,
 };
+use model_provider::{EngineExtras, Knob, Sampling, ThoughtSeal, ToolParallelism};
 use vision_prep::{MediaType, PatchFactor, PixelCount, ResizeRule};
 
 fn call() -> ToolCall {
@@ -35,7 +36,10 @@ fn request() -> TurnRequest {
                 parts: vec![
                     Part::Text("go".into()),
                     Part::Image(image),
-                    Part::Thought("hm".into()),
+                    Part::Thought {
+                        text: "hm".into(),
+                        seal: ThoughtSeal::None,
+                    },
                 ],
             },
             Message {
@@ -63,13 +67,22 @@ fn request() -> TurnRequest {
             }),
         ],
         tool_choice: ToolChoice::Named(ToolName::new("computer_use").unwrap()),
+        tool_calls: ToolParallelism::One,
         output: OutputShape::JsonSchema(SchemaText(JsonText::new("{}").unwrap())),
         limits: Limits {
             max_output: Tokens(512),
-            temperature: Milli(0),
             stop: vec!["\n\n".into()],
         },
+        sampling: Sampling {
+            temperature: Milli(0),
+            top_p: Knob::Off,
+            top_k: Knob::Off,
+            min_p: Knob::Off,
+            repeat_penalty: Knob::Off,
+            seed: Knob::Off,
+        },
         reasoning: Reasoning::On(Effort::Low),
+        engine: EngineExtras::None,
     }
 }
 
@@ -96,6 +109,7 @@ fn requests_and_events_round_trip() {
         TurnEvent::Usage(TurnUsage {
             input: Tokens(10),
             output: Tokens(2),
+            cached: Tokens(8),
             images: ImageCount(1),
         }),
     ];
@@ -226,7 +240,8 @@ fn scripted_provider_replays_and_records() {
     let provider = ScriptedProvider::new(
         vec![ModelInfo {
             name: ModelName("holo".into()),
-            context: Tokens(32768),
+            loaded_context: Tokens(32768),
+            trained_context: Tokens(262144),
         }],
         vec![script()],
     );

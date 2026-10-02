@@ -1,8 +1,9 @@
 //! The fingerprint of a request: what a cassette stores in place of the request itself.
 
 use model_provider::{
-    ImageDetail, Limits, ModelName, OutputShape, Reasoning, Role, ToolCall, ToolCallId, ToolChoice,
-    ToolSpec, ToolStatus, TurnRequest,
+    EngineExtras, ImageDetail, Limits, ModelName, OutputShape, Reasoning, Role, Sampling,
+    ThoughtSeal, ToolCall, ToolCallId, ToolChoice, ToolParallelism, ToolSpec, ToolStatus,
+    TurnRequest,
 };
 use serde::{Deserialize, Serialize};
 use vision_prep::MediaType;
@@ -31,7 +32,7 @@ pub struct ImagePrint {
 pub enum PartPrint {
     Text(String),
     Image(ImagePrint),
-    Thought(String),
+    Thought { text: String, seal: ThoughtSeal },
     ToolCall(ToolCall),
     ToolResult(ToolResultPrint),
 }
@@ -56,15 +57,29 @@ pub struct RequestPrint {
     pub messages: Vec<MessagePrint>,
     pub tools: Vec<ToolSpec>,
     pub tool_choice: ToolChoice,
+    pub tool_calls: ToolParallelism,
     pub output: OutputShape,
     pub limits: Limits,
+    pub sampling: Sampling,
     pub reasoning: Reasoning,
+    pub engine: EngineExtras,
 }
+
+/// A BLAKE3 digest of the canonical JSON (keys sorted) of a [`RequestPrint`], 64 lowercase hex
+/// characters.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct PrintHash(pub String);
 
 impl RequestPrint {
     /// The fingerprint of `request`: images become digest and size.
     pub fn of(request: &TurnRequest) -> RequestPrint {
         let _ = request;
         todo!("RequestPrint::of: blake3 over image bytes")
+    }
+
+    /// The hash of this print's canonical JSON.
+    pub fn hash(&self) -> PrintHash {
+        todo!("RequestPrint::hash: canonical JSON, blake3")
     }
 }

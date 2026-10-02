@@ -1,6 +1,21 @@
-use model_http::{AuthHeader, HttpClient, HttpEndpoint, HttpTarget, Proxy, UrlPath};
-use model_openai_compat::{Flavor, OpenAiCompat, RequestJson};
+use model_http::{
+    AuthHeader, HttpClient, HttpEndpoint, HttpTarget, Proxy, RouteRoot, Timeouts, UrlPath, WaitMs,
+};
+use model_openai_compat::{
+    DimensionsField, Flavor, OpenAiCodec, OpenAiCompat, Quirks, RequestJson, ToolImages,
+    ToolNaming, UsageAsk,
+};
+use model_provider::ShapeWithTools;
+use model_wire::ChatCodec;
 use std::path::PathBuf;
+
+fn timeouts() -> Timeouts {
+    Timeouts {
+        connect: WaitMs(2_000),
+        first_byte: WaitMs(60_000),
+        idle: WaitMs(30_000),
+    }
+}
 
 #[test]
 fn flavors_have_stable_slugs() {
@@ -23,11 +38,11 @@ fn a_provider_is_built_from_a_client_and_a_flavor() {
         proxy: Proxy::Direct,
         base: UrlPath("/v1".into()),
         auth: AuthHeader::None,
+        headers: vec![],
+        timeouts: timeouts(),
     });
-    assert_eq!(
-        OpenAiCompat::new(client, Flavor::Vllm).flavor(),
-        Flavor::Vllm
-    );
+    let provider: OpenAiCompat = OpenAiCodec::new(Flavor::Vllm).provider(client);
+    assert_eq!(provider.codec().flavor(), Flavor::Vllm);
 }
 
 #[test]
@@ -59,6 +74,8 @@ fn a_speech_provider_is_built_from_a_client_and_a_flavor() {
         proxy: Proxy::Direct,
         base: UrlPath("/v1".into()),
         auth: AuthHeader::None,
+        headers: vec![],
+        timeouts: timeouts(),
     });
     assert_eq!(
         OpenAiSpeech::new(client, SpeechFlavor::KokoroFastApi).flavor(),
@@ -74,4 +91,96 @@ fn multipart_bodies_do_not_print_the_audio() {
         bytes: vec![1, 2, 3],
     };
     assert_eq!(format!("{body:?}"), "MultipartBody(<3 bytes>)");
+}
+
+#[test]
+fn the_quirk_table_is_pinned() {
+    const CASES: &[(Flavor, Quirks)] = &[
+        (
+            Flavor::LlamaServer,
+            Quirks {
+                usage: UsageAsk::Request,
+                tool_naming: ToolNaming::AutoOnly,
+                tool_images: ToolImages::InToolMessage,
+                shape_with_tools: ShapeWithTools::AfterResult,
+                describe_root: RouteRoot::Server,
+                dimensions: DimensionsField::Ignored,
+            },
+        ),
+        (
+            Flavor::Vllm,
+            Quirks {
+                usage: UsageAsk::Request,
+                tool_naming: ToolNaming::Any,
+                tool_images: ToolImages::NextUserMessage,
+                shape_with_tools: ShapeWithTools::Together,
+                describe_root: RouteRoot::Base,
+                dimensions: DimensionsField::Send,
+            },
+        ),
+        (
+            Flavor::LiteLlm,
+            Quirks {
+                usage: UsageAsk::Request,
+                tool_naming: ToolNaming::Any,
+                tool_images: ToolImages::NextUserMessage,
+                shape_with_tools: ShapeWithTools::AfterResult,
+                describe_root: RouteRoot::Base,
+                dimensions: DimensionsField::Send,
+            },
+        ),
+        (
+            Flavor::OpenRouter,
+            Quirks {
+                usage: UsageAsk::Never,
+                tool_naming: ToolNaming::Any,
+                tool_images: ToolImages::NextUserMessage,
+                shape_with_tools: ShapeWithTools::AfterResult,
+                describe_root: RouteRoot::Base,
+                dimensions: DimensionsField::Send,
+            },
+        ),
+    ];
+    for (flavor, quirks) in CASES {
+        assert_eq!(flavor.quirks(), *quirks, "{flavor:?}");
+        let json = serde_json::to_string(quirks).unwrap();
+        assert_eq!(serde_json::from_str::<Quirks>(&json).unwrap(), *quirks);
+    }
+}
+
+#[test]
+fn a_quirk_row_has_pinned_json() {
+    assert_eq!(
+        serde_json::to_string(&Flavor::LlamaServer.quirks()).unwrap(),
+        r#"{"usage":"request","tool_naming":"auto_only","tool_images":"in_tool_message","shape_with_tools":"after_result","describe_root":"server","dimensions":"ignored"}"#
+    );
+}
+
+#[test]
+fn only_llama_server_refuses_a_named_tool_and_ignores_dimensions() {
+    for flavor in [
+        Flavor::LlamaServer,
+        Flavor::Vllm,
+        Flavor::LiteLlm,
+        Flavor::OpenRouter,
+    ] {
+        let q = flavor.quirks();
+        assert_eq!(
+            q.tool_naming == ToolNaming::AutoOnly,
+            flavor == Flavor::LlamaServer
+        );
+        assert_eq!(
+            q.dimensions == DimensionsField::Ignored,
+            flavor == Flavor::LlamaServer
+        );
+    }
+}
+
+#[test]
+fn a_codec_hands_out_a_decoder_for_the_served_model() {
+    use model_provider::ModelName;
+    let codec = OpenAiCodec::new(Flavor::LlamaServer);
+    // The decoder is plain data until a frame arrives.
+    let decoder = codec.decoder(ModelName("holo".into()));
+    assert!(format!("{decoder:?}").contains("LlamaServer"));
 }

@@ -1,15 +1,20 @@
 //! The chat-completions wire that llama-server, vLLM, LiteLLM and OpenRouter share.
 //!
-//! `codec` is pure: a `TurnRequest` becomes request JSON, and the server's SSE events become
-//! `TurnEvent`s. `OpenAiCompat` is the `Provider` that joins the codec to `model-http`.
+//! `OpenAiCodec` is a `model-wire` codec and pure: a `TurnRequest` becomes an `Exchange`, and the
+//! server's SSE frames become `TurnEvent`s. `Flavor::quirks` is the table of what differs between
+//! servers. `OpenAiCompat` is `Driver<OpenAiCodec, HttpClient>`. The `audio` module is the speech
+//! wire, still over `model-http`'s client directly.
 
 mod audio;
 mod codec;
 mod provider;
+mod quirks;
 
 pub use audio::{
     AudioCodecError, MultipartBody, OpenAiSpeech, PcmDecoder, SpeechFlavor, decode_transcription,
     encode_speech_request, encode_transcription,
 };
-pub use codec::{CodecError, Flavor, RequestJson, StreamDecoder, encode_request};
+pub use codec::{Flavor, OpenAiCodec, RequestJson, StreamDecoder, encode_request};
+pub use model_wire::CodecError;
 pub use provider::OpenAiCompat;
+pub use quirks::{DimensionsField, Quirks, ToolImages, ToolNaming, UsageAsk};

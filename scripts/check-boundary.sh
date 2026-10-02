@@ -10,8 +10,12 @@ cd "$(dirname "$0")/.."
 
 # RULES: what a crate reaches through ANY path (transitive, default features). The pure crates
 # never reach a runtime, an HTTP client, a bus, a compositor, a database or an inference runtime;
-# vision-prep reaches the image stack only through its `pixels` feature; the two io crates
-# (model-http, model-openai-compat) may reach an HTTP stack and a runtime but nothing below.
+# vision-prep reaches the image stack only through its `pixels` feature; the one io crate
+# (model-http: the Transport) may reach an HTTP stack and a runtime but nothing below. The codecs
+# (model-wire, model-openai-compat) and model-extract are pure over the Transport trait: they
+# reach no HTTP stack and no runtime, so when `HyperTransport` lands in model-http it sits behind
+# a feature that only a daemon turns on, and these rows keep checking default features.
+# genai-names has no dependencies at all.
 # Nothing here reaches porter: stoker is portable and has no porter dependency.
 PORTER="porter-core porter-infer porter-client porter-provider"
 EFFECTS="tokio hyper hyper-util rustls zbus zvariant reqwest ureq wayland-client wayland-backend reis atspi oo7 ort fastembed rusqlite notify cedar-policy rmcp"
@@ -31,7 +35,10 @@ RULES=(
   "model-catalog: $EFFECTS $PORTER"
   "engine-supervisor: $EFFECTS $PORTER"
   "model-http: $IO_FORBIDDEN $PORTER"
-  "model-openai-compat: $IO_FORBIDDEN $PORTER $AUDIO_DEVICES $GPL_TTS"
+  "model-wire: $EFFECTS $PORTER"
+  "model-extract: $EFFECTS $PORTER"
+  "genai-names: $EFFECTS $PORTER"
+  "model-openai-compat: $EFFECTS $PORTER $AUDIO_DEVICES $GPL_TTS"
   "speech-provider: $EFFECTS $PORTER $AUDIO_DEVICES $GPL_TTS"
   "speech-vad: $EFFECTS $PORTER $AUDIO_DEVICES $GPL_TTS"
   "speech-host-client: $IO_FORBIDDEN $PORTER $AUDIO_DEVICES $GPL_TTS"
@@ -67,15 +74,18 @@ done
 EDGES=(
   "cua-action:"
   "vision-prep: cua-action"
-  "model-provider: cua-action vision-prep"
+  "model-provider: cua-action genai-names vision-prep"
   "cua-parse: cua-action model-provider"
   "cua-vendors: cua-action cua-parse model-provider"
   "cua-session: cua-action cua-parse cua-vendors model-provider vision-prep"
-  "model-replay: model-provider speech-provider vision-prep"
+  "model-replay: model-http model-provider speech-provider vision-prep"
   "model-catalog: model-provider speech-provider"
   "engine-supervisor: model-catalog"
   "model-http:"
-  "model-openai-compat: model-http model-provider speech-provider"
+  "model-wire: model-http model-provider"
+  "model-extract: model-provider"
+  "genai-names:"
+  "model-openai-compat: model-http model-provider model-wire speech-provider"
   "speech-provider: model-provider"
   "speech-vad: speech-provider"
   "speech-host-client: model-provider speech-provider"

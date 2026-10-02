@@ -7,7 +7,10 @@ use base64::engine::general_purpose::STANDARD;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use vision_prep::MediaType;
 
-use crate::{JsonText, Milli, ModelName, SchemaText, Tokens, ToolCallId, ToolName};
+use crate::{
+    EngineExtras, JsonText, ModelName, Sampling, SchemaText, ThoughtSeal, Tokens, ToolCallId,
+    ToolName, ToolParallelism,
+};
 use cua_action::WireDialect;
 
 /// One request to one concrete model: sampling, native tools, prepared images.
@@ -17,9 +20,13 @@ pub struct TurnRequest {
     pub messages: Vec<Message>,
     pub tools: Vec<ToolSpec>,
     pub tool_choice: ToolChoice,
+    pub tool_calls: ToolParallelism,
     pub output: OutputShape,
     pub limits: Limits,
+    pub sampling: Sampling,
     pub reasoning: Reasoning,
+    /// Knobs of one engine flavor; `EngineExtras::None` for none.
+    pub engine: EngineExtras,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -42,8 +49,12 @@ pub enum Role {
 pub enum Part {
     Text(String),
     Image(ImageInput),
-    /// Reasoning content handed back where the wire wants it.
-    Thought(String),
+    /// Reasoning content handed back where the wire wants it, with its seal when the provider
+    /// gave one (signed or redacted thinking must return unchanged when tools are in play).
+    Thought {
+        text: String,
+        seal: ThoughtSeal,
+    },
     ToolCall(ToolCall),
     ToolResult(ToolResult),
 }
@@ -137,7 +148,9 @@ pub enum ToolChoice {
     Named(ToolName),
 }
 
-/// What shape the reply must take. `Regex` and `Lark` are for local engines only.
+/// What shape the reply must take. `Regex`, `Lark`, `Gbnf` and `Choice` are for local engines
+/// only: llama-server takes GBNF (not Lark), vLLM's guided backends take regex, choice and
+/// Lark. `Choice` is a reply that is exactly one of the listed strings.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "v", rename_all = "snake_case")]
 pub enum OutputShape {
@@ -145,12 +158,13 @@ pub enum OutputShape {
     JsonSchema(SchemaText),
     Regex(String),
     Lark(String),
+    Gbnf(String),
+    Choice(Vec<String>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Limits {
     pub max_output: Tokens,
-    pub temperature: Milli,
     pub stop: Vec<String>,
 }
 

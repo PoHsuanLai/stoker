@@ -98,6 +98,51 @@ fn missing_field_refuses() {
 }
 
 #[test]
+fn a_chat_entry_writes_its_sampling_defaults() {
+    use model_provider::{Count, Knob, Milli};
+    let entry = parse_entry(&holo_text()).unwrap();
+    let sampling = entry.sampling.unwrap();
+    assert_eq!(sampling.reasoning_on.temperature, Milli(600));
+    assert_eq!(sampling.reasoning_on.top_k, Knob::Set(Count(20)));
+    assert_eq!(sampling.reasoning_off.temperature, Milli(0));
+    assert_eq!(sampling.reasoning_off.top_p, Knob::Off);
+
+    let without: String = holo_text()
+        .lines()
+        .filter(|l| !l.starts_with("sampling "))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_eq!(
+        parse_entry(&without),
+        Err(CatalogError::ChatRoleWithoutSampling)
+    );
+}
+
+#[test]
+fn a_speech_entry_may_not_write_sampling() {
+    let text = std::fs::read_to_string(catalog_dir().join("kokoro-82m.toml")).unwrap();
+    let with = format!(
+        "{}\nsampling = {{ reasoning_on = {{ temperature = 0, top_p = {{ kind = \"off\" }}, top_k = {{ kind = \"off\" }}, min_p = {{ kind = \"off\" }}, repeat_penalty = {{ kind = \"off\" }}, seed = {{ kind = \"off\" }} }}, reasoning_off = {{ temperature = 0, top_p = {{ kind = \"off\" }}, top_k = {{ kind = \"off\" }}, min_p = {{ kind = \"off\" }}, repeat_penalty = {{ kind = \"off\" }}, seed = {{ kind = \"off\" }} }} }}",
+        text.split("[[engine]]").next().unwrap().trim_end()
+    ) + "\n[[engine]]"
+        + text.split("[[engine]]").nth(1).unwrap();
+    assert_eq!(
+        parse_entry(&with),
+        Err(CatalogError::SamplingWithoutChatRole)
+    );
+}
+
+#[test]
+fn the_new_constraints_parse_in_the_output_list() {
+    let text = holo_text().replace(
+        r#"output = ["json_schema"]"#,
+        r#"output = ["json_schema", "regex", "lark", "gbnf", "choice"]"#,
+    );
+    let entry = parse_entry(&text).unwrap();
+    assert_eq!(entry.caps.unwrap().output.len(), 5);
+}
+
+#[test]
 fn an_entry_without_an_engine_is_refused() {
     let text = holo_text();
     let head = text.split("[[engine]]").next().unwrap();

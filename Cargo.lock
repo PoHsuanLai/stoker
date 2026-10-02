@@ -158,6 +158,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "genai-names"
+version = "0.1.0"
+
+[[package]]
 name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -252,6 +256,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "model-extract"
+version = "0.1.0"
+dependencies = [
+ "model-provider",
+ "serde_json",
+]
+
+[[package]]
 name = "model-http"
 version = "0.1.0"
 dependencies = [
@@ -266,6 +278,7 @@ version = "0.1.0"
 dependencies = [
  "model-http",
  "model-provider",
+ "model-wire",
  "serde",
  "serde_json",
  "speech-provider",
@@ -278,6 +291,7 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "cua-action",
+ "genai-names",
  "serde",
  "serde_json",
  "thiserror",
@@ -288,12 +302,23 @@ dependencies = [
 name = "model-replay"
 version = "0.1.0"
 dependencies = [
+ "model-http",
  "model-provider",
  "serde",
  "serde_json",
  "speech-provider",
  "thiserror",
  "vision-prep",
+]
+
+[[package]]
+name = "model-wire"
+version = "0.1.0"
+dependencies = [
+ "model-http",
+ "model-provider",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

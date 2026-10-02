@@ -26,7 +26,6 @@ pub struct Caps {
 pub enum InputKind {
     Text,
     Image,
-    Audio,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -46,6 +45,24 @@ pub enum Constraint {
     JsonSchema,
     Regex,
     Lark,
+    /// llama.cpp's grammar format.
+    Gbnf,
+    /// The reply is exactly one of a list of strings.
+    Choice,
+}
+
+/// Whether a server still calls tools when a response format is set on the same request. Some
+/// servers suppress tool calls then (`response_format` plus `tools`); the extraction mode
+/// picks its route by it. A property of the engine flavor, not of the model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShapeWithTools {
+    /// Both at once.
+    Together,
+    /// The format is sent only after a tool result exists.
+    AfterResult,
+    /// Never both.
+    Refuse,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

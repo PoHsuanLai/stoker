@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::AuthHeader;
+use crate::{AuthHeader, ExtraHeader, Timeouts};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -45,4 +45,8 @@ pub struct HttpEndpoint {
     /// Prefixed to every request path (`/v1`).
     pub base: UrlPath,
     pub auth: AuthHeader,
+    /// Sent on every request besides `auth`: Anthropic's version and beta headers, OpenRouter's
+    /// referer, LiteLLM routing.
+    pub headers: Vec<ExtraHeader>,
+    pub timeouts: Timeouts,
 }

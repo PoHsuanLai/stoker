@@ -10,7 +10,7 @@ mod parse;
 
 pub use engine::{EngineArg, EngineKind, EngineProfile, FileName, WeightFiles};
 pub use entry::{
-    CatalogId, CatalogKind, GitRevision, GpuNeed, HfRepo, Licence, MiB, ModelEntry, Spdx,
-    VramEstimate, WeightSource,
+    CatalogId, CatalogKind, GitRevision, GpuNeed, HfRepo, Licence, MiB, ModelEntry,
+    SamplingDefaults, Spdx, VramEstimate, WeightSource,
 };
 pub use parse::{CatalogError, merge_catalogs, parse_entry};

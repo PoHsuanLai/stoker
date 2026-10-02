@@ -1,0 +1,18 @@
+[package]
+name = "model-extract"
+description = "Structured extraction as a pure machine: choose how to ask a model for a typed output, build the request, absorb the reply, repair once, or fail. No I/O."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+model-provider = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

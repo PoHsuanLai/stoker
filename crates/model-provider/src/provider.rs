@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ModelName, RetrySeconds, Tokens, TurnEnd, TurnRequest, TurnSink};
+use crate::{ModelName, RetrySeconds, ServerStatus, Tokens, TurnEnd, TurnRequest, TurnSink};
 
 /// One endpoint: a running engine or a cloud account.
 ///
@@ -23,7 +23,11 @@ pub trait Provider: Send + Sync {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModelInfo {
     pub name: ModelName,
-    pub context: Tokens,
+    /// The context the engine actually loaded (llama.cpp `n_ctx`, vLLM `max_model_len`); the
+    /// planner packs against this one.
+    pub loaded_context: Tokens,
+    /// The context the model was trained for.
+    pub trained_context: Tokens,
 }
 
 /// Each arm is something a caller acts on.
@@ -40,6 +44,9 @@ pub enum ProviderError {
     RateLimited(RetrySeconds),
     #[error("unauthorized")]
     Unauthorized,
+    /// A 5xx the server answered with. Never carries the body (it can echo the prompt).
+    #[error("the server failed with status {0:?}")]
+    Server(ServerStatus),
     #[error("the prompt exceeds the context limit of {limit:?}")]
     ContextOverflow { limit: Tokens },
     #[error("the endpoint rejected the request: {0}")]

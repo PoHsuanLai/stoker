@@ -1,0 +1,20 @@
+[package]
+name = "model-wire"
+description = "The wire half of a model endpoint: the codec traits (request encode, reply decode, error classification) and the Driver that joins a codec to a Transport. Pure over a seam: no HTTP stack."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+model-http = { workspace = true }
+model-provider = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

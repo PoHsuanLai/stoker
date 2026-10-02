@@ -1,6 +1,6 @@
 [package]
 name = "model-replay"
-description = "Record and replay of model turns for tests: cassettes, a replaying provider, and a recording wrapper over an injected sink."
+description = "Record and replay for tests, at two layers: typed turn cassettes (a replaying provider and a recording wrapper) and wire cassettes recorded and replayed at the Transport seam, both over an injected sink."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,6 +9,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+model-http = { workspace = true }
 model-provider = { workspace = true }
 speech-provider = { workspace = true }
 vision-prep = { workspace = true }

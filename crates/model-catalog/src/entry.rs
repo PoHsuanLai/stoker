@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use model_provider::{Caps, Tokens};
+use model_provider::{Caps, Sampling, Tokens};
 use serde::{Deserialize, Serialize};
 use speech_provider::{SpeechCaps, SpeechDir};
 
@@ -118,11 +118,21 @@ impl CatalogKind {
     }
 }
 
+/// A model's default sampling, one set per reasoning mode: Qwen-family models want different
+/// temperatures with thinking on and off. Written in full in every chat entry; a request carries
+/// the values it uses, taken from here when the caller has no opinion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SamplingDefaults {
+    pub reasoning_on: Sampling,
+    pub reasoning_off: Sampling,
+}
+
 /// The file's serde form: the chat capability fields sit at the top level beside the rest, and
 /// the speech capabilities are the `speech` table.
 ///
-/// `caps` is present exactly when a role needs it (`llm`, `computer_use`, `embeddings`, ...)
-/// and `speech` exactly when a speech role does; `parse_entry` checks both. A speech-only
+/// `caps` and `sampling` are present exactly when a chat role needs them (`llm`, `computer_use`,
+/// `embeddings`, ...) and `speech` exactly when a speech role does; `parse_entry` checks all
+/// three. A speech-only
 /// entry writes no chat fields, and a chat-only entry writes no `speech` table.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModelEntry {
@@ -134,6 +144,8 @@ pub struct ModelEntry {
     pub roles: BTreeSet<CatalogKind>,
     #[serde(flatten)]
     pub caps: Option<Caps>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sampling: Option<SamplingDefaults>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub speech: Option<SpeechCaps>,
     #[serde(rename = "engine")]

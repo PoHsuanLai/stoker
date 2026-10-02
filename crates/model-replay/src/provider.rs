@@ -3,7 +3,7 @@
 use model_provider::{ModelInfo, Provider, ProviderError, TurnEnd, TurnRequest, TurnSink};
 use serde::{Deserialize, Serialize};
 
-use crate::{Cassette, Interaction, RequestPrint};
+use crate::{Cassette, Interaction, InteractionId, RequestPrint};
 
 /// How a replay matches requests to interactions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -13,15 +13,17 @@ pub enum ReplayMode {
     InOrder,
     /// Each turn gets the first unused interaction whose request print equals its own.
     ByRequest,
+    /// The nth turn gets the nth interaction, and its request hash must equal too.
+    Strict,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ReplayError {
     #[error("the cassette has no interaction left")]
     Exhausted,
-    #[error("interaction {index} was recorded for a different request")]
+    #[error("interaction {index:?} was recorded for a different request")]
     Mismatch {
-        index: u32,
+        index: InteractionId,
         want: Box<RequestPrint>,
         got: Box<RequestPrint>,
     },
