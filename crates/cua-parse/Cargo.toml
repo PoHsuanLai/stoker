@@ -1,0 +1,21 @@
+[package]
+name = "cua-parse"
+description = "Strict, total parsers for the action dialects of local computer-use models: text and server-parsed tool calls."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+cua-action = { workspace = true }
+model-provider = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

@@ -4,6 +4,9 @@ members = [
   "crates/cua-action",
   "crates/vision-prep",
   "crates/model-provider",
+  "crates/cua-parse",
+  "crates/cua-vendors",
+  "crates/cua-session",
 ]
 
 [workspace.package]

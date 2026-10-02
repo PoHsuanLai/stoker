@@ -1,0 +1,22 @@
+[package]
+name = "cua-session"
+description = "The model side of one computer-use step: prompt assembly, parse with one repair, and mapping into window space. Pure."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+cua-action = { workspace = true }
+vision-prep = { workspace = true }
+model-provider = { workspace = true }
+cua-parse = { workspace = true }
+cua-vendors = { workspace = true }
+
+[dev-dependencies]
+
+
+[lints]
+workspace = true
