@@ -87,7 +87,7 @@ stoker.
 | `cua-action` | `space` < `geometry`, `target`, `text`, `keys` < `dialect`, `action` |
 | `vision-prep` | `rule` < `frame_map` < `pixels` |
 | `model-provider` | `units`, `ids` < `control`, `request` < `caps`, `event` < `provider` < `embed`, `shape`, `sequence` < `retry` < `scripted` (feature `testing`) |
-| `cua-parse` | `limits` < `outcome` < `parse` |
+| `cua-parse` | `limits` < `outcome` < `common`, `scan`, `chord` < `ui_tars`, `tools` < `parse` |
 | `cua-vendors` | `step_result` < `codec` |
 | `cua-session` | `model` < `session` |
 | `model-replay` | `print` < `cassette` < `sequence` < `provider`, `speech`, `wire` |
@@ -259,9 +259,9 @@ on; a change is an edit of SPEC.md first. Every `todo!()` is listed in `FINDINGS
 | Piece | State |
 | --- | --- |
 | `cua-action`: every type, `class`, `map_points`, the text and number limits | built, tested (round trips, pinned JSON, tables, compile-fail) |
-| `vision-prep`: types and serde | built, tested; `fit`, `image_tokens`, `FrameMap` maths, `prepare` stubbed |
+| `vision-prep`: types and serde | built, tested (`fit` against the reference `smart_resize`, the map tables and proptest, `prepare` with the `pixels` feature) |
 | `model-provider`: every type, `JsonText`, `ToolName`, `ImageBytes`, `ScriptedProvider` | built, tested |
-| `cua-parse`: types and limits | built, tested; `parse_text`, `parse_tool_calls` stubbed |
+| `cua-parse`: types and limits | built, tested (UiTars15, QwenComputerUse and a provisional Holo31; `never_panics` proptest; nightly fuzz targets in `crates/cua-parse/fuzz`) |
 | `cua-vendors`: trait, enum, `StepResult` | built; the codec bodies stubbed |
 | `cua-session`: types, `begin` | built; `request`, `absorb` stubbed |
 | `model-replay`: cassette format (engine stamp, interaction id and hash, `Strict` mode), round trip; wire cassette format and round trip | built, tested; the providers, `RequestPrint::{of, hash}`, `check_sequence`, `Cassette::check_sequences`, `RecordingTransport` and `ReplayTransport` stubbed |

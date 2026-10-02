@@ -65,6 +65,18 @@ impl VerbText {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// The verb as the model wrote it, cut to what a `VerbText` holds: control characters
+    /// removed, at most [`VerbText::MAX_CHARS`] characters. Total, for reporting what a parser
+    /// dropped.
+    pub(crate) fn lossy(verb: &str) -> Self {
+        VerbText(
+            verb.chars()
+                .filter(|c| !c.is_control())
+                .take(Self::MAX_CHARS)
+                .collect(),
+        )
+    }
 }
 
 impl TryFrom<String> for VerbText {

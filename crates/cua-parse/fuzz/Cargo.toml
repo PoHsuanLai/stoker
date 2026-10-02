@@ -1,0 +1,33 @@
+# Fuzz targets for cua-parse (QUESTIONS P11). Not a workspace member and nightly only: it is run
+# by hand with `dev/fuzz-cua-parse.sh`, never by CI or the stable gate. Its `[workspace]` table
+# keeps cargo from reading it as part of stoker's.
+[package]
+name = "cua-parse-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+cua-action = { path = "../../cua-action" }
+cua-parse = { path = ".." }
+model-provider = { path = "../../model-provider" }
+
+[workspace]
+
+[[bin]]
+name = "parse_text"
+path = "fuzz_targets/parse_text.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_tool_calls"
+path = "fuzz_targets/parse_tool_calls.rs"
+test = false
+doc = false
+bench = false

@@ -79,12 +79,11 @@ Decisions taken from it:
 Every `todo!()` in the repo (91: 86 in the workspace, 5 in the two excluded crates; the rig amendment added 27, see `The rig amendment` below). Each is a signature other repos build on; the body arrives with
 the work in the "Closes when" line of its crate.
 
-### `cua-parse` (2)
+### `cua-parse` (0, filled in wave F1)
 
-- `src/parse.rs`: parse_text: UiTars15 grammar
-- `src/parse.rs`: parse_tool_calls: QwenComputerUse and Holo31 schemas
+Both entry points are built. `parse_text` reads the UI-TARS-1.5 grammar (the model-card examples are in `fixtures/ui_tars_15/`); `parse_tool_calls` reads `QwenComputerUse` (Qwen's `computer_use` schema) and `Holo31`.
 
-Closes when the UiTars15 grammar parses the model-card examples; Holo31 and QwenComputerUse parse calls recorded by `dev/record-engine.sh`; `never_panics` (proptest) and the `fuzz/` targets pass.
+Still open: the `Holo31` schema is ours, provisional. The chat template names no computer-use function, so the parser reads Qwen's schema plus flat verbs (`click`, `drag`, `move`, `finish`, `ask`, `observe`; a point as `x` and `y` or `coordinate`), and `fixtures/holo_31/` and `fixtures/qwen_cu/` are hand-written from those schemas, not recorded. Closes when `dev/record-engine.sh` records real calls from Holo-3.1-4B and the fixtures and the verb tables are corrected to match. The nightly targets are `crates/cua-parse/fuzz/` (`dev/fuzz-cua-parse.sh`, needs `cargo-fuzz`); `never_panics` (proptest) runs on stable.
 
 ### `cua-session` (2)
 
@@ -232,18 +231,9 @@ Closes when `level_of` passes a table (silence is 0, full scale is 1000, -40 dBF
 
 Closes when `ort` (2.0.0-rc.13, the line fastembed resolves) joins the pinned block and the Silero v6.2.1 file, supplied by the daemon's path, gives the reference probabilities on a synthetic fixture under `fixtures/audio/`.
 
-### `vision-prep` (8)
+### `vision-prep` (0, filled in wave F1)
 
-- `src/frame_map.rs`: FrameMap::new: device size from scale, then fit
-- `src/frame_map.rs`: image_to_window: round half up in u64, refuse outside
-- `src/frame_map.rs`: grid_to_window: divisor is the grid max
-- `src/frame_map.rs`: window_to_image
-- `src/frame_map.rs`: length_to_window
-- `src/pixels.rs`: prepare: fast_image_resize then image encode
-- `src/rule.rs`: fit: smart_resize, long-edge and identity rules
-- `src/rule.rs`: image_tokens: per-rule token estimate
-
-Closes when `fit` matches the reference `smart_resize` on `fixtures/smart_resize.csv` (made by `dev/smart-resize-vectors.py` from qwen-vl-utils); the map passes its tables and the proptest; `prepare` resizes once and encodes once.
+`fit` matches the reference `smart_resize` on every row of `fixtures/smart_resize.csv` (made by `dev/smart-resize-vectors.py` from qwen-vl-utils); `image_tokens`, `FrameMap` and `prepare` are built and tested, with the round-trip proptest. `BelowMinimum` is returned only when a rule's budget floors an image to less than one patch.
 
 Also not yet present, and not `todo!()`:
 

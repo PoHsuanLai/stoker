@@ -1,0 +1,3 @@
+{"source":"hand-written from the schema parse_tool_calls reads for Holo31; replace with a recording from dev/record-engine.sh",
+ "calls":[{"name":"click","arguments":{"x":500,"y":250}},
+          {"name":"ask","arguments":{"question":"Which account?","choices":["Work","Personal"]}}]}

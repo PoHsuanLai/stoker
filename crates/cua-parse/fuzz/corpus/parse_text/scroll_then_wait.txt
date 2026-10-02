@@ -1,0 +1,4 @@
+Thought: The list is longer than the window; scroll down, then wait.
+Action: scroll(start_box='(500,500)', direction='down')
+
+wait()

@@ -1,0 +1,3 @@
+{"source":"hand-written from Qwen's documented computer_use schema; replace with a recording from dev/record-engine.sh",
+ "calls":[{"name":"computer_use","arguments":{"action":"scroll","coordinate":[600,400],"pixels":-300}},
+          {"name":"computer_use","arguments":{"action":"terminate","status":"success"}}]}

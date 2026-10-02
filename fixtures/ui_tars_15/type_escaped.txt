@@ -1,0 +1,2 @@
+Thought: Type the query into the focused field.
+Action: type(content='it\'s "quoted"\nsecond line')

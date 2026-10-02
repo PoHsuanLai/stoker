@@ -1,0 +1,2 @@
+{"source":"hand-written from Qwen's documented computer_use schema; replace with a recording from dev/record-engine.sh",
+ "calls":[{"name":"computer_use","arguments":{"action":"left_click","coordinate":[412,288]}}]}

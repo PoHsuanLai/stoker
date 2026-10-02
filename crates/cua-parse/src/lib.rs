@@ -3,9 +3,14 @@
 //! Strict and total: no `eval`, no panic on any input, verbs on an allow-list, numbers parsed as
 //! `u32` within bounds. An unknown verb is dropped and reported, never guessed.
 
+mod chord;
+mod common;
 mod limits;
 mod outcome;
 mod parse;
+mod scan;
+mod tools;
+mod ui_tars;
 
 pub use limits::{ActionCount, ByteLen, ByteOffset, ParseLimits};
 pub use outcome::{DropReason, Dropped, InSpace, ParseError, Parsed, VerbText, VerbTextError};

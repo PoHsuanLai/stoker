@@ -97,12 +97,122 @@ pub enum PrepError {
 }
 
 /// Resizes once and encodes once, from the frame's pixel format to `enc`.
+///
+/// The frame is read as opaque RGB (the alpha byte of `Argb8888` and `Abgr8888` is dropped: a
+/// window capture has no backdrop to blend with), resized with fast_image_resize's default
+/// Lanczos3 filter when the map's image size differs from the frame, and encoded by `image`.
 #[cfg(feature = "pixels")]
 pub fn prepare(
     raw: RawFrame<'_>,
     map: &FrameMap,
     enc: Encoding,
 ) -> Result<PreparedImage, PrepError> {
-    let _ = (raw, map, enc);
-    todo!("prepare: fast_image_resize then image encode")
+    check_geometry(&raw, map)?;
+    let rgb = to_rgb(&raw)?;
+    let (w, h) = (map.image.w.0, map.image.h.0);
+    let rgb = if (raw.size.w, raw.size.h) == (w, h) {
+        rgb
+    } else {
+        resize_rgb(rgb, raw.size, (w, h))?
+    };
+    let (media, bytes) = encode(&rgb, (w, h), enc)?;
+    Ok(PreparedImage {
+        media,
+        bytes,
+        size: map.image,
+    })
+}
+
+/// Bytes per pixel of every `wl_shm` format a capturer hands over.
+#[cfg(feature = "pixels")]
+const BYTES_PER_PIXEL: usize = 4;
+
+/// The frame must be a nonzero size that agrees with the window to within the rounding of the
+/// scale (a device size is the logical size times scale, rounded), and the buffer must hold it.
+#[cfg(feature = "pixels")]
+fn check_geometry(raw: &RawFrame<'_>, map: &FrameMap) -> Result<(), PrepError> {
+    let (w, h) = (raw.size.w as usize, raw.size.h as usize);
+    let (window_w, window_h) = (u64::from(map.window.w.0), u64::from(map.window.h.0));
+    let skew = (u64::from(raw.size.w) * window_h).abs_diff(u64::from(raw.size.h) * window_w);
+    let empty = w == 0 || h == 0 || map.image.w.0 == 0 || map.image.h.0 == 0;
+    if empty || skew > window_w + window_h {
+        return Err(PrepError::SizeMismatch);
+    }
+    let row = w
+        .checked_mul(BYTES_PER_PIXEL)
+        .ok_or(PrepError::ShortBuffer)?;
+    let stride = raw.stride as usize;
+    let needed = (h - 1)
+        .checked_mul(stride)
+        .and_then(|n| n.checked_add(row))
+        .ok_or(PrepError::ShortBuffer)?;
+    if stride < row || raw.pixels.len() < needed {
+        return Err(PrepError::ShortBuffer);
+    }
+    Ok(())
+}
+
+/// Where red, green and blue sit in one four-byte pixel (little-endian `wl_shm` words).
+#[cfg(feature = "pixels")]
+fn channel_order(format: PixelFormat) -> [usize; 3] {
+    match format {
+        PixelFormat::Xrgb8888 | PixelFormat::Argb8888 => [2, 1, 0],
+        PixelFormat::Xbgr8888 | PixelFormat::Abgr8888 => [0, 1, 2],
+    }
+}
+
+#[cfg(feature = "pixels")]
+fn to_rgb(raw: &RawFrame<'_>) -> Result<Vec<u8>, PrepError> {
+    let [r, g, b] = channel_order(raw.format);
+    let (w, h, stride) = (
+        raw.size.w as usize,
+        raw.size.h as usize,
+        raw.stride as usize,
+    );
+    let rows = raw.pixels.chunks(stride).take(h);
+    Ok(rows
+        .flat_map(|row| {
+            row[..w * BYTES_PER_PIXEL]
+                .as_chunks::<BYTES_PER_PIXEL>()
+                .0
+                .iter()
+        })
+        .flat_map(|px| [px[r], px[g], px[b]])
+        .collect())
+}
+
+#[cfg(feature = "pixels")]
+fn resize_rgb(rgb: Vec<u8>, from: DeviceSize, to: (u32, u32)) -> Result<Vec<u8>, PrepError> {
+    use fast_image_resize::{PixelType, Resizer, images::Image};
+    let src = Image::from_vec_u8(from.w, from.h, rgb, PixelType::U8x3)
+        .map_err(|_| PrepError::ShortBuffer)?;
+    let mut dst = Image::new(to.0, to.1, PixelType::U8x3);
+    Resizer::new()
+        .resize(&src, &mut dst, None)
+        .map_err(|_| PrepError::Encode)?;
+    Ok(dst.into_vec())
+}
+
+#[cfg(feature = "pixels")]
+fn encode(
+    rgb: &[u8],
+    (w, h): (u32, u32),
+    enc: Encoding,
+) -> Result<(MediaType, Vec<u8>), PrepError> {
+    use image::{ExtendedColorType, ImageEncoder, codecs};
+    let mut out = Vec::new();
+    let color = ExtendedColorType::Rgb8;
+    let (media, result) = match enc {
+        Encoding::Png => (
+            MediaType::Png,
+            codecs::png::PngEncoder::new(&mut out).write_image(rgb, w, h, color),
+        ),
+        Encoding::Jpeg(quality) => (
+            MediaType::Jpeg,
+            codecs::jpeg::JpegEncoder::new_with_quality(&mut out, quality.value())
+                .write_image(rgb, w, h, color),
+        ),
+    };
+    result.map_err(|_| PrepError::Encode)?;
+    Ok((media, out))
 }

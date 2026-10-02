@@ -3,3 +3,6 @@
 .claude/
 /crates/*/target
 /crates/*/Cargo.lock
+/crates/*/fuzz/target
+/crates/*/fuzz/Cargo.lock
+/crates/*/fuzz/artifacts

@@ -1,0 +1,2 @@
+Thought: I need to copy the selection first, then paste it in the other window.
+Action: hotkey(key='ctrl c')
