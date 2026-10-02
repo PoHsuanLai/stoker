@@ -15,6 +15,10 @@ cd "$(dirname "$0")/.."
 # Nothing here reaches porter: stoker is portable and has no porter dependency.
 PORTER="porter-core porter-infer porter-client porter-provider"
 EFFECTS="tokio hyper hyper-util rustls zbus zvariant reqwest ureq wayland-client wayland-backend reis atspi oo7 ort fastembed rusqlite notify cedar-policy rmcp"
+# Audio devices belong to the voice daemon (docket's voiced), never to the speech crates; and no
+# TTS stack with a GPL grapheme step is ever linked: Kokoro runs as its own process (voice.md 0.3).
+AUDIO_DEVICES="pipewire libpulse-binding libpulse-simple-binding cpal"
+GPL_TTS="espeak-rs espeak-ng espeak-ng-sys piper-rs"
 IO_FORBIDDEN="zbus zvariant reqwest wayland-client wayland-backend reis atspi oo7 ort fastembed rusqlite notify cedar-policy rmcp"
 RULES=(
   "cua-action: $EFFECTS $PORTER"
@@ -27,7 +31,10 @@ RULES=(
   "model-catalog: $EFFECTS $PORTER"
   "engine-supervisor: $EFFECTS $PORTER"
   "model-http: $IO_FORBIDDEN $PORTER"
-  "model-openai-compat: $IO_FORBIDDEN $PORTER"
+  "model-openai-compat: $IO_FORBIDDEN $PORTER $AUDIO_DEVICES $GPL_TTS"
+  "speech-provider: $EFFECTS $PORTER $AUDIO_DEVICES $GPL_TTS"
+  "speech-vad: $EFFECTS $PORTER $AUDIO_DEVICES $GPL_TTS"
+  "speech-host-client: $IO_FORBIDDEN $PORTER $AUDIO_DEVICES $GPL_TTS"
 )
 fail=0
 
@@ -64,11 +71,14 @@ EDGES=(
   "cua-parse: cua-action model-provider"
   "cua-vendors: cua-action cua-parse model-provider"
   "cua-session: cua-action cua-parse cua-vendors model-provider vision-prep"
-  "model-replay: model-provider vision-prep"
-  "model-catalog: model-provider"
+  "model-replay: model-provider speech-provider vision-prep"
+  "model-catalog: model-provider speech-provider"
   "engine-supervisor: model-catalog"
   "model-http:"
-  "model-openai-compat: model-http model-provider"
+  "model-openai-compat: model-http model-provider speech-provider"
+  "speech-provider: model-provider"
+  "speech-vad: speech-provider"
+  "speech-host-client: model-provider speech-provider"
 )
 for edge in "${EDGES[@]}"; do
   crate="${edge%%:*}"
@@ -84,10 +94,49 @@ for edge in "${EDGES[@]}"; do
   fi
 done
 
-# Every workspace member has a row above, so a new crate cannot slip in unchecked.
-for member in $(sed -n 's#^  "crates/\(.*\)",$#\1#p' Cargo.toml); do
+# The excluded crates (they need a runtime outside the pinned block, so they are not workspace
+# members) are checked from their own manifests: their direct path dependencies are exactly the
+# ones listed, and they reach no porter crate, no audio device crate and no GPL TTS stack. They
+# MAY reach `ort` and `sherpa-onnx`, which is why they are excluded.
+EXCLUDED=(
+  "speech-vad-silero: speech-provider speech-vad"
+  "speech-host: speech-provider"
+)
+for entry in "${EXCLUDED[@]}"; do
+  crate="${entry%%:*}"
+  read -r -a allowed <<<"${entry#*:}"
+  manifest="crates/$crate/Cargo.toml"
+  found=$(cargo tree --manifest-path "$manifest" --depth 1 -e normal,build --prefix none 2>/dev/null \
+    | grep '(/' | awk '{print $1}' | grep -vx "$crate" | sort -u | tr '\n' ' ')
+  want=$(printf '%s\n' "${allowed[@]}" | grep . | sort -u | tr '\n' ' ')
+  if [ "$found" != "$want" ]; then
+    echo "EDGE: $crate (excluded) depends on [${found% }], the table allows [${want% }]"
+    fail=1
+  else
+    echo "edges hold: $crate (excluded) depends on [${found% }]"
+  fi
+  leaked=0
+  for dep in $PORTER $AUDIO_DEVICES $GPL_TTS; do
+    if cargo tree --manifest-path "$manifest" -i "$dep" -e normal,build 2>/dev/null | grep -q .; then
+      echo "LEAK: $crate (excluded) depends on $dep"
+      leaked=1
+      fail=1
+    fi
+  done
+  if [ "$leaked" -eq 0 ]; then
+    echo "boundary holds: $crate (excluded) reaches none of $PORTER $AUDIO_DEVICES $GPL_TTS"
+  fi
+done
+
+# Every workspace member has a row above, so a new crate cannot slip in unchecked; every
+# excluded crate has a row in EXCLUDED, and is listed in the workspace's `exclude`.
+for member in $(sed -n '/^members = \[/,/^\]/s#^  "crates/\(.*\)",$#\1#p' Cargo.toml); do
   printf '%s\n' "${EDGES[@]}" | grep -q "^$member:" || { echo "ERROR: $member has no row in EDGES"; fail=1; }
   printf '%s\n' "${RULES[@]}" | grep -q "^$member:" || { echo "ERROR: $member has no row in RULES"; fail=1; }
+done
+
+for member in $(sed -n '/^exclude = \[/,/^\]/s#^  "crates/\(.*\)",$#\1#p' Cargo.toml); do
+  printf '%s\n' "${EXCLUDED[@]}" | grep -q "^$member:" || { echo "ERROR: $member has no row in EXCLUDED"; fail=1; }
 done
 
 exit "$fail"

@@ -36,3 +36,9 @@ additions, kept so the two repos read alike):
    and never clamped.
 8. **Recorded fixtures come from dev scripts** run by hand against the user's own engine.
    Nothing in CI generates, records or downloads a model, a weight or a screenshot.
+9. **Speech is personal and its engines stay separate.** What a person said (`PcmBytes`,
+   `Frame512`, `HeardText`) and what a model says aloud (`SpokenText`) follow rule 6; audio is
+   never stored, only digested in cassettes. No GPL code is linked into any crate here: text to
+   speech runs as its own engine process, and `speech-host` links sherpa-onnx built without TTS.
+10. **Lists are plain.** The catalog and its labels rank nothing: no best, recommended or tier
+    wording in a file, a label or a doc comment; a test fails a catalog file that has any.

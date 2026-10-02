@@ -1,0 +1,27 @@
+# Excluded from the workspace (and so from the gate's clippy and test, and from deny's graph),
+# the way almanac excludes recall-fastembed: it runs an ONNX model through `ort`, which is not
+# in the pinned block yet. Build it by hand:
+#
+#   cargo build --manifest-path crates/speech-vad-silero/Cargo.toml
+#
+# `ort` (2.0.0-rc.13, the line fastembed resolves) joins the dependencies below with the fill,
+# after it joins quire's `docs/workspace-deps.toml`.
+[package]
+name = "speech-vad-silero"
+description = "Silero VAD v6.2.1 (ONNX) as a speech-provider VoiceActivity, through ort."
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.92"
+repository = "https://github.com/PoHsuanLai/stoker"
+publish = false
+
+[dependencies]
+speech-provider = { path = "../speech-provider" }
+speech-vad = { path = "../speech-vad" }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+
+[lints.rust]
+unsafe_code = "deny"
+missing_debug_implementations = "warn"

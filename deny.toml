@@ -5,6 +5,9 @@
 
 [graph]
 targets = ["x86_64-unknown-linux-gnu"]
+# The skeletons that need a runtime outside the pinned block (workspace `exclude`) stay out of the
+# graph; their dependencies are checked when they join (`ort`, `sherpa-onnx`).
+exclude = ["speech-vad-silero", "speech-host"]
 
 [licenses]
 allow = [
