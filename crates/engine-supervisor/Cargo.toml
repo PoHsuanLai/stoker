@@ -1,0 +1,24 @@
+[package]
+name = "engine-supervisor"
+description = "Engine lifecycle as a pure machine: start, readiness, idle unload, crash backoff and the VRAM budget; the seams the daemon fills."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+model-catalog = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true
+
+[features]
+# Scripted fakes of the three seams, for tests of the daemon and of porter's inferd.
+testing = []

@@ -7,6 +7,9 @@ members = [
   "crates/cua-parse",
   "crates/cua-vendors",
   "crates/cua-session",
+  "crates/model-replay",
+  "crates/model-catalog",
+  "crates/engine-supervisor",
 ]
 
 [workspace.package]

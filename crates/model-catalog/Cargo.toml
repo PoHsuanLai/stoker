@@ -1,0 +1,23 @@
+[package]
+name = "model-catalog"
+description = "The curated model table as data files: entries, engine profiles, the file format and its parser."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+model-provider = { workspace = true }
+serde = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+cua-action = { workspace = true }
+vision-prep = { workspace = true }
+
+
+[lints]
+workspace = true

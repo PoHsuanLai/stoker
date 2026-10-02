@@ -1,0 +1,39 @@
+# Holo 3.1 4B (H Company), a computer-use model on the Qwen3.5 4B base.
+#
+# Read from the repository's config.json, preprocessor_config.json and chat_template.jinja
+# (FINDINGS.md, S0):
+# - images: patch 16, merge 2, so factor 32; the processor's size is 65536 to 16777216 pixels.
+# - grid: 1000 is the Qwen3-VL family's convention. Neither the model card nor the chat
+#   template states Holo's coordinate convention, so a recorded step confirms it.
+# - tools: the chat template renders tools as JSON and expects Qwen3-coder XML calls, which
+#   vLLM's qwen3_coder parser turns into tool calls. The template names no computer-use
+#   function, so the action schema is the one cua-session's prompt declares (dialect holo31).
+# - kv: 8 of 32 layers use full attention (4 KV heads of 256, bf16): 32 MiB per 1k tokens; the
+#   linear-attention layers keep a fixed-size state, inside the overhead.
+id = "holo-3.1-4b"
+label = "Holo 3.1 4B"
+licence = { kind = "open", v = "Apache-2.0" }
+source = { kind = "hugging_face", v = { repo = "Hcompany/Holo-3.1-4B", revision = "8c88265a5a159bfd1492db9243733dd2e6e04a6e" } }
+vram = { weights_mib = 10400, kv_per_1k_ctx_mib = 32, overhead_mib = 1500 }
+roles = ["llm", "computer_use"]
+inputs = ["text", "image"]
+tools = "server_parsed"
+output = ["json_schema"]
+reasoning = "present"
+streaming = "present"
+context = 32768
+max_output = 4096
+images = { per_prompt = 3, rule = { kind = "smart_resize", v = { factor = 32, min_pixels = 65536, max_pixels = 16777216 } }, space = { kind = "grid", v = 1000 } }
+computer_use = { kind = "dialect", v = { dialect = { kind = "tool", v = "holo31" }, batching = "one", zoom = "absent" } }
+
+[[engine]]
+kind = "vllm"
+args = [
+  "--max-model-len", "32768",
+  "--limit-mm-per-prompt", "{\"image\":3,\"video\":0}",
+  "--enable-auto-tool-choice",
+  "--tool-call-parser", "qwen3_coder",
+  "--reasoning-parser", "qwen3",
+  "--gpu-memory-utilization", "0.80",
+]
+weights = { kind = "hf_snapshot" }
