@@ -1,0 +1,20 @@
+# Whisper large-v3 turbo (OpenAI), speech to text on the GPU through vLLM's transcription endpoint.
+#
+# - weights: 809M parameters in fp16 (about 1550 MiB); the KV share is small and sits in the overhead.
+# - vram: the estimate and the utilisation below are proposals (they cannot sit beside the chat
+#   model at 0.80); a measurement in engine fill (spike V-L) replaces them. The supervisor's
+#   budget decides whether it fits and may evict it first.
+# - langs: any (the model detects the language); max_audio_ms is its 30 s window.
+# - the request is batch: no partial results.
+id = "whisper-large-v3-turbo"
+label = "Whisper large-v3 turbo"
+licence = { kind = "open", v = "MIT" }
+source = { kind = "hugging_face", v = { repo = "openai/whisper-large-v3-turbo", revision = "41f01f3fe87f28c78e2fbf8b568835947dd65ed9" } }
+vram = { weights_mib = 1550, kv_per_1k_ctx_mib = 0, overhead_mib = 1500 }
+roles = ["speech_in"]
+speech = { dir = "in", streaming = "absent", partials = "absent", punctuation = "present", timestamps = "absent", langs = { kind = "any" }, max_audio_ms = 30000, input = { rate = 16000, pcm = "s16_le" } }
+
+[[engine]]
+kind = "vllm"
+args = ["--max-model-len", "448", "--gpu-memory-utilization", "0.20"]
+weights = { kind = "hf_snapshot" }

@@ -59,15 +59,23 @@ pub struct UnitSpec {
 }
 
 /// Where the engines' programs and the weights cache are, from settings
-/// (`ai.engine.vllm.python`, `ai.engine.llama_server.path`); never from the environment.
+/// (`ai.engine.vllm.python`, `ai.engine.llama_server.path`, `ai.engine.speech_host.path`,
+/// `ai.engine.kokoro.python`); never from the environment.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EnginePaths {
     pub vllm_python: ProgramPath,
     pub llama_server: ProgramPath,
+    pub speech_host: ProgramPath,
+    pub kokoro_python: ProgramPath,
     pub hf_cache: PathBuf,
 }
 
 /// Pure: the unit that runs `profile` for `entry`, listening on `socket`.
+///
+/// `{socket}` in a profile's args is replaced by the socket path. An entry whose
+/// `vram.gpu_need()` is `Absent` gets `GpuAccess::Absent` in its sandbox; `SpeechHost` runs
+/// `paths.speech_host` and `KokoroFastApi` runs `paths.kokoro_python` (a uv environment's
+/// interpreter, like vLLM's).
 pub fn command(
     entry: &ModelEntry,
     profile: &EngineProfile,

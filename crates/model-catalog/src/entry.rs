@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 
 use model_provider::{Caps, Tokens};
 use serde::{Deserialize, Serialize};
+use speech_provider::{SpeechCaps, SpeechDir};
 
 use crate::EngineProfile;
 
@@ -59,7 +60,24 @@ pub struct VramEstimate {
     pub overhead: MiB,
 }
 
+/// Whether an engine for a model needs the GPU at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GpuNeed {
+    /// The estimate is all zeros: the engine runs on the CPU, and its sandbox has no GPU access.
+    Absent,
+    Needed,
+}
+
 impl VramEstimate {
+    /// `Absent` exactly when weights, KV and overhead are all zero.
+    pub fn gpu_need(&self) -> GpuNeed {
+        match (self.weights, self.kv_per_1k_ctx, self.overhead) {
+            (MiB(0), MiB(0), MiB(0)) => GpuNeed::Absent,
+            _ => GpuNeed::Needed,
+        }
+    }
+
     /// `weights + kv(context) + overhead`; the KV share rounds up to whole mebibytes.
     pub fn need(&self, context: Tokens) -> MiB {
         let kv = (u64::from(self.kv_per_1k_ctx.0) * u64::from(context.0)).div_ceil(1000);
@@ -77,12 +95,35 @@ pub enum CatalogKind {
     Llm,
     ComputerUse,
     Embeddings,
-    Speech,
+    /// Speech to text (porter's `AiKind` splits the old `Speech` row the same way).
+    SpeechIn,
+    /// Text to speech.
+    SpeechOut,
     ImageGen,
     Rerank,
 }
 
-/// The file's serde form: the capability fields sit at the top level beside the rest.
+impl CatalogKind {
+    /// The direction of a speech role; `None` for every chat-side role.
+    pub fn speech_dir(self) -> Option<SpeechDir> {
+        match self {
+            CatalogKind::SpeechIn => Some(SpeechDir::In),
+            CatalogKind::SpeechOut => Some(SpeechDir::Out),
+            CatalogKind::Llm
+            | CatalogKind::ComputerUse
+            | CatalogKind::Embeddings
+            | CatalogKind::ImageGen
+            | CatalogKind::Rerank => None,
+        }
+    }
+}
+
+/// The file's serde form: the chat capability fields sit at the top level beside the rest, and
+/// the speech capabilities are the `speech` table.
+///
+/// `caps` is present exactly when a role needs it (`llm`, `computer_use`, `embeddings`, ...)
+/// and `speech` exactly when a speech role does; `parse_entry` checks both. A speech-only
+/// entry writes no chat fields, and a chat-only entry writes no `speech` table.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModelEntry {
     pub id: CatalogId,
@@ -92,7 +133,9 @@ pub struct ModelEntry {
     pub vram: VramEstimate,
     pub roles: BTreeSet<CatalogKind>,
     #[serde(flatten)]
-    pub caps: Caps,
+    pub caps: Option<Caps>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speech: Option<SpeechCaps>,
     #[serde(rename = "engine")]
     pub engines: Vec<EngineProfile>,
 }

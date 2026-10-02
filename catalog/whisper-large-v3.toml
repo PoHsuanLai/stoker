@@ -1,0 +1,20 @@
+# Whisper large-v3 (OpenAI), speech to text on the GPU through vLLM's transcription endpoint.
+#
+# - weights: 1.55B parameters in fp16 (about 2960 MiB); the snapshot is already in the Hugging Face cache; the KV share is small and sits in the overhead.
+# - vram: the estimate and the utilisation below are proposals (they cannot sit beside the chat
+#   model at 0.80); a measurement in engine fill (spike V-L) replaces them. The supervisor's
+#   budget decides whether it fits and may evict it first.
+# - langs: any (the model detects the language); max_audio_ms is its 30 s window.
+# - the request is batch: no partial results.
+id = "whisper-large-v3"
+label = "Whisper large-v3"
+licence = { kind = "open", v = "Apache-2.0" }
+source = { kind = "hugging_face", v = { repo = "openai/whisper-large-v3", revision = "06f233fe06e710322aca913c1bc4249a0d71fce1" } }
+vram = { weights_mib = 2960, kv_per_1k_ctx_mib = 0, overhead_mib = 1500 }
+roles = ["speech_in"]
+speech = { dir = "in", streaming = "absent", partials = "absent", punctuation = "present", timestamps = "absent", langs = { kind = "any" }, max_audio_ms = 30000, input = { rate = 16000, pcm = "s16_le" } }
+
+[[engine]]
+kind = "vllm"
+args = ["--max-model-len", "448", "--gpu-memory-utilization", "0.30"]
+weights = { kind = "hf_snapshot" }

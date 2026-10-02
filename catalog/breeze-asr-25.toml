@@ -1,0 +1,18 @@
+# Breeze ASR 25 (MediaTek Research), a Whisper large-v2 fine-tune for Taiwanese Mandarin with
+# English code-switching, on the GPU through vLLM's transcription endpoint.
+#
+# - weights: 1.55B parameters in fp16 (about 2960 MiB); the KV share sits in the overhead.
+# - vram: proposals, as for the Whisper entries; spike V-L measures them.
+# - langs: zh-TW and en; max_audio_ms is the 30 s window; the request is batch.
+id = "breeze-asr-25"
+label = "Breeze ASR 25"
+licence = { kind = "open", v = "Apache-2.0" }
+source = { kind = "hugging_face", v = { repo = "MediaTek-Research/Breeze-ASR-25", revision = "cffe7ccb404d025296a00758d0a33468bec3a9d0" } }
+vram = { weights_mib = 2960, kv_per_1k_ctx_mib = 0, overhead_mib = 1500 }
+roles = ["speech_in"]
+speech = { dir = "in", streaming = "absent", partials = "absent", punctuation = "present", timestamps = "absent", langs = { kind = "listed", v = ["en", "zh-TW"] }, max_audio_ms = 30000, input = { rate = 16000, pcm = "s16_le" } }
+
+[[engine]]
+kind = "vllm"
+args = ["--max-model-len", "448", "--gpu-memory-utilization", "0.30"]
+weights = { kind = "hf_snapshot" }

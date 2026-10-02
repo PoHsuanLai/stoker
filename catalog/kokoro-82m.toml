@@ -1,0 +1,21 @@
+# Kokoro 82M (hexgrad), text to speech, served by Kokoro-FastAPI in its own uv environment.
+#
+# - the engine is a separate process: Kokoro's grapheme-to-phoneme step can fall back to
+#   espeak-ng (GPL-3.0), which therefore never links into anything of ours.
+# - CPU profile (ONNX): the estimate is all zeros and the sandbox has no GPU access.
+# - output: 24 kHz mono S16 PCM, the streaming `pcm` format of /v1/audio/speech.
+# - voices: three of the pack's voices; the full list is read from the engine at run time.
+# - args: uvicorn on a Unix socket; the flag wiring is unverified until the Kokoro dev script
+#   (spike V-T) runs once by hand.
+id = "kokoro-82m"
+label = "Kokoro 82M"
+licence = { kind = "open", v = "Apache-2.0" }
+source = { kind = "hugging_face", v = { repo = "hexgrad/Kokoro-82M", revision = "f3ff3571791e39611d31c381e3a41a3af07b4987" } }
+vram = { weights_mib = 0, kv_per_1k_ctx_mib = 0, overhead_mib = 0 }
+roles = ["speech_out"]
+speech = { dir = "out", streaming = "present", partials = "absent", punctuation = "absent", timestamps = "absent", langs = { kind = "listed", v = ["en-GB", "en-US", "ja", "zh-CN"] }, max_audio_ms = 60000, output = { rate = 24000, pcm = "s16_le" }, voices = ["af_heart", "bf_emma", "zf_xiaoxiao"] }
+
+[[engine]]
+kind = "kokoro_fast_api"
+args = ["--uds", "{socket}"]
+weights = { kind = "hf_snapshot" }

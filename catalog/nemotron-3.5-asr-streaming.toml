@@ -1,0 +1,29 @@
+# Nemotron Speech 3.5 streaming (NVIDIA), the sherpa-onnx int8 export with a 560 ms chunk,
+# run by our `speech-host` on the CPU.
+#
+# Read from the NVIDIA model card (licence OpenMDW-1.1, 40 language-locales, punctuated output,
+# language detection with target_lang=auto) and the sherpa-onnx repository's file list
+# (encoder, decoder, joiner int8 ONNX files, tokens.txt). The export is csukuangfj2's, not
+# csukuangfj's as the first proposal wrote.
+# - weights and VRAM: CPU only, so the estimate is all zeros and the sandbox has no GPU access.
+# - langs: the model card's 40 locale tags, as written there.
+# - max_audio_ms: the proposal's 120 s; `speech-host` measures it in engine fill.
+# - args: `{socket}` is replaced by `command`; the weights directory is added by `command`
+#   from the snapshot.
+id = "nemotron-3.5-asr-streaming"
+label = "Nemotron Speech 3.5"
+licence = { kind = "open", v = "OpenMDW-1.1" }
+source = { kind = "hugging_face", v = { repo = "csukuangfj2/sherpa-onnx-nemotron-3.5-asr-streaming-0.6b-560ms-int8-2026-06-11", revision = "ab43d895f5985b1bbab8b6eac8607fcdc05343f3" } }
+vram = { weights_mib = 0, kv_per_1k_ctx_mib = 0, overhead_mib = 0 }
+roles = ["speech_in"]
+speech = { dir = "in", streaming = "present", partials = "present", punctuation = "present", timestamps = "present", langs = { kind = "listed", v = [
+  "ar-AR", "bg-BG", "cs-CZ", "da-DK", "de-DE", "el-GR", "en-GB", "en-US", "es-ES", "es-US",
+  "et-EE", "fi-FI", "fr-CA", "fr-FR", "he-IL", "hi-IN", "hr-HR", "hu-HU", "it-IT", "ja-JP",
+  "ko-KR", "lt-LT", "lv-LV", "mt-MT", "nb-NO", "nl-NL", "nn-NO", "pl-PL", "pt-BR", "pt-PT",
+  "ro-RO", "ru-RU", "sk-SK", "sl-SI", "sv-SE", "th-TH", "tr-TR", "uk-UA", "vi-VN", "zh-CN",
+] }, max_audio_ms = 120000, input = { rate = 16000, pcm = "s16_le" } }
+
+[[engine]]
+kind = "speech_host"
+args = ["--socket", "{socket}", "--threads", "6", "--chunk-ms", "560"]
+weights = { kind = "sherpa_dir" }

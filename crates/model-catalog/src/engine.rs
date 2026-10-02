@@ -7,6 +7,11 @@ use serde::{Deserialize, Serialize};
 pub enum EngineKind {
     LlamaServer,
     Vllm,
+    /// Our own STT engine process (`speech-host`, sherpa-onnx without TTS), on the CPU.
+    SpeechHost,
+    /// Kokoro-FastAPI in a uv environment: a separate process, so its GPL espeak-ng is never
+    /// linked into ours.
+    KokoroFastApi,
 }
 
 /// One command-line argument, passed to the engine as written.
@@ -27,6 +32,8 @@ pub enum WeightFiles {
     HfSnapshot,
     /// A GGUF model and its multimodal projector, as llama-server reads them.
     Gguf { model: FileName, mmproj: FileName },
+    /// A directory of ONNX files and `tokens.txt`, as the speech host reads it.
+    SherpaDir,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
