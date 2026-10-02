@@ -15,15 +15,12 @@
 //! is refused; nothing `Untrusted`-labelled or `Private` is ever recorded, and nothing is
 //! recorded from a real user session.
 
-use model_http::{
-    BodyKind, BodySink, EventName, Exchange, HttpError, HttpStatus, RouteRoot, Transport, UrlPath,
-    Verb, WaitSeconds,
-};
+use model_http::{BodyKind, EventName, HttpStatus, RouteRoot, UrlPath, Verb, WaitSeconds};
 use model_provider::{JsonText, Seed};
 use serde::{Deserialize, Serialize};
 
 use crate::cassette::{read_jsonl, write_jsonl};
-use crate::{CassetteError, CassetteHeader, ReplayMode, SinkError};
+use crate::{CassetteError, CassetteHeader, InteractionId, SinkError};
 
 /// The header of a wire cassette: the turn header, so one type carries version and engine stamp.
 pub type WireHeader = CassetteHeader;
@@ -129,64 +126,16 @@ pub trait WireSink: Send + Sync {
     fn write(&self, exchange: &WireExchange) -> Result<(), SinkError>;
 }
 
-/// Wraps any transport and records every exchange it carries into a sink.
-#[derive(Debug)]
-pub struct RecordingTransport<T: Transport, S: WireSink> {
-    inner: T,
-    sink: S,
-}
-
-impl<T: Transport, S: WireSink> RecordingTransport<T, S> {
-    pub fn new(inner: T, sink: S) -> Self {
-        Self { inner, sink }
-    }
-}
-
-impl<T: Transport, S: WireSink> Transport for RecordingTransport<T, S> {
-    fn exchange<K: BodySink>(
-        &self,
-        ex: &Exchange,
-        sink: &mut K,
-    ) -> impl Future<Output = Result<HttpStatus, HttpError>> + Send {
-        let _ = (&self.inner, &self.sink, ex, &mut *sink);
-        async {
-            todo!(
-                "RecordingTransport::exchange: tee head and frames into a WireExchange, scrub, write"
-            )
-        }
-    }
-}
-
-/// Plays a wire cassette as a transport: the recorded head, then the recorded body sliced by the
-/// plan.
-#[derive(Debug)]
-pub struct ReplayTransport {
-    cassette: WireCassette,
-    mode: ReplayMode,
-    plan: ChunkPlan,
-}
-
-impl ReplayTransport {
-    pub fn new(cassette: WireCassette, mode: ReplayMode, plan: ChunkPlan) -> Self {
-        Self {
-            cassette,
-            mode,
-            plan,
-        }
-    }
-}
-
-impl Transport for ReplayTransport {
-    fn exchange<K: BodySink>(
-        &self,
-        ex: &Exchange,
-        sink: &mut K,
-    ) -> impl Future<Output = Result<HttpStatus, HttpError>> + Send {
-        let _ = (&self.cassette, &self.mode, &self.plan, ex, &mut *sink);
-        async {
-            todo!(
-                "ReplayTransport::exchange: match the request, deliver head then chunks, WireEnd as the error"
-            )
-        }
-    }
+/// A request the replay could not serve, kept for the test to read (a transport can only answer
+/// `HttpError::Connect`).
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum WireMiss {
+    #[error("the wire cassette has no exchange left")]
+    Exhausted,
+    #[error("exchange {index:?} was recorded for a different request")]
+    Mismatch {
+        index: InteractionId,
+        want: Box<WireRequest>,
+        got: Box<WireRequest>,
+    },
 }

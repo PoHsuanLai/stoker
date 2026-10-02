@@ -10,6 +10,9 @@ mod state;
 mod step;
 mod unit;
 
+#[cfg(test)]
+mod testutil;
+
 #[cfg(feature = "testing")]
 mod fakes;
 

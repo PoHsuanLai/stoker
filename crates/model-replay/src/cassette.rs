@@ -5,7 +5,7 @@ use model_provider::{ModelName, ProviderError, TurnEnd, TurnEvent};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::{PrintHash, RequestPrint};
+use crate::{PrintHash, RequestPrint, check_sequence};
 
 /// The format version of a cassette file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -99,17 +99,25 @@ impl Cassette {
 
     pub fn from_jsonl(text: &str) -> Result<Cassette, CassetteError> {
         let (header, interactions) = read_jsonl(text)?;
-        Ok(Cassette {
+        let cassette = Cassette {
             header,
             interactions,
-        })
+        };
+        cassette.check_sequences()?;
+        Ok(cassette)
     }
 
-    /// Runs `check_sequence` over every interaction's events: `BadSequence` names the line. The
-    /// loader calls it once it is built (`from_jsonl` does not yet).
+    /// Runs `check_sequence` over every interaction's events: `BadSequence` names the line
+    /// (the header is line 1). `from_jsonl` calls it once the file is built.
     pub fn check_sequences(&self) -> Result<(), CassetteError> {
-        let _ = &self.interactions;
-        todo!("Cassette::check_sequences: check_sequence per interaction, line = index + 2")
+        self.interactions
+            .iter()
+            .enumerate()
+            .try_for_each(|(at, interaction)| {
+                check_sequence(&interaction.events).map_err(|_| CassetteError::BadSequence {
+                    line: u32::try_from(at + 2).unwrap_or(u32::MAX),
+                })
+            })
     }
 }
 

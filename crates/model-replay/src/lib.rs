@@ -5,12 +5,16 @@
 //! HTTP exchanges recorded at the `Transport` seam) share the file format and the header with the
 //! chat ones.
 
+mod canon;
 mod cassette;
 mod print;
 mod provider;
 mod sequence;
 mod speech;
 mod wire;
+mod wire_form;
+mod wire_record;
+mod wire_replay;
 
 pub use cassette::{
     BackendLabel, BuildLabel, Cassette, CassetteError, CassetteHeader, CassetteVersion,
@@ -29,6 +33,8 @@ pub use speech::{
     SpeechInteraction, SpeechReplay, SttPrint, TextDigest, TextPrint, TtsPrint,
 };
 pub use wire::{
-    ByteStep, ChunkPlan, HeadPrint, RecordingTransport, ReplayTransport, WireBody, WireCassette,
-    WireEnd, WireExchange, WireFrame, WireHeader, WireReply, WireRequest, WireSink,
+    ByteStep, ChunkPlan, HeadPrint, WireBody, WireCassette, WireEnd, WireExchange, WireFrame,
+    WireHeader, WireMiss, WireReply, WireRequest, WireSink,
 };
+pub use wire_record::RecordingTransport;
+pub use wire_replay::ReplayTransport;
