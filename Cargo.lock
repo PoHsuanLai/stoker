@@ -154,10 +154,17 @@ dependencies = [
 name = "cua-session"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "cua-action",
  "cua-parse",
  "cua-vendors",
+ "model-http",
+ "model-openai-compat",
  "model-provider",
+ "model-replay",
+ "model-wire",
+ "proptest",
+ "serde_json",
  "vision-prep",
 ]
 

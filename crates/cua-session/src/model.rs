@@ -3,7 +3,10 @@
 use cua_action::{CuaAction, CuaDialect, ModelSpace, Point, WindowSpace};
 use cua_parse::{Dropped, ParseError};
 use cua_vendors::StepResult;
-use model_provider::{ToolCall, TurnEnd, TurnRequest};
+use model_provider::{
+    EngineExtras, Knob, Limits, Milli, Reasoning, Sampling, Tokens, ToolCall, ToolParallelism,
+    TurnEnd, TurnRequest,
+};
 use vision_prep::{Encoding, ResizeRule};
 
 /// The index of a step within one run, from 0.
@@ -21,6 +24,50 @@ pub struct FrameBudget(pub u8);
 /// How many repair prompts a step may spend on a reply that does not parse.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RepairBudget(pub u8);
+
+/// How many earlier steps the prompt lists as one line each (the frames are `FrameBudget`'s).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct StepLines(pub u8);
+
+/// What a step's request says beyond the prompt: how the model samples and how long it may
+/// answer. `CuaProfile` is frozen and carries none of it, so the daemon sets it from the model's
+/// catalog entry with [`CuaSession::with_settings`](crate::CuaSession::with_settings); a session
+/// that is never given settings uses [`TurnSettings::default`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TurnSettings {
+    pub sampling: Sampling,
+    pub limits: Limits,
+    pub reasoning: Reasoning,
+    pub tool_calls: ToolParallelism,
+    pub engine: EngineExtras,
+    pub lines: StepLines,
+}
+
+impl Default for TurnSettings {
+    /// Greedy sampling (the same screen gives the same click), no reasoning, one call per turn,
+    /// 1024 tokens of answer, eight earlier steps listed. Provisional: the daemon replaces them
+    /// with the catalog's `reasoning_off` sampling and `max_output`.
+    fn default() -> Self {
+        TurnSettings {
+            sampling: Sampling {
+                temperature: Milli(0),
+                top_p: Knob::Off,
+                top_k: Knob::Off,
+                min_p: Knob::Off,
+                repeat_penalty: Knob::Off,
+                seed: Knob::Off,
+            },
+            limits: Limits {
+                max_output: Tokens(1024),
+                stop: Vec::new(),
+            },
+            reasoning: Reasoning::Off,
+            tool_calls: ToolParallelism::One,
+            engine: EngineExtras::None,
+            lines: StepLines(8),
+        }
+    }
+}
 
 /// How one model is prompted and parsed.
 #[derive(Debug, Clone, PartialEq, Eq)]
