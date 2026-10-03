@@ -879,6 +879,7 @@ dependencies = [
 name = "speech-vad"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "serde",
  "serde_json",
  "speech-provider",

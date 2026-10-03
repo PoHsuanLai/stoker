@@ -48,13 +48,58 @@ pub enum EndWhy {
     NoSpeech,
 }
 
-/// The next state after one frame's verdict at position `at`.
+/// Samples in a millisecond of 16 kHz audio.
+const SAMPLES_PER_MS: u64 = 16;
+
+fn samples(ms: AudioMs) -> u64 {
+    u64::from(ms.0) * SAMPLES_PER_MS
+}
+
+/// The next state after one frame's verdict at position `at` (the frame's first sample, counted
+/// from the start of the utterance).
+///
+/// - `Waiting` becomes `InSpeech` at the first speech frame; with only silence for
+///   `silence_end` from the start it is `Ended(NoSpeech)`.
+/// - `InSpeech` becomes `Trailing` at the first silent frame, if the speech lasted `min_speech`;
+///   a shorter burst was not speech and the machine is `Waiting` again.
+/// - `Trailing` becomes `Ended(Silence)` once the silence has lasted `silence_end`; speech
+///   resuming before that is `InSpeech` again, and speech that has been accepted once stays
+///   accepted (the resumed state's `since` is set back by `min_speech`, so the next silence
+///   does not count it a burst).
+/// - `Ended` stays ended.
+///
+/// `lead` is the caller's: it keeps that much audio before `InSpeech`'s `since`.
 pub fn endpoint(
     state: Endpoint,
     voiced: Voiced,
     at: SampleIndex,
     params: &EndpointParams,
 ) -> Endpoint {
-    let _ = (state, voiced, at, params);
-    todo!("endpoint: Waiting to InSpeech on speech, Trailing on silence, Ended after silence_end")
+    let silent_for = |since: SampleIndex| at.0.saturating_sub(since.0);
+    match (state, voiced) {
+        (Endpoint::Ended(why), _) => Endpoint::Ended(why),
+        (Endpoint::Waiting, Voiced::Speech) => Endpoint::InSpeech { since: at },
+        (Endpoint::Waiting, Voiced::Silence) if at.0 >= samples(params.silence_end) => {
+            Endpoint::Ended(EndWhy::NoSpeech)
+        }
+        (Endpoint::Waiting, Voiced::Silence) => Endpoint::Waiting,
+        (Endpoint::InSpeech { since }, Voiced::Speech) => Endpoint::InSpeech { since },
+        (Endpoint::InSpeech { since }, Voiced::Silence) => {
+            if silent_for(since) >= samples(params.min_speech) {
+                Endpoint::Trailing { since: at }
+            } else {
+                Endpoint::Waiting
+            }
+        }
+        (Endpoint::Trailing { .. }, Voiced::Speech) => Endpoint::InSpeech {
+            since: SampleIndex(at.0.saturating_sub(samples(params.min_speech))),
+        },
+        (Endpoint::Trailing { since }, Voiced::Silence) => {
+            if silent_for(since) >= samples(params.silence_end) {
+                Endpoint::Ended(EndWhy::Silence)
+            } else {
+                Endpoint::Trailing { since }
+            }
+        }
+    }
 }

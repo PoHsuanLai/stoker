@@ -1,14 +1,13 @@
 //! Fakes that play scripts and record every request, for tests of the daemons above.
 
-use std::collections::VecDeque;
 use std::sync::Mutex;
 
-use model_provider::ProviderError;
+use model_provider::{Flow, ProviderError};
 
 use crate::{
-    AudioMs, AudioSink, AudioSource, Frame512, SampleIndex, SpeechModelInfo, SpeechProb,
-    SpeechToText, SttEnd, SttRequest, TextToSpeech, TranscriptEvent, TranscriptSink, TtsEnd,
-    TtsRequest, VoiceActivity, Voiced,
+    AudioChunk, AudioMs, AudioPull, AudioSink, AudioSource, Frame512, PcmBytes, SampleIndex,
+    SpeechModelInfo, SpeechProb, SpeechToText, SttEnd, SttRequest, TextToSpeech, TranscriptEvent,
+    TranscriptSink, TtsEnd, TtsRequest, VoiceActivity, Voiced,
 };
 
 /// Plays `(index, event)` pairs: each event is pushed once the audio pulled so far passes its
@@ -52,16 +51,38 @@ impl SpeechToText for ScriptedStt {
         audio: &mut A,
         sink: &mut K,
     ) -> impl Future<Output = Result<SttEnd, ProviderError>> + Send {
-        let _ = (
-            &self.script,
-            &self.end,
-            &self.seen,
-            request,
-            &mut *audio,
-            &mut *sink,
-        );
-        async {
-            todo!("ScriptedStt::transcribe: pull audio, push each event once its index passes")
+        // The request is kept before the script plays.
+        if let Ok(mut seen) = self.seen.lock() {
+            seen.push(request.clone());
+        }
+        async move {
+            let mut next = 0;
+            let mut heard = 0_u64;
+            loop {
+                let pulled = audio.next().await;
+                let (position, last) = match pulled {
+                    AudioPull::Chunk(chunk) => (
+                        Some(chunk.at.0.saturating_add(u64::from(chunk.samples()))),
+                        false,
+                    ),
+                    AudioPull::End => (None, true),
+                };
+                heard = position.map_or(heard, |p| heard.max(p));
+                // Each event goes out once, when the audio pulled so far reaches its index; at
+                // the end of the audio everything left goes out.
+                while let Some((index, event)) = self.script.get(next) {
+                    if !last && index.0 > heard {
+                        break;
+                    }
+                    next += 1;
+                    if sink.event(event.clone()) == Flow::Stop {
+                        return self.end.clone();
+                    }
+                }
+                if last {
+                    return self.end.clone();
+                }
+            }
         }
     }
 }
@@ -105,9 +126,38 @@ impl TextToSpeech for ScriptedTts {
         request: &TtsRequest,
         sink: &mut K,
     ) -> impl Future<Output = Result<TtsEnd, ProviderError>> + Send {
-        let _ = (&self.script, &self.seen, request, &mut *sink);
-        async {
-            todo!("ScriptedTts::speak: silent chunks until the audio length, stop on Flow::Stop")
+        if let Ok(mut seen) = self.seen.lock() {
+            seen.push(request.clone());
+        }
+        let rate = u64::from(request.format.rate.0);
+        let width = u64::from(request.format.pcm.width());
+        let samples_in = |ms: AudioMs| u64::from(ms.0) * rate / 1000;
+        let total = samples_in(self.script.audio);
+        // A chunk length of zero is the whole audio in one chunk.
+        let step = Some(samples_in(self.script.chunk))
+            .filter(|n| *n > 0)
+            .unwrap_or(total.max(1));
+        let (format, served, audio) = (request.format, request.model.clone(), self.script.audio);
+        async move {
+            let mut at = 0_u64;
+            while at < total {
+                let count = step.min(total - at);
+                let bytes = usize::try_from(count * width).unwrap_or(usize::MAX);
+                let chunk = AudioChunk {
+                    format,
+                    at: SampleIndex(at),
+                    pcm: PcmBytes::new(vec![0; bytes]),
+                };
+                at += count;
+                if sink.chunk(chunk) == Flow::Stop {
+                    let ms = if rate == 0 { 0 } else { at * 1000 / rate };
+                    return Ok(TtsEnd {
+                        audio: AudioMs(u32::try_from(ms).unwrap_or(u32::MAX)),
+                        served,
+                    });
+                }
+            }
+            Ok(TtsEnd { audio, served })
         }
     }
 }
@@ -115,24 +165,33 @@ impl TextToSpeech for ScriptedTts {
 /// Answers one scripted verdict per frame; silence once the script runs out.
 #[derive(Debug)]
 pub struct ScriptedVad {
-    verdicts: VecDeque<Voiced>,
+    verdicts: Vec<Voiced>,
+    next: usize,
 }
 
 impl ScriptedVad {
     pub fn new(verdicts: Vec<Voiced>) -> Self {
-        Self {
-            verdicts: verdicts.into(),
-        }
+        Self { verdicts, next: 0 }
     }
 }
 
 impl VoiceActivity for ScriptedVad {
     fn push(&mut self, frame: &Frame512) -> (Voiced, SpeechProb) {
-        let _ = (&mut self.verdicts, frame);
-        todo!("ScriptedVad::push: the next verdict, with probability 1000 or 0")
+        let _ = frame;
+        let verdict = self
+            .verdicts
+            .get(self.next)
+            .copied()
+            .unwrap_or(Voiced::Silence);
+        self.next = self.next.saturating_add(1);
+        let probability = match verdict {
+            Voiced::Speech => 1000,
+            Voiced::Silence => 0,
+        };
+        (verdict, SpeechProb(probability))
     }
 
     fn reset(&mut self) {
-        todo!("ScriptedVad::reset: back to the start of the script")
+        self.next = 0;
     }
 }
