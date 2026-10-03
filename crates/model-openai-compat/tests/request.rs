@@ -198,10 +198,12 @@ fn a_native_tool_is_refused() {
         serde_json::from_value(json!({"dialect": "open_ai_computer", "config": "{}"})).unwrap();
     let mut r = base();
     r.tools = vec![ToolSpec::Native(native)];
-    assert_eq!(
-        encode_request(&r, Flavor::Vllm),
-        Err(CodecError::UnsupportedShape)
-    );
+    for flavor in ALL {
+        assert_eq!(
+            encode_request(&r, flavor),
+            Err(CodecError::NativeToolUnsupported)
+        );
+    }
     r.tools = vec![function("click", "{}")];
     assert!(encode_request(&r, Flavor::Vllm).is_ok());
 }
@@ -584,4 +586,25 @@ fn a_request_is_valid_json_for_any_text() {
             Ok(())
         })
         .unwrap();
+}
+
+#[test]
+fn reasoning_engine_default_sends_no_switch_and_off_still_does() {
+    for flavor in ALL {
+        let mut r = base();
+        r.messages = vec![user("hi")];
+        r.reasoning = Reasoning::EngineDefault;
+        let default = body(&r, flavor);
+        for key in ["chat_template_kwargs", "reasoning_effort", "reasoning"] {
+            assert!(default.get(key).is_none(), "{flavor:?} sent {key}");
+        }
+        r.reasoning = Reasoning::Off;
+        let off = body(&r, flavor);
+        let switched = matches!(flavor, Flavor::LlamaServer | Flavor::Vllm);
+        assert_eq!(
+            off.get("chat_template_kwargs") == Some(&json!({"enable_thinking": false})),
+            switched,
+            "{flavor:?}"
+        );
+    }
 }

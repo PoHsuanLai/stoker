@@ -93,6 +93,7 @@ fn a_driver_joins_a_codec_and_a_transport() {
 fn codec_errors_are_distinct_and_print() {
     let all = [
         CodecError::UnsupportedShape,
+        CodecError::NativeToolUnsupported,
         CodecError::Unreadable,
         CodecError::Truncated,
         CodecError::BadToolArguments,

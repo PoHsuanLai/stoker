@@ -47,35 +47,71 @@ pub enum Extracted<T> {
 /// One extraction of a `T`: the mode, the repairs left. Pure: `request` and `absorb` are total.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExtractSession<T: Extract> {
-    mode: ExtractMode,
-    left: RepairsLeft,
-    last_fault: Option<ShapeFault>,
+    machine: Machine,
     of: PhantomData<fn() -> T>,
 }
 
 impl<T: Extract> ExtractSession<T> {
     pub fn new(mode: ExtractMode, budget: RepairBudget) -> Self {
         Self {
-            mode,
-            left: RepairsLeft(budget.0),
-            last_fault: None,
+            machine: Machine::new(mode, budget),
             of: PhantomData,
         }
     }
 
     pub fn mode(&self) -> &ExtractMode {
-        &self.mode
+        &self.machine.mode
     }
 
     pub fn left(&self) -> RepairsLeft {
-        self.left
+        self.machine.left
     }
 
     /// `base` with this session's output shape, tools and tool choice set; after a fault, with
     /// the fixed repair turn appended (it never repeats what the model said). A request that
     /// carries tools of its own keeps them, and `limits` are the base's.
     pub fn request(&self, base: &TurnRequest) -> TurnRequest {
-        let shape = T::shape();
+        self.machine.request(base, &T::shape())
+    }
+
+    /// Reads a finished turn: its end, its text, its tool calls. `base` is the request that was
+    /// sent first; a fault with a repair left answers `Repair` of `request(base)` with the fault
+    /// appended.
+    ///
+    /// Truncation is checked before anything else and is never repaired. A reply that does not
+    /// fit is a repair while the budget lasts; with the budget spent it is `Unparseable` (a
+    /// repair was tried) or `OverBudget` (none was ever available).
+    pub fn absorb(
+        &mut self,
+        base: &TurnRequest,
+        end: &TurnEnd,
+        text: &str,
+        calls: &[ToolCall],
+    ) -> Extracted<T> {
+        self.machine
+            .absorb(base, end, text, calls, &T::shape(), |json| T::read(json))
+    }
+}
+
+/// The mode, the repairs left and the last fault: everything a session is but its shape and its
+/// reader, which a typed session takes from `T` and a shaped one holds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Machine {
+    pub(crate) mode: ExtractMode,
+    pub(crate) left: RepairsLeft,
+    last_fault: Option<ShapeFault>,
+}
+
+impl Machine {
+    pub(crate) fn new(mode: ExtractMode, budget: RepairBudget) -> Self {
+        Self {
+            mode,
+            left: RepairsLeft(budget.0),
+            last_fault: None,
+        }
+    }
+
+    pub(crate) fn request(&self, base: &TurnRequest, shape: &Shape) -> TurnRequest {
         let mut request = base.clone();
         match &self.mode {
             ExtractMode::Native(output) => request.output = output.clone(),
@@ -114,19 +150,14 @@ impl<T: Extract> ExtractSession<T> {
         request
     }
 
-    /// Reads a finished turn: its end, its text, its tool calls. `base` is the request that was
-    /// sent first; a fault with a repair left answers `Repair` of `request(base)` with the fault
-    /// appended.
-    ///
-    /// Truncation is checked before anything else and is never repaired. A reply that does not
-    /// fit is a repair while the budget lasts; with the budget spent it is `Unparseable` (a
-    /// repair was tried) or `OverBudget` (none was ever available).
-    pub fn absorb(
+    pub(crate) fn absorb<T>(
         &mut self,
         base: &TurnRequest,
         end: &TurnEnd,
         text: &str,
         calls: &[ToolCall],
+        shape: &Shape,
+        read: impl Fn(&JsonText) -> Result<T, ShapeFault>,
     ) -> Extracted<T> {
         match end.stop {
             StopReason::MaxTokens => return Extracted::Failed(ExtractFailure::Truncated),
@@ -134,8 +165,8 @@ impl<T: Extract> ExtractSession<T> {
             StopReason::EndTurn | StopReason::ToolUse | StopReason::StopSequence => {}
         }
         let fault = match self
-            .candidate(text, calls)
-            .and_then(|json| read::<T>(&json))
+            .candidate(text, calls, shape)
+            .and_then(|json| shape.check(&json).and_then(|()| read(&json)))
         {
             Ok(value) => return Extracted::Done(value),
             Err(fault) => fault,
@@ -144,7 +175,7 @@ impl<T: Extract> ExtractSession<T> {
             Some(left) => {
                 self.left = RepairsLeft(left);
                 self.last_fault = Some(fault);
-                Extracted::Repair(Box::new(self.request(base)))
+                Extracted::Repair(Box::new(self.request(base, shape)))
             }
             None if self.last_fault.is_some() => Extracted::Failed(ExtractFailure::Unparseable),
             None => Extracted::Failed(ExtractFailure::OverBudget),
@@ -152,7 +183,12 @@ impl<T: Extract> ExtractSession<T> {
     }
 
     /// The JSON the reply holds, by mode.
-    fn candidate(&self, text: &str, calls: &[ToolCall]) -> Result<JsonText, ShapeFault> {
+    fn candidate(
+        &self,
+        text: &str,
+        calls: &[ToolCall],
+        shape: &Shape,
+    ) -> Result<JsonText, ShapeFault> {
         match &self.mode {
             ExtractMode::ToolCall { tool } => calls
                 .iter()
@@ -160,7 +196,7 @@ impl<T: Extract> ExtractSession<T> {
                 .map(|c| c.input.clone())
                 .ok_or(ShapeFault::NotJson),
             ExtractMode::Native(OutputShape::Choice(_) | OutputShape::Regex(_)) => {
-                bare_value(&T::shape(), text)
+                bare_value(shape, text)
             }
             ExtractMode::Native(_) | ExtractMode::Prompted => {
                 JsonText::new(unfenced(text)).map_err(|_| ShapeFault::NotJson)
@@ -171,12 +207,6 @@ impl<T: Extract> ExtractSession<T> {
 
 fn is_named(spec: &ToolSpec, tool: &ToolName) -> bool {
     matches!(spec, ToolSpec::Function { name, .. } if name == tool)
-}
-
-/// The shape's own check, then the type's reader.
-fn read<T: Extract>(json: &JsonText) -> Result<T, ShapeFault> {
-    T::shape().check(json)?;
-    T::read(json)
 }
 
 /// A reply constrained to a bare value (`allow`, `7`) as the JSON of its shape: a choice is a

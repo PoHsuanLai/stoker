@@ -8,10 +8,12 @@
 //! The checker is ours (`Shape::check`), not a `jsonschema` crate.
 //!
 mod check;
+mod from_schema;
 mod gbnf;
 mod pattern;
 mod schema;
 
+pub use from_schema::{KeywordText, Refused, SchemaLimits, SchemaPath, SchemaRefusal};
 pub use schema::sanitize_schema;
 
 use serde::{Deserialize, Serialize};

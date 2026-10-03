@@ -3,7 +3,7 @@
 use model_provider::Caps;
 use speech_provider::SpeechDir;
 
-use crate::{CatalogKind, EngineKind, GpuNeed, ModelEntry};
+use crate::{CatalogKind, EngineKind, GpuNeed, ModelEntry, WeightFiles};
 
 /// Why a catalog file was refused.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -34,13 +34,19 @@ pub enum CatalogError {
     SamplingWithoutChatRole,
     #[error("a vLLM engine needs a GPU memory estimate; the entry's is all zeros")]
     VllmWithoutVram,
+    #[error("a llama-server engine reads GGUF files; the profile's weights are not `gguf`")]
+    LlamaServerWithoutGguf,
+    #[error("the `embed` table needs the embeddings role")]
+    EmbedTableWithoutEmbeddingsRole,
 }
 
 /// Parses one `catalog/<id>.toml`.
 ///
 /// Beyond the file format: the chat fields are required when a chat role is listed (and refused
 /// when none is), the `speech` table when a speech role is, in the direction the role says; one
-/// entry has one speech direction; a vLLM engine needs a GPU estimate.
+/// entry has one speech direction; a vLLM engine needs a GPU estimate; a llama-server profile
+/// names GGUF weights (`command` has no `--model` for anything else); the `embed` table goes with
+/// the `embeddings` role, and an entry that has it needs no chat fields for that role.
 pub fn parse_entry(text: &str) -> Result<ModelEntry, CatalogError> {
     let entry: ModelEntry = toml::from_str(text).map_err(|e| CatalogError::Toml(e.to_string()))?;
     if entry.engines.is_empty() {
@@ -56,7 +62,19 @@ pub fn parse_entry(text: &str) -> Result<ModelEntry, CatalogError> {
     {
         return Err(CatalogError::VllmWithoutVram);
     }
+    check_weights(&entry)?;
     Ok(entry)
+}
+
+fn check_weights(entry: &ModelEntry) -> Result<(), CatalogError> {
+    let bad = entry.engines.iter().any(|e| {
+        e.kind == EngineKind::LlamaServer && !matches!(e.weights, WeightFiles::Gguf { .. })
+    });
+    if bad {
+        Err(CatalogError::LlamaServerWithoutGguf)
+    } else {
+        Ok(())
+    }
 }
 
 fn check_speech(entry: &ModelEntry) -> Result<(), CatalogError> {
@@ -79,12 +97,22 @@ fn check_speech(entry: &ModelEntry) -> Result<(), CatalogError> {
     }
 }
 
+/// Chat fields are needed by every non-speech role, except `embeddings` when the entry has its
+/// `embed` table (the table is what that role needs); they are refused when no such role is listed.
 fn check_chat(entry: &ModelEntry, text: &str) -> Result<(), CatalogError> {
+    let embeddings = entry.roles.contains(&CatalogKind::Embeddings);
+    if entry.embed.is_some() && !embeddings {
+        return Err(CatalogError::EmbedTableWithoutEmbeddingsRole);
+    }
     let chat_role = entry.roles.iter().any(|r| r.speech_dir().is_none());
+    let chat_needed = entry.roles.iter().any(|r| {
+        r.speech_dir().is_none() && !(*r == CatalogKind::Embeddings && entry.embed.is_some())
+    });
     match (chat_role, &entry.caps) {
         (false, _) if entry.sampling.is_some() => Err(CatalogError::SamplingWithoutChatRole),
         (false, Some(_)) => Err(CatalogError::ChatFieldsWithoutChatRole),
         (false, None) => Ok(()),
+        (true, None) if !chat_needed => Ok(()),
         (true, caps) => {
             // The flattened field swallows an error, so read the fields again to name the
             // one that is missing.
@@ -93,7 +121,7 @@ fn check_chat(entry: &ModelEntry, text: &str) -> Result<(), CatalogError> {
             if caps.max_output > caps.context {
                 return Err(CatalogError::OutputExceedsContext);
             }
-            if entry.sampling.is_none() {
+            if entry.sampling.is_none() && chat_needed {
                 return Err(CatalogError::ChatRoleWithoutSampling);
             }
             Ok(())

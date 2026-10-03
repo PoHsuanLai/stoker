@@ -171,6 +171,9 @@ pub struct Limits {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "v", rename_all = "snake_case")]
 pub enum Reasoning {
+    /// Whatever the engine and the model's template do when nothing is said: a codec sends no
+    /// reasoning field for it. (A caller that wants a short turn asks for `Off`.)
+    EngineDefault,
     Off,
     On(Effort),
 }

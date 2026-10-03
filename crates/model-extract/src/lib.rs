@@ -17,8 +17,10 @@
 mod mode;
 mod repair;
 mod session;
+mod shaped;
 
 pub use mode::{ExtractMode, ToolsPresent, choose};
 pub use session::{
     ExtractFailure, ExtractSession, Extracted, FINAL_RESULT_TOOL, RepairBudget, RepairsLeft,
 };
+pub use shaped::ShapedSession;

@@ -44,8 +44,9 @@ pub use retry::{RetryClass, RetryPolicy, Retrying, Sleeper, next_wait};
 pub use scripted::{Script, ScriptedProvider};
 pub use sequence::{SequenceFault, check as check_sequence};
 pub use shape::{
-    ChoiceText, Extract, Field, FieldName, IdentError, SchemaDialect, Shape, ShapeFault, ShapeKind,
-    Variant, VariantName, sanitize_schema,
+    ChoiceText, Extract, Field, FieldName, IdentError, KeywordText, Refused, SchemaDialect,
+    SchemaLimits, SchemaPath, SchemaRefusal, Shape, ShapeFault, ShapeKind, Variant, VariantName,
+    sanitize_schema,
 };
 pub use units::{
     Attempt, BatchMax, CallIndex, CharCount, Count, Dims, ImageCount, Knob, Milli, Permille,

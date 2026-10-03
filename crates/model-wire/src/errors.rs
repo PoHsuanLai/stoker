@@ -29,6 +29,9 @@ pub(crate) fn codec_error(error: CodecError) -> ProviderError {
         CodecError::UnsupportedShape => {
             ProviderError::BadRequest("unsupported shape for this wire".into())
         }
+        CodecError::NativeToolUnsupported => {
+            ProviderError::BadRequest("native tools are not supported by this wire".into())
+        }
         CodecError::Unreadable => ProviderError::Unreadable("a frame is not a chunk".into()),
         CodecError::Truncated => {
             ProviderError::Unreadable("the stream ended before a finish reason".into())

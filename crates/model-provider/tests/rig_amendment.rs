@@ -5,10 +5,10 @@ use model_provider::{
     Attempt, BatchMax, CharCount, ChoiceText, Constraint, Count, Dims, EmbedCaps, EmbedEnd,
     EmbedFault, EmbedPrompts, EmbedRole, EmbedTurn, EmbedVector, EngineExtras, Field, FieldName,
     KeepAlive, Knob, LlamaExtras, Milli, ModelName, OllamaExtras, OpaqueText, OutputShape, Part,
-    Permille, PrefixText, PromptCache, ProviderError, RetryClass, RetryPolicy, RetrySeconds,
-    Sampling, SchemaDialect, Seconds, Seed, SequenceFault, ServerStatus, Shape, ShapeKind,
-    ShapeWithTools, SignatureText, SlotId, StopReason, ThoughtSeal, Tokens, ToolParallelism,
-    TurnUsage, Variant, VariantName, VllmExtras, WaitMs,
+    Permille, PrefixText, PromptCache, ProviderError, Reasoning, RetryClass, RetryPolicy,
+    RetrySeconds, Sampling, SchemaDialect, Seconds, Seed, SequenceFault, ServerStatus, Shape,
+    ShapeKind, ShapeWithTools, SignatureText, SlotId, StopReason, ThoughtSeal, Tokens,
+    ToolParallelism, TurnUsage, Variant, VariantName, VllmExtras, WaitMs,
 };
 
 fn round_trip<T>(value: &T, json: &str)
@@ -317,4 +317,14 @@ fn sequence_faults_are_distinct() {
             assert_eq!(i == j, a == b);
         }
     }
+}
+
+#[test]
+fn reasoning_has_an_engine_default_arm_with_pinned_json() {
+    round_trip(&Reasoning::EngineDefault, r#"{"kind":"engine_default"}"#);
+    round_trip(&Reasoning::Off, r#"{"kind":"off"}"#);
+    round_trip(
+        &Reasoning::On(model_provider::Effort::High),
+        r#"{"kind":"on","v":"high"}"#,
+    );
 }

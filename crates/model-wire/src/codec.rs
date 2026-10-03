@@ -10,6 +10,9 @@ use model_provider::{
 pub enum CodecError {
     #[error("this wire cannot enforce the requested output shape")]
     UnsupportedShape,
+    /// A `ToolSpec::Native` on a wire that has no native tool protocol (every local engine).
+    #[error("this wire has no native tools: only function tools can be declared")]
+    NativeToolUnsupported,
     #[error("a frame is not a chunk of this wire")]
     Unreadable,
     #[error("the stream ended before a finish reason")]

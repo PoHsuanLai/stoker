@@ -73,7 +73,7 @@ fn tools(
                     },
                 }))
             }
-            ToolSpec::Native(_) => Err(CodecError::UnsupportedShape),
+            ToolSpec::Native(_) => Err(CodecError::NativeToolUnsupported),
         })
         .collect::<Result<Vec<_>, _>>()?;
     body.insert("tools".into(), Value::Array(specs));
@@ -125,8 +125,10 @@ fn sampling(body: &mut Map<String, Value>, sampling: &Sampling, flavor: Flavor) 
 
 /// Reasoning on or off, where the flavor has a switch: the chat template's `enable_thinking`
 /// (llama-server, vLLM), `reasoning_effort` (vLLM, LiteLLM) or OpenRouter's `reasoning` object.
+/// `EngineDefault` sends none of them.
 fn reasoning(body: &mut Map<String, Value>, reasoning: Reasoning, flavor: Flavor) {
     let effort = match reasoning {
+        Reasoning::EngineDefault => return,
         Reasoning::On(effort) => Some(
             serde_json::to_value(effort)
                 .ok()

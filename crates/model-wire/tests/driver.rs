@@ -329,6 +329,19 @@ fn an_unencodable_request_never_reaches_the_transport() {
 }
 
 #[test]
+fn a_native_tool_on_a_wire_without_them_is_a_bad_request_that_names_the_kind() {
+    let d = driver(Framing::Sse, vec![]);
+    let result = block_on(d.turn(&request("native"), &mut Keep::default()));
+    assert_eq!(
+        result,
+        Err(ProviderError::BadRequest(
+            "native tools are not supported by this wire".into()
+        ))
+    );
+    assert!(d.transport().asked().is_empty());
+}
+
+#[test]
 fn describe_parses_the_models_and_classifies_a_failure() {
     let ok = Canned::ok(head(200, BodyKind::Json), &["a 4096\n", "b 8192"]);
     let d = driver(Framing::Sse, vec![ok]);

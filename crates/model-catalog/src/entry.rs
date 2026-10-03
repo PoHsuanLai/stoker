@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use model_provider::{Caps, Sampling, Tokens};
+use model_provider::{Caps, EmbedCaps, Sampling, Tokens};
 use serde::{Deserialize, Serialize};
 use speech_provider::{SpeechCaps, SpeechDir};
 
@@ -127,13 +127,15 @@ pub struct SamplingDefaults {
     pub reasoning_off: Sampling,
 }
 
-/// The file's serde form: the chat capability fields sit at the top level beside the rest, and
-/// the speech capabilities are the `speech` table.
+/// The file's serde form: the chat capability fields sit at the top level beside the rest, the
+/// speech capabilities are the `speech` table and the embedding ones the `embed` table.
 ///
 /// `caps` and `sampling` are present exactly when a chat role needs them (`llm`, `computer_use`,
 /// `embeddings`, ...) and `speech` exactly when a speech role does; `parse_entry` checks all
 /// three. A speech-only
-/// entry writes no chat fields, and a chat-only entry writes no `speech` table.
+/// entry writes no chat fields, and a chat-only entry writes no `speech` table. The `embed` table
+/// (dimensions, batch and input limits, query and document prefixes) belongs to the `embeddings`
+/// role and is the only capability an embeddings-only entry needs: it writes no chat fields.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModelEntry {
     pub id: CatalogId,
@@ -148,6 +150,8 @@ pub struct ModelEntry {
     pub sampling: Option<SamplingDefaults>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub speech: Option<SpeechCaps>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub embed: Option<EmbedCaps>,
     #[serde(rename = "engine")]
     pub engines: Vec<EngineProfile>,
 }
