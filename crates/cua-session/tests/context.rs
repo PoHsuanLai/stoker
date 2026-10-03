@@ -267,7 +267,7 @@ proptest! {
         prop_assert!(profile.history.0 <= wanted);
         // The frames the history keeps and the current one fit the limit (a model that takes none
         // still gets the current frame, which the catalog never offers it for).
-        prop_assert!(u32::from(profile.history.0) + 1 <= u32::from(per_prompt.max(1)));
+        prop_assert!(u32::from(profile.history.0) < u32::from(per_prompt.max(1)));
         // And nothing is given up that the limit allowed.
         prop_assert_eq!(
             u32::from(profile.history.0),
