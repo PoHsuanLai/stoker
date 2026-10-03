@@ -76,7 +76,7 @@ Decisions taken from it:
 
 ## Stubs behind frozen interfaces
 
-Every `todo!()` in the repo (72: 67 in the workspace, 5 in the two excluded crates; the rig amendment added 27, see `The rig amendment` below, and the pure fill wave F1 `stoker-shape` removed 19, see `Fill F1: stoker-shape` below). Each is a signature other repos build on; the body arrives with
+Every `todo!()` in the repo (the rig amendment added 27, see `The rig amendment` below; the fill wave F1 lanes remove theirs, and `stoker-shape` removed 19, see `Fill F1: stoker-shape` below). Each is a signature other repos build on; the body arrives with
 the work in the "Closes when" line of its crate.
 
 ### `cua-parse` (0, filled in wave F1)
