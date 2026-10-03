@@ -7,7 +7,12 @@
 //! form is the schema. One conversion lives here so docket, almanac and cua do not each write one.
 //! The checker is ours (`Shape::check`), not a `jsonschema` crate.
 //!
-//! The bodies are stubbed; `FINDINGS.md` lists them.
+mod check;
+mod gbnf;
+mod pattern;
+mod schema;
+
+pub use schema::sanitize_schema;
 
 use serde::{Deserialize, Serialize};
 
@@ -155,27 +160,38 @@ pub enum ShapeFault {
 
 impl Shape {
     pub fn to_json_schema(&self, dialect: SchemaDialect) -> SchemaText {
-        let _ = (self, dialect);
-        todo!("Shape::to_json_schema: per-dialect sanitiser")
+        self.schema_text(dialect)
     }
 
     /// GBNF for llama-server: Choice, Integer, Text, Record, List and Optional; the rest is
     /// `NotRepresentable`.
     pub fn to_gbnf(&self) -> Result<String, ShapeFault> {
-        let _ = self;
-        todo!("Shape::to_gbnf")
+        self.gbnf_text()
     }
 
-    /// A regex, for Choice and a bounded Integer only.
+    /// A regex over the bare value, for Choice and a bounded Integer only: the reply is `allow`,
+    /// not `"allow"` (vLLM's `structured_outputs.regex` constrains the whole reply).
     pub fn to_regex(&self) -> Option<String> {
-        let _ = self;
-        todo!("Shape::to_regex")
+        match self {
+            Shape::Choice(choices) if !choices.is_empty() => Some(
+                pattern::Pat::Alt(
+                    choices
+                        .iter()
+                        .map(|c| pattern::Pat::Lit(c.0.clone()))
+                        .collect(),
+                )
+                .render(pattern::Syntax::Regex),
+            ),
+            Shape::Integer { min, max } => {
+                pattern::int_range(*min, *max).map(|p| p.render(pattern::Syntax::Regex))
+            }
+            _ => None,
+        }
     }
 
     /// Our own checker for the same vocabulary.
     pub fn check(&self, json: &JsonText) -> Result<(), ShapeFault> {
-        let _ = (self, json);
-        todo!("Shape::check")
+        self.check_json(json)
     }
 }
 

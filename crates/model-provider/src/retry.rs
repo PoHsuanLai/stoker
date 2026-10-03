@@ -10,8 +10,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Attempt, ModelInfo, Permille, Provider, ProviderError, RetrySeconds, TurnEnd, TurnRequest,
-    TurnSink, WaitMs,
+    Attempt, Flow, ModelInfo, Permille, Provider, ProviderError, RetrySeconds, TurnEnd, TurnEvent,
+    TurnRequest, TurnSink, WaitMs,
 };
 
 /// How a failure may be retried.
@@ -29,8 +29,25 @@ impl ProviderError {
     /// 408, 425, 429 and 5xx are retryable (`Server`, `RateLimited`); a refusal never is; an
     /// unreachable or not-ready engine and a timeout are transient; the rest are not.
     pub fn retry_class(&self) -> RetryClass {
-        todo!("ProviderError::retry_class: rig's retryable_status and transient_transport, ported")
+        match self {
+            ProviderError::RateLimited(wait) => RetryClass::Overload(*wait),
+            ProviderError::Server(status) if retryable_status(status.0) => RetryClass::Transient,
+            ProviderError::Unreachable | ProviderError::NotReady | ProviderError::Timeout => {
+                RetryClass::Transient
+            }
+            ProviderError::Server(_)
+            | ProviderError::Unauthorized
+            | ProviderError::ContextOverflow { .. }
+            | ProviderError::BadRequest(_)
+            | ProviderError::Refused(_)
+            | ProviderError::Unreadable(_) => RetryClass::Never,
+        }
     }
+}
+
+/// 408 (request timeout), 425 (too early), 429 (too many requests) and every 5xx.
+fn retryable_status(status: u16) -> bool {
+    matches!(status, 408 | 425 | 429 | 500..=599)
 }
 
 /// How many tries, and the backoff between them (`base * 2^(n-1)`, capped at `cap`). The numbers
@@ -50,8 +67,18 @@ pub fn next_wait(
     class: RetryClass,
     jitter: Permille,
 ) -> Option<WaitMs> {
-    let _ = (policy, attempt, class, jitter);
-    todo!("next_wait: exponent clamped at 31, cap, Overload takes the larger of server and backoff")
+    if class == RetryClass::Never || attempt.0 >= policy.attempts.0 {
+        return None;
+    }
+    let doubled = u64::from(policy.base.0) << u32::from(attempt.0.saturating_sub(1)).min(31);
+    let capped = doubled.min(u64::from(policy.cap.0));
+    let jitter = u64::from(jitter.0.min(1000));
+    let backoff = capped - capped * jitter / 1000;
+    let wait = match class {
+        RetryClass::Overload(server) => backoff.max(u64::from(server.0) * 1000),
+        RetryClass::Never | RetryClass::Transient => backoff,
+    };
+    Some(WaitMs(u32::try_from(wait).unwrap_or(u32::MAX)))
 }
 
 /// Where the waiting happens: a tokio timer in a daemon, a recorder in a test.
@@ -79,17 +106,61 @@ impl<P: Provider, S: Sleeper> Retrying<P, S> {
 }
 
 impl<P: Provider, S: Sleeper> Provider for Retrying<P, S> {
-    fn describe(&self) -> impl Future<Output = Result<Vec<ModelInfo>, ProviderError>> + Send {
-        let _ = (&self.inner, &self.policy, &self.sleep);
-        async { todo!("Retrying::describe: loop on retry_class and next_wait") }
+    async fn describe(&self) -> Result<Vec<ModelInfo>, ProviderError> {
+        let mut attempt = Attempt(1);
+        loop {
+            match self.inner.describe().await {
+                Err(error) => self.pause(attempt, &error).await?,
+                done => return done,
+            }
+            attempt = Attempt(attempt.0.saturating_add(1));
+        }
     }
 
-    fn turn<K: TurnSink>(
+    async fn turn<K: TurnSink>(
         &self,
         request: &TurnRequest,
         sink: &mut K,
-    ) -> impl Future<Output = Result<TurnEnd, ProviderError>> + Send {
-        let _ = (&self.inner, &self.policy, &self.sleep, request, &mut *sink);
-        async { todo!("Retrying::turn: a counting sink; retry only while it has seen no event") }
+    ) -> Result<TurnEnd, ProviderError> {
+        let mut counting = Counting {
+            inner: sink,
+            seen: 0,
+        };
+        let mut attempt = Attempt(1);
+        loop {
+            match self.inner.turn(request, &mut counting).await {
+                Err(error) if counting.seen == 0 => self.pause(attempt, &error).await?,
+                done => return done,
+            }
+            attempt = Attempt(attempt.0.saturating_add(1));
+        }
+    }
+}
+
+impl<P: Provider, S: Sleeper> Retrying<P, S> {
+    /// Sleeps the wait that follows try `attempt`, or hands `error` back when it may not be
+    /// retried. The wire's jitter source is not part of the provider seam, so there is none here:
+    /// callers that spread out do it in the sleeper.
+    async fn pause(&self, attempt: Attempt, error: &ProviderError) -> Result<(), ProviderError> {
+        match next_wait(&self.policy, attempt, error.retry_class(), Permille(0)) {
+            Some(wait) => {
+                self.sleep.sleep(wait).await;
+                Ok(())
+            }
+            None => Err(error.clone()),
+        }
+    }
+}
+
+/// Counts the events that reach the caller's sink: a turn that has delivered one is never retried.
+struct Counting<'a, K> {
+    inner: &'a mut K,
+    seen: usize,
+}
+
+impl<K: TurnSink> TurnSink for Counting<'_, K> {
+    fn event(&mut self, event: TurnEvent) -> Flow {
+        self.seen += 1;
+        self.inner.event(event)
     }
 }

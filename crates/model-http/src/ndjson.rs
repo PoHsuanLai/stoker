@@ -10,6 +10,9 @@ pub enum LineError {
     LineTooLong,
 }
 
+/// The longest line the decoder buffers.
+const LINE_MAX: usize = 4 << 20;
+
 /// Holds the bytes of an incomplete line between `feed` calls. The same bytes give the same
 /// lines whatever the chunking; a code point split across chunks is never an error.
 #[derive(Debug, Clone, Default)]
@@ -22,16 +25,34 @@ impl NdjsonDecoder {
         Self::default()
     }
 
-    /// Feeds one chunk; returns the complete, non-blank lines it finished.
+    /// Feeds one chunk; returns the complete, non-blank lines it finished (a `\r` before the
+    /// `\n` is dropped).
     pub fn feed(&mut self, bytes: &[u8]) -> Result<Vec<String>, LineError> {
-        let _ = (bytes, &self.pending);
-        todo!("NdjsonDecoder::feed: split on newline, skip blank lines, cap the line")
+        self.pending.extend_from_slice(bytes);
+        let mut lines = Vec::new();
+        while let Some(end) = self.pending.iter().position(|b| *b == b'\n') {
+            let raw: Vec<u8> = self.pending.drain(..=end).collect();
+            lines.extend(line(&raw[..end])?);
+        }
+        if self.pending.len() > LINE_MAX {
+            return Err(LineError::LineTooLong);
+        }
+        Ok(lines)
     }
 
     /// The stream ended: an unterminated last line, if any (the codec decides whether that is
-    /// `Truncated`).
+    /// `Truncated`). A last line that is not UTF-8 is not returned.
     pub fn finish(self) -> Option<String> {
-        let _ = self.pending;
-        todo!("NdjsonDecoder::finish")
+        line(&self.pending).ok().flatten()
     }
+}
+
+/// One line without its terminator: `None` when it is blank.
+fn line(raw: &[u8]) -> Result<Option<String>, LineError> {
+    if raw.len() > LINE_MAX {
+        return Err(LineError::LineTooLong);
+    }
+    let text = std::str::from_utf8(raw).map_err(|_| LineError::NotUtf8)?;
+    let text = text.strip_suffix('\r').unwrap_or(text);
+    Ok((!text.trim().is_empty()).then(|| text.to_owned()))
 }

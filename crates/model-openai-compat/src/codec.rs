@@ -1,10 +1,10 @@
 //! Request encoding and stream decoding, with no I/O: the chat-completions codec.
 
 use model_http::{Exchange, ResponseHead};
-use model_provider::{
-    EmbedEnd, EmbedTurn, ModelInfo, ModelName, ProviderError, TurnEnd, TurnEvent, TurnRequest,
-};
-use model_wire::{ChatCodec, ChatDecoder, CodecError, EmbedCodec, ErrorWire};
+use model_provider::{EmbedEnd, EmbedTurn, ModelInfo, ModelName, ProviderError, TurnRequest};
+use model_wire::{ChatCodec, CodecError, EmbedCodec, ErrorWire};
+
+use crate::StreamDecoder;
 use serde::{Deserialize, Serialize};
 
 /// Which server dialect of the shared wire to speak: they differ in where reasoning text arrives,
@@ -99,32 +99,5 @@ impl EmbedCodec for OpenAiCodec {
     fn decode_embed(&self, served: ModelName, body: &[u8]) -> Result<EmbedEnd, CodecError> {
         let _ = (self.flavor, served, body);
         todo!("OpenAiCodec::decode_embed: data[].embedding in index order")
-    }
-}
-
-/// Turns SSE data frames into turn events. Tool-call argument fragments are joined per index and
-/// checked as JSON; `[DONE]`, or a finish reason followed by the usage chunk, ends the stream; a
-/// malformed frame is `Unreadable`, never a panic.
-#[derive(Debug, Clone)]
-pub struct StreamDecoder {
-    flavor: Flavor,
-    served: ModelName,
-}
-
-impl StreamDecoder {
-    pub fn new(flavor: Flavor, served: ModelName) -> Self {
-        Self { flavor, served }
-    }
-}
-
-impl ChatDecoder for StreamDecoder {
-    fn feed(&mut self, frame: &str) -> Result<Vec<TurnEvent>, CodecError> {
-        let _ = (&self.flavor, frame);
-        todo!("StreamDecoder::feed: deltas, reasoning, tool-call fragments, usage")
-    }
-
-    fn finish(self) -> Result<TurnEnd, CodecError> {
-        let _ = self.served;
-        todo!("StreamDecoder::finish: stop reason and usage")
     }
 }

@@ -76,7 +76,7 @@ Decisions taken from it:
 
 ## Stubs behind frozen interfaces
 
-Every `todo!()` in the repo (91: 86 in the workspace, 5 in the two excluded crates; the rig amendment added 27, see `The rig amendment` below). Each is a signature other repos build on; the body arrives with
+Every `todo!()` in the repo (72: 67 in the workspace, 5 in the two excluded crates; the rig amendment added 27, see `The rig amendment` below, and the pure fill wave F1 `stoker-shape` removed 19, see `Fill F1: stoker-shape` below). Each is a signature other repos build on; the body arrives with
 the work in the "Closes when" line of its crate.
 
 ### `cua-parse` (0, filled in wave F1)
@@ -108,17 +108,13 @@ Closes when the first cloud backend is turned on (the user chose open models onl
 
 Closes when `step` passes the table of every row of models.md 4.1, `budget` its table (Fits, LRU eviction, never an active engine, NoRoom with numbers), `command` its table for Holo under vLLM.
 
-### `model-http` (5)
+### `model-http` (1)
 
 - `src/exchange.rs`: `Transport for HttpClient`: exchange over hyper (Tcp, Unix or Tls by target, proxy)
-- `src/sse.rs`: SseDecoder::feed: lines, fields, blank line dispatches
-- `src/sse.rs`: SseDecoder::finish
-- `src/ndjson.rs`: NdjsonDecoder::feed: split on newline, skip blank lines, cap the line
-- `src/ndjson.rs`: NdjsonDecoder::finish
 
-Closes when hyper, hyper-util and http-body-util join the pinned block, then the decoders pass `sse_decoder_any_chunking` (and its NDJSON twin) and the transport a loopback Unix-socket test that checks the head (status, `Content-Type` kind, `Retry-After`, request id) arrives before the first chunk and that a non-success answer is `Rejected` with its body in the sink. The SSE edge cases to port are the list in `research-rig.md` section 3.1 (CR, LF and CRLF split across chunks, a BOM split across chunks, comment lines, an event reset by a blank line, a multibyte code point split across chunks, a line cap and a per-event data cap, a truncated trailing event never delivered).
+Closes when hyper, hyper-util and http-body-util join the pinned block, then the transport passes a loopback Unix-socket test that checks the head (status, `Content-Type` kind, `Retry-After`, request id) arrives before the first chunk and that a non-success answer is `Rejected` with its body in the sink. (The SSE and NDJSON decoders are filled; see F1.)
 
-### `model-openai-compat` (17)
+### `model-openai-compat` (15)
 
 - `src/codec.rs`: encode_request: messages, images, tools, constraints, sampling, engine extras, stream_options
 - `src/codec.rs`: OpenAiCodec::classify: status classes, the error envelope, an HTML 200
@@ -127,8 +123,6 @@ Closes when hyper, hyper-util and http-body-util join the pinned block, then the
 - `src/codec.rs`: OpenAiCodec::parse_models: loaded and trained context per flavor
 - `src/codec.rs`: OpenAiCodec::encode_embed: POST /embeddings, no `dimensions` where the quirk says Ignored
 - `src/codec.rs`: OpenAiCodec::decode_embed: data[].embedding in index order
-- `src/codec.rs`: StreamDecoder::feed: deltas, reasoning, tool-call fragments, usage
-- `src/codec.rs`: StreamDecoder::finish: stop reason and usage
 - `src/audio/codec.rs`: encode_speech_request: model, input, voice, response_format pcm, stream true
 - `src/audio/codec.rs`: encode_transcription: WAV header over the samples, form fields, boundary
 - `src/audio/codec.rs`: decode_transcription: the `text` field of the JSON
@@ -170,25 +164,11 @@ Closes when `blake3` joins quire `docs/workspace-deps.toml`, then the providers 
 
 Closes with `model-http`'s transport and decoders: the sink adapter buffers a non-success or `Html` body (64 KiB at most) and maps it with `classify`; otherwise the framer the exchange named feeds `ChatDecoder`; `Flow::Stop` answers `ChunkFlow::Stop`; a scripted `Transport` drives it in tests.
 
-### `model-provider` (11)
+### `model-extract` (1)
 
-- `src/embed.rs`: EmbedEnd::check: the count, then every width
-- `src/embed.rs`: plan_batches: chunks of max(1, max), covering 0..n exactly
-- `src/sequence.rs`: check: port of rig's validate_canonical
-- `src/retry.rs`: ProviderError::retry_class: rig's retryable_status and transient_transport, ported
-- `src/retry.rs`: next_wait: exponent clamped at 31, cap, Overload takes the larger of server and backoff
-- `src/retry.rs`: Retrying::describe and Retrying::turn (2)
-- `src/shape.rs`: Shape::to_json_schema, to_gbnf, to_regex, check (4)
+- `src/session.rs`: ExtractSession::absorb (frozen signature has no base request; see the interface ask under F1)
 
-Closes when `plan_batches` passes a table and a property (the ranges cover 0..n exactly, in order, none over the cap), `check` the rig scenarios (consecutive assistant, unanswered call, orphan result), `next_wait` a table with an injected jitter and a fake `Sleeper`, `Retrying` a test that never retries after the first event, and the `Shape` conversions the round-trip property of `research-rig.md` section 6d.5 (any value accepted by `check` is accepted by the generated GBNF, through a tiny matcher in tests only).
-
-### `model-extract` (3)
-
-- `src/mode.rs`: choose: the four rules, in order
-- `src/session.rs`: ExtractSession::request: output, synthetic tool, tool_choice, limits
-- `src/session.rs`: ExtractSession::absorb: Truncated before anything, then T::read, then one repair
-
-Closes when the seven tests of `research-rig.md` section 6d.5 pass (`choose_picks_native_choice_on_llama_server`, `choose_falls_back_to_tool_when_schema_and_tools_conflict`, `repair_message_never_echoes_output`, `one_repair_then_failed`, `max_tokens_is_failed_not_repaired`, `shape_to_gbnf_roundtrip_checks`, `named_tool_refused_on_llama_server`).
+Closes when the interface ask below is applied: `absorb` takes the base request (`absorb_for` is the working body), and `named_tool_refused_on_llama_server` passes in the codec's `encode` (`ToolChoice::Named` on `LlamaServer` is `UnsupportedShape`).
 
 ### `speech-host` (2, excluded crate)
 
@@ -321,6 +301,74 @@ Left to fill, with the reason (the type is frozen, the spelling is not):
 - **Rig attribution.** No rig code is copied. Porting its SSE framer tests or its tool-call
   assembly in the fill puts the attribution header of `research-rig.md` in that file and one
   `THIRD-PARTY-NOTICES` entry in the repo.
+
+## Fill F1: stoker-shape (2026-10-03)
+
+Filled: `model-provider` (`shape`, `retry`, `sequence`, `embed`), `model-extract` (`choose`,
+`request`, `absorb_for`), `model-http` (`SseDecoder`, `NdjsonDecoder`), `model-openai-compat`
+(`StreamDecoder`, the tool-call assembler in `assemble.rs`, the error envelope reader in
+`envelope.rs`). Not touched: HTTP io, `Driver`, the request encoder, `classify`, `describe`,
+`parse_models`, the embedding codec and the audio wire (F2).
+
+Engine constraint spellings, verified from current docs on 2026-10-03:
+
+| Fact | Source |
+| --- | --- |
+| llama.cpp GBNF supports `{m,n}`, `{m}`, `{m,}`, `{0,n}`, character classes with `\xXX`, `\uXXXX`, `\UXXXXXXXX` escapes and `^` negation, `#` comments; `x? x? x?` chains sample very slowly, use `x{0,N}` | llama.cpp `grammars/README.md` |
+| llama-server takes `grammar` (GBNF), `json_schema`, and `response_format` (plain JSON or schema constrained); `cache_prompt`, `id_slot`; tool calling needs `--jinja`; the docs do not say whether `response_format` suppresses tool calls, so `shape_with_tools = AfterResult` for llama-server stays a conservative guess | llama.cpp `tools/server/README.md` |
+| vLLM current spelling: `response_format: {type: "json_schema"}` or `extra_body.structured_outputs` with `choice`, `regex`, `json`, `grammar`, `structural_tag`; backend chosen at serve time with `--structured-outputs-config.backend`. The `guided_json`, `guided_regex`, `guided_choice`, `guided_grammar` and `guided_decoding_backend` spellings are removed from v0.12.0 | docs.vllm.ai `features/structured_outputs` |
+| Ollama native: the schema goes in `format`; the OpenAI-compatible endpoint takes `response_format` | docs.ollama.com `capabilities/structured-outputs` |
+| Anthropic structured output refuses `minimum`, `maximum`, `multipleOf`, `minLength`, `maxLength`, `maxItems` (and `minItems` beyond 0 or 1), and needs `additionalProperties: false` on every object; the SDKs strip the bounds and move them into descriptions | platform.claude.com structured-outputs |
+
+The `SchemaDialect::Anthropic` sanitiser therefore strips those keywords (the frozen doc comment said
+"numeric bounds"); `Shape::check` still enforces every bound after the reply. The request-side
+parameter spellings (`structured_outputs` for vLLM, `grammar` and `response_format` for llama-server)
+are used by `encode_request` in F2, which keeps the "verify at fill" rows marked in `quirks.rs`
+(`shape_with_tools` for llama-server and vLLM) until a recorded fixture settles them. `GuidedBackend`
+is a serve-time flag in the current vLLM, not a request parameter; F2 decides whether `VllmExtras`
+still has a request field to carry.
+
+Decisions taken in the bodies:
+
+- **`Shape::to_gbnf` describes the canonical text**: fields in declared order, every field present
+  (`Optional` is `null` or a value), bounds above 256 left open (llama.cpp unrolls `{m,n}`) and
+  enforced by `check`. A reply that follows it always passes `check`; the converse needs the
+  canonical form (the property test generates it). `Date`, `DateTime` and `Tagged` stay
+  `NotRepresentable`, as the frozen doc comment says.
+- **`Shape::to_regex` is the regex of the bare value** (`allow`, `7`), for vLLM's
+  `structured_outputs.regex`, which constrains the whole reply. `ExtractSession` reads a bare
+  `Choice` or `Regex` reply as the JSON of its shape.
+- **`Shape::check` faults** name the nearest enclosing field (`root` at the top) and a kind. An
+  unknown key is reported against the field that holds it, not by its own name: the key is the
+  model's text.
+- **`sanitize_schema` is public** (additive): tool parameter schemas need the same dialects.
+- **`sequence::check`** treats a tool call left unanswered at the end of the list as
+  `UnansweredCall`: a request never ends there. A tool result inside a user message answers a call.
+- **`Retrying`** has no jitter source (the frozen struct holds none): it passes `Permille(0)`.
+  `Sleeper` implementations spread callers out if they need to. `Retry-After` is the larger of the
+  server's seconds and the backoff, and is not capped.
+- **`choose`** applies `ShapeWithTools` to rules 1 and 2 alike (a constraint over the whole reply
+  suppresses tool calls wherever it is not `Together`), and reads rule 1 as the scalar shapes
+  (`Choice`, `Integer`); a grammar also serves any other shape it can say when there is no schema.
+- **`StreamDecoder`**: a call opens on its name (id minted as `call_<n>` when the wire gave none),
+  `finish_reason: length` drops a call whose arguments are not valid JSON and keeps whole ones,
+  `stop` after delivered calls is `ToolUse`, a bare `[DONE]` before any chunk is `Unreadable`,
+  usage is clamped (`cached <= input`), the first of `reasoning_content` and `reasoning` wins.
+  The SSE caps are 1 MiB per line and 8 MiB of data per event (`LineTooLong`); NDJSON 4 MiB per line.
+
+Interface asks (nothing in a frozen signature was changed):
+
+1. **`ExtractSession::absorb` cannot build `Extracted::Repair(Box<TurnRequest>)`**: it has no base
+   request. Replace `absorb(&mut self, end, text, calls)` with `absorb_for(&mut self, base, end,
+   text, calls)`, which is written and tested; `absorb` is left as a `todo!()` until then.
+2. **An error envelope inside a 200 cannot reach the driver as a `ProviderError`**: `CodecError` is
+   `Copy` and carries no fault. `StreamDecoder::fault()` returns it today (and `feed` answers
+   `Unreadable`); the trait wants either `ChatDecoder::fault(&self) -> Option<ProviderError>` with a
+   default of `None`, or a `CodecError::Envelope` variant plus that accessor.
+3. **`Retrying` needs a jitter source** if the callers are to spread out: a defaulted
+   `Sleeper::jitter(&self) -> Permille` returning zero would be additive.
+4. **`ProviderError::RateLimited(RetrySeconds)` from an envelope has no seconds**: the envelope reader
+   answers `RetrySeconds(0)`; the driver replaces it with the head's `Retry-After` when it has one.
 
 ## Open
 

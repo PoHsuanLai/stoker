@@ -13,10 +13,9 @@
 //!
 //! A repair prompt names the field and the expected shape and never echoes the model's output: it
 //! may hold untrusted text, and the reader is quarantined.
-//!
-//! The bodies are stubbed; `FINDINGS.md` lists them.
 
 mod mode;
+mod repair;
 mod session;
 
 pub use mode::{ExtractMode, ToolsPresent, choose};

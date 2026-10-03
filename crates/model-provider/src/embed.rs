@@ -91,8 +91,17 @@ pub enum EmbedFault {
 impl EmbedEnd {
     /// `Ok` when there are `want` vectors, each `dims` wide.
     pub fn check(&self, want: Count, dims: Dims) -> Result<(), EmbedFault> {
-        let _ = (self, want, dims);
-        todo!("EmbedEnd::check: the count, then every width")
+        let got = Count(u32::try_from(self.vectors.len()).unwrap_or(u32::MAX));
+        if got != want {
+            return Err(EmbedFault::CountMismatch { want, got });
+        }
+        self.vectors
+            .iter()
+            .map(|vector| Dims(u32::try_from(vector.0.len()).unwrap_or(u32::MAX)))
+            .find(|width| *width != dims)
+            .map_or(Ok(()), |got| {
+                Err(EmbedFault::WidthMismatch { want: dims, got })
+            })
     }
 }
 
@@ -108,6 +117,9 @@ pub trait Embedder: Send + Sync {
 /// Callers send one range per call and reassemble the vectors by range, so an index rebuild
 /// issues the same calls every time.
 pub fn plan_batches(n: usize, max: BatchMax) -> Vec<Range<usize>> {
-    let _ = (n, max);
-    todo!("plan_batches: chunks of max(1, max), covering 0..n exactly")
+    let step = usize::try_from(max.0).unwrap_or(usize::MAX).max(1);
+    (0..n)
+        .step_by(step)
+        .map(|start| start..start.saturating_add(step).min(n))
+        .collect()
 }

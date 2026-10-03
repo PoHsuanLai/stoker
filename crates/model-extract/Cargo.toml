@@ -10,9 +10,12 @@ publish.workspace = true
 
 [dependencies]
 model-provider = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
-serde_json = { workspace = true }
+cua-action = { workspace = true }
+vision-prep = { workspace = true }
+proptest = { workspace = true }
 
 [lints]
 workspace = true

@@ -45,7 +45,7 @@ pub use scripted::{Script, ScriptedProvider};
 pub use sequence::{SequenceFault, check as check_sequence};
 pub use shape::{
     ChoiceText, Extract, Field, FieldName, IdentError, SchemaDialect, Shape, ShapeFault, ShapeKind,
-    Variant, VariantName,
+    Variant, VariantName, sanitize_schema,
 };
 pub use units::{
     Attempt, BatchMax, CallIndex, CharCount, Count, Dims, ImageCount, Knob, Milli, Permille,
