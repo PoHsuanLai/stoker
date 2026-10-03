@@ -48,6 +48,13 @@ pub trait ChatDecoder {
 
     /// The end of the turn, once the stream is over.
     fn finish(self) -> Result<TurnEnd, CodecError>;
+
+    /// The error a frame carried, after `feed` answered `Unreadable` for an error envelope
+    /// delivered inside a 200 stream: what the driver reports instead of a generic unreadable
+    /// reply. A wire with no such envelope keeps the default.
+    fn fault(&self) -> Option<ProviderError> {
+        None
+    }
 }
 
 /// The request and reply format of an embeddings endpoint.

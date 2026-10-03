@@ -20,7 +20,7 @@ struct Cursor {
 /// Plays a wire cassette as a transport: the recorded head, then the recorded body sliced by the
 /// plan.
 ///
-/// A request with no exchange to serve it answers `HttpError::Connect` and is kept in
+/// A request with no exchange to serve it answers `HttpError::ReplayMiss` and is kept in
 /// [`ReplayTransport::misses`]. A recorded `Reset` ends in `HttpError::Broken` after the
 /// frames; a non-success head ends in `Rejected`.
 #[derive(Debug)]
@@ -137,7 +137,7 @@ impl Transport for ReplayTransport {
     ) -> impl Future<Output = Result<HttpStatus, HttpError>> + Send {
         let result = match self.pick(&request_of(ex)) {
             Ok(reply) => deliver(reply, ex, self.plan, sink),
-            Err(_) => Err(HttpError::Connect),
+            Err(_) => Err(HttpError::ReplayMiss),
         };
         std::future::ready(result)
     }

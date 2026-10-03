@@ -125,6 +125,7 @@ impl<S: CoordSpace> CuaAction<S> {
         let target = |t: Target<S>| match t {
             Target::Point(p) => f(p).map(Target::Point),
             Target::Node(n) => Ok(Target::Node(n)),
+            Target::Centre => Ok(Target::Centre),
         };
         Ok(match self {
             CuaAction::Click {

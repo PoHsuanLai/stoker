@@ -6,12 +6,12 @@ use model_http::{
     BodyKind, BodySink, ChunkFlow, EventName, Exchange, Framing, HttpError, HttpStatus, JsonBody,
     ResponseHead, RouteRoot, Transport, UrlPath, Verb, WaitSeconds,
 };
-use model_provider::{ModelName, Seed};
+use model_provider::{ModelName, Seed, Tokens};
 use model_replay::{
-    BuildLabel, ByteStep, CassetteHeader, CassetteVersion, ChunkPlan, EngineLabel, EngineStamp,
-    HeadPrint, InteractionId, RecordedAt, RecordingTransport, ReplayMode, ReplayTransport,
-    SinkError, WireBody, WireCassette, WireEnd, WireExchange, WireFrame, WireMiss, WireReply,
-    WireRequest, WireSink,
+    BuildLabel, ByteStep, CassetteHeader, CassetteVersion, ChunkPlan, ContextStamp, EngineLabel,
+    EngineStamp, HeadPrint, InteractionId, RecordedAt, RecordingTransport, ReplayMode,
+    ReplayTransport, SinkError, WireBody, WireCassette, WireEnd, WireExchange, WireFrame, WireMiss,
+    WireReply, WireRequest, WireSink,
 };
 
 fn block_on<T>(future: impl Future<Output = T>) -> T {
@@ -151,6 +151,11 @@ fn cassette(exchanges: Vec<WireExchange>) -> WireCassette {
             },
             model: ModelName("holo".into()),
             recorded: RecordedAt(1),
+            context: ContextStamp {
+                loaded: Tokens(8192),
+                trained: Tokens(32768),
+            },
+            speech: None,
         },
         exchanges,
     }
@@ -289,7 +294,11 @@ fn modes_pick_exchanges() {
         Ok(HttpStatus(200)),
         "key order does not matter"
     );
-    assert_eq!(run(&by, &a).0, Err(HttpError::Connect), "each is used once");
+    assert_eq!(
+        run(&by, &a).0,
+        Err(HttpError::ReplayMiss),
+        "each is used once"
+    );
     assert_eq!(by.misses(), vec![WireMiss::Exhausted]);
 
     let order = replay(both(), ReplayMode::InOrder, ChunkPlan::Whole);
@@ -297,7 +306,7 @@ fn modes_pick_exchanges() {
     assert_eq!(run(&order, &sse_b).1, SSE, "in order ignores the request");
 
     let strict = replay(both(), ReplayMode::Strict, ChunkPlan::Whole);
-    assert_eq!(run(&strict, &b).0, Err(HttpError::Connect));
+    assert_eq!(run(&strict, &b).0, Err(HttpError::ReplayMiss));
     let [WireMiss::Mismatch { index, want, got }] = &strict.misses()[..] else {
         panic!("one mismatch");
     };

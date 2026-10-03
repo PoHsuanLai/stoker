@@ -331,3 +331,39 @@ fn describe_is_retried_the_same_way() {
     assert_eq!(block_on(retrying.describe()), Ok(vec![]));
     assert_eq!(*recorder.0.lock().unwrap(), vec![WaitMs(100), WaitMs(200)]);
 }
+
+/// A sleeper that shaves a fixed share off every wait.
+struct Jittery(Mutex<Vec<WaitMs>>, Permille);
+
+impl Sleeper for &Jittery {
+    fn sleep(&self, wait: WaitMs) -> impl Future<Output = ()> + Send {
+        self.0.lock().unwrap().push(wait);
+        std::future::ready(())
+    }
+
+    fn jitter(&self) -> Permille {
+        self.1
+    }
+}
+
+#[test]
+fn the_sleepers_jitter_shaves_every_backoff() {
+    let sleeper = Jittery(Mutex::new(vec![]), Permille(250));
+    let inner = ScriptedProvider::new(
+        vec![],
+        vec![
+            fail(ProviderError::Unreachable),
+            fail(ProviderError::Unreachable),
+            delta(),
+        ],
+    );
+    let retrying = Retrying::new(inner, POLICY, &sleeper);
+    let mut sink = Keep(vec![]);
+    assert_eq!(block_on(retrying.turn(&request(), &mut sink)), Ok(end()));
+    assert_eq!(*sleeper.0.lock().unwrap(), vec![WaitMs(75), WaitMs(150)]);
+}
+
+#[test]
+fn a_sleeper_without_a_jitter_source_shaves_nothing() {
+    assert_eq!((&Recorder::default()).jitter(), Permille(0));
+}

@@ -12,9 +12,9 @@ use model_provider::{Flow, ModelName, ProviderError, Support};
 use serde::{Deserialize, Serialize};
 use speech_provider::{
     AudioChunk, AudioFormat, AudioMs, AudioPull, AudioSink, AudioSource, HeardText, Lang,
-    LangChoice, LangSet, PcmBytes, PcmFormat, SampleIndex, SampleRate, SpeechCaps, SpeechIo,
-    SpeechModelInfo, SpeechToText, SttEnd, SttMode, SttRequest, TextToSpeech, TranscriptEvent,
-    TranscriptSink, TtsEnd, TtsRequest, VoiceId,
+    LangChoice, LangSet, PcmBytes, PcmFormat, SampleIndex, SampleRate, SpeechCaps, SpeechDir,
+    SpeechIo, SpeechModelInfo, SpeechToText, SttEnd, SttMode, SttRequest, TextToSpeech,
+    TranscriptEvent, TranscriptSink, TtsEnd, TtsRequest, VoiceId,
 };
 
 use crate::canon::{digest_hex, len64};
@@ -345,11 +345,27 @@ fn present(any: bool) -> Support {
 }
 
 impl SpeechReplay {
-    /// What the recorded calls show, since the header carries no capabilities: `Present` for
-    /// streaming, partials and timestamps when some call used them, punctuation `Absent` (never
-    /// recorded), any language, the longest audio seen, the first call's format. No such call,
-    /// no model.
+    /// The model the header describes, when it recorded capabilities for this direction.
+    fn header_info(&self, dir: SpeechDir) -> Option<SpeechModelInfo> {
+        let header = &self.cassette.header;
+        header
+            .speech
+            .clone()
+            .filter(|caps| caps.dir() == dir)
+            .map(|caps| SpeechModelInfo {
+                name: header.model.clone(),
+                caps,
+            })
+    }
+
+    /// The header's recorded capabilities when it is an input model's; otherwise what the
+    /// recorded calls show: `Present` for streaming, partials and timestamps when some call used
+    /// them, punctuation `Absent` (never recorded), any language, the longest audio seen, the
+    /// first call's format. No such call, no model.
     fn stt_info(&self) -> Vec<SpeechModelInfo> {
+        if let Some(info) = self.header_info(SpeechDir::In) {
+            return vec![info];
+        }
         let calls = self.stt_calls();
         let Some(first) = calls.first() else {
             return Vec::new();
@@ -381,6 +397,9 @@ impl SpeechReplay {
 
     /// As [`Self::stt_info`], for synthesis: the voices recorded, the first call's output format.
     fn tts_info(&self) -> Vec<SpeechModelInfo> {
+        if let Some(info) = self.header_info(SpeechDir::Out) {
+            return vec![info];
+        }
         let calls = self.tts_calls();
         let Some(first) = calls.first() else {
             return Vec::new();

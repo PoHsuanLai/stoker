@@ -53,6 +53,10 @@ pub enum HttpError {
     /// codec classifies them; the error carries nothing (a body can echo the prompt).
     #[error("the server rejected the request")]
     Rejected,
+    /// A replay transport had no recorded exchange for the request (`ReplayTransport::misses`
+    /// says which and why). Only a test transport answers it; a real one never does.
+    #[error("no recorded exchange answers this request")]
+    ReplayMiss,
 }
 
 /// One endpoint's HTTP client; it is a [`crate::Transport`].

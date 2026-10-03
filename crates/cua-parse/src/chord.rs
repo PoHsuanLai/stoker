@@ -39,13 +39,17 @@ pub(crate) fn from_words<S: AsRef<str>>(words: &[S]) -> Result<Chord, DropReason
         ([], [only]) => modifier(only.as_ref()).map(modifier_key),
         _ => None,
     };
-    let key = key.ok_or(DropReason::MissingArgument)?;
+    let key = key.ok_or(if words.is_empty() {
+        DropReason::MissingArgument
+    } else {
+        DropReason::BadArgument
+    })?;
     let mods = if keys.is_empty() {
         BTreeSet::new()
     } else {
         mods
     };
-    Chord::new(mods, key).map_err(|_| DropReason::MissingArgument)
+    Chord::new(mods, key).map_err(|_| DropReason::BadArgument)
 }
 
 fn modifier(word: &str) -> Option<Modifier> {

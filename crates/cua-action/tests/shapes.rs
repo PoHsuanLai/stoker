@@ -300,3 +300,31 @@ fn map_points_stops_at_the_first_error() {
     let click = every_action().remove(0);
     assert_eq!(click.map_points(refuse, keep), Err("out of frame"));
 }
+
+#[test]
+fn the_centre_target_maps_unchanged_and_round_trips() {
+    let scroll = CuaAction::<WindowSpace>::Scroll {
+        at: Target::Centre,
+        dir: ScrollDir::Up,
+        by: ScrollBy::Distance(Length::new(Coord(10))),
+    };
+    let mapped = scroll
+        .clone()
+        .map_points::<ImageSpace, ()>(|_| Err(()), |l| Ok(Length::new(Coord(l.coord().0 * 2))))
+        .unwrap();
+    assert_eq!(
+        mapped,
+        CuaAction::Scroll {
+            at: Target::Centre,
+            dir: ScrollDir::Up,
+            by: ScrollBy::Distance(Length::new(Coord(20))),
+        },
+        "no point is mapped, so the failing point map is never called"
+    );
+    let json = serde_json::to_string(&Target::<WindowSpace>::Centre).unwrap();
+    assert_eq!(json, r#"{"kind":"centre"}"#);
+    assert_eq!(
+        serde_json::from_str::<Target<WindowSpace>>(&json).unwrap(),
+        Target::Centre
+    );
+}

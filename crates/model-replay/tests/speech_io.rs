@@ -3,17 +3,17 @@
 use std::collections::VecDeque;
 use std::sync::Mutex;
 
-use model_provider::{Flow, ModelName, ProviderError, Support};
+use model_provider::{Flow, ModelName, ProviderError, Support, Tokens};
 use model_replay::{
-    AudioPrint, BuildLabel, CassetteHeader, CassetteVersion, EngineLabel, EngineStamp, RecordedAt,
-    RecordingSpeech, ReplayMode, SinkError, SpeechCassette, SpeechCassetteSink, SpeechInteraction,
-    SpeechReplay, SttPrint, TtsPrint,
+    AudioPrint, BuildLabel, CassetteHeader, CassetteVersion, ContextStamp, EngineLabel,
+    EngineStamp, RecordedAt, RecordingSpeech, ReplayMode, SinkError, SpeechCassette,
+    SpeechCassetteSink, SpeechInteraction, SpeechReplay, SttPrint, TtsPrint,
 };
 use speech_provider::{
     AudioChunk, AudioFormat, AudioMs, AudioPull, AudioSink, AudioSource, HeardText, Lang,
-    LangChoice, PcmBytes, PcmFormat, SampleIndex, SampleRate, SpeechIo, SpeechToText, SpokenText,
-    SttEnd, SttMode, SttRequest, TextToSpeech, TranscriptEvent, TranscriptSink, TtsEnd, TtsRequest,
-    VoiceId,
+    LangChoice, LangSet, PcmBytes, PcmFormat, SampleIndex, SampleRate, SpeechCaps, SpeechIo,
+    SpeechToText, SpokenText, SttEnd, SttMode, SttRequest, TextToSpeech, TranscriptEvent,
+    TranscriptSink, TtsEnd, TtsRequest, VoiceId,
 };
 
 fn block_on<T>(future: impl Future<Output = T>) -> T {
@@ -137,6 +137,11 @@ fn header() -> CassetteHeader {
         },
         model: ModelName("nemotron".into()),
         recorded: RecordedAt(1),
+        context: ContextStamp {
+            loaded: Tokens(8192),
+            trained: Tokens(32768),
+        },
+        speech: None,
     }
 }
 
@@ -367,6 +372,36 @@ fn describe_reports_what_the_calls_show() {
     let none = replay(vec![], ReplayMode::InOrder);
     assert!(block_on(SpeechToText::describe(&none)).unwrap().is_empty());
     assert!(block_on(TextToSpeech::describe(&none)).unwrap().is_empty());
+}
+
+#[test]
+fn describe_answers_the_headers_caps_over_what_the_calls_show() {
+    let caps = SpeechCaps {
+        streaming: Support::Absent,
+        partials: Support::Absent,
+        punctuation: Support::Present,
+        timestamps: Support::Absent,
+        langs: LangSet::Any,
+        max_audio: AudioMs(30_000),
+        io: SpeechIo::In { input: S16_16K },
+    };
+    let mut header = header();
+    header.speech = Some(caps.clone());
+    let r = SpeechReplay::new(
+        SpeechCassette {
+            header,
+            interactions: vec![stt_line(), tts_line("a", 500, tts_end(500))],
+        },
+        ReplayMode::InOrder,
+    );
+    let stt = block_on(SpeechToText::describe(&r)).unwrap();
+    assert_eq!(stt[0].caps, caps, "the header's caps win over the calls");
+    let tts = block_on(TextToSpeech::describe(&r)).unwrap();
+    assert_eq!(
+        tts[0].caps.max_audio,
+        AudioMs(500),
+        "an input header does not describe synthesis"
+    );
 }
 
 #[derive(Default)]

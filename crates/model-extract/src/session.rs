@@ -114,14 +114,6 @@ impl<T: Extract> ExtractSession<T> {
         request
     }
 
-    /// Reads a finished turn: its end, its text, its tool calls.
-    pub fn absorb(&mut self, end: &TurnEnd, text: &str, calls: &[ToolCall]) -> Extracted<T> {
-        let _ = (&mut self.left, &mut self.last_fault, end, text, calls);
-        todo!(
-            "ExtractSession::absorb: needs the base request to build a repair; use absorb_for (interface ask)"
-        )
-    }
-
     /// Reads a finished turn: its end, its text, its tool calls. `base` is the request that was
     /// sent first; a fault with a repair left answers `Repair` of `request(base)` with the fault
     /// appended.
@@ -129,7 +121,7 @@ impl<T: Extract> ExtractSession<T> {
     /// Truncation is checked before anything else and is never repaired. A reply that does not
     /// fit is a repair while the budget lasts; with the budget spent it is `Unparseable` (a
     /// repair was tried) or `OverBudget` (none was ever available).
-    pub fn absorb_for(
+    pub fn absorb(
         &mut self,
         base: &TurnRequest,
         end: &TurnEnd,

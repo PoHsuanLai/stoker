@@ -10,7 +10,10 @@
 //! Pure over a seam: the crate reaches no HTTP stack and no runtime.
 
 mod codec;
+mod collect;
 mod driver;
+mod errors;
+mod sink;
 
 pub use codec::{ChatCodec, ChatDecoder, CodecError, EmbedCodec, ErrorWire};
 pub use driver::Driver;

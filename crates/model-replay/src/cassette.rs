@@ -1,9 +1,10 @@
 //! The cassette file: JSON Lines, `<name>.cassette.jsonl`, a header line then one line per
 //! interaction.
 
-use model_provider::{ModelName, ProviderError, TurnEnd, TurnEvent};
+use model_provider::{ModelName, ProviderError, Tokens, TurnEnd, TurnEvent};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use speech_provider::SpeechCaps;
 
 use crate::{PrintHash, RequestPrint, check_sequence};
 
@@ -42,6 +43,14 @@ pub struct EngineStamp {
     pub build: BuildLabel,
 }
 
+/// The context sizes the recorded model reported (llama.cpp `n_ctx`, vLLM `max_model_len`, and
+/// the trained context), so a replayed `describe` answers what the engine did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ContextStamp {
+    pub loaded: Tokens,
+    pub trained: Tokens,
+}
+
 /// The header of every cassette file, chat, speech and wire.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CassetteHeader {
@@ -49,6 +58,11 @@ pub struct CassetteHeader {
     pub engine: EngineStamp,
     pub model: ModelName,
     pub recorded: RecordedAt,
+    /// What the engine reported for the model's context; `describe` of a replay answers it.
+    pub context: ContextStamp,
+    /// What the speech model could do, for a speech cassette; `None` for a chat or wire one, and
+    /// for a speech cassette whose replay infers the caps from the recorded calls.
+    pub speech: Option<SpeechCaps>,
 }
 
 /// The index of an interaction in its cassette, from 0: what a `Mismatch` names.

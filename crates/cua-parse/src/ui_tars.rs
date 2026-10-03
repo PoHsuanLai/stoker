@@ -124,7 +124,8 @@ fn direction(value: Option<&str>) -> Result<ScrollDir, DropReason> {
         Some("down") => Ok(ScrollDir::Down),
         Some("left") => Ok(ScrollDir::Left),
         Some("right") => Ok(ScrollDir::Right),
-        _ => Err(DropReason::MissingArgument),
+        Some(_) => Err(DropReason::BadArgument),
+        None => Err(DropReason::MissingArgument),
     }
 }
 

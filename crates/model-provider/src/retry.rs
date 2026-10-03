@@ -84,6 +84,12 @@ pub fn next_wait(
 /// Where the waiting happens: a tokio timer in a daemon, a recorder in a test.
 pub trait Sleeper: Send + Sync {
     fn sleep(&self, wait: WaitMs) -> impl Future<Output = ()> + Send;
+
+    /// How much of each backoff to shave off (thousandths), so callers spread out: a daemon
+    /// draws a random one, a test returns a fixed one. The default is none.
+    fn jitter(&self) -> Permille {
+        Permille(0)
+    }
 }
 
 /// Wraps a provider and retries a turn that failed before it delivered an event. `describe` is
@@ -139,10 +145,14 @@ impl<P: Provider, S: Sleeper> Provider for Retrying<P, S> {
 
 impl<P: Provider, S: Sleeper> Retrying<P, S> {
     /// Sleeps the wait that follows try `attempt`, or hands `error` back when it may not be
-    /// retried. The wire's jitter source is not part of the provider seam, so there is none here:
-    /// callers that spread out do it in the sleeper.
+    /// retried. The jitter comes from the sleeper, which owns the clock and any random source.
     async fn pause(&self, attempt: Attempt, error: &ProviderError) -> Result<(), ProviderError> {
-        match next_wait(&self.policy, attempt, error.retry_class(), Permille(0)) {
+        match next_wait(
+            &self.policy,
+            attempt,
+            error.retry_class(),
+            self.sleep.jitter(),
+        ) {
             Some(wait) => {
                 self.sleep.sleep(wait).await;
                 Ok(())

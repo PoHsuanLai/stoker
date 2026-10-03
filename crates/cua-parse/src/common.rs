@@ -1,10 +1,9 @@
 //! What every dialect parser shares: the space a point may live in, the batch that keeps the
 //! actions and what was dropped, and the small constructors and bounds around them.
 //!
-//! A drop reason is the one reason a verb did not become an action. `DropReason` has no variant
-//! for "an argument that is present but unusable" (an empty `type` text, a control character, a
-//! key chord of two plain keys, an unknown direction), so those read as `MissingArgument`: no
-//! usable argument was given.
+//! A drop reason is the one reason a verb did not become an action: `MissingArgument` when the
+//! model gave none, `BadArgument` when it gave one that is unusable (an empty `type` text, a
+//! control character, a key chord of two plain keys, an unknown direction).
 
 use std::collections::BTreeSet;
 
@@ -138,12 +137,11 @@ impl<S: CoordSpace> Batch<S> {
     }
 }
 
-/// A bounded text refused for its content: too long stays `TooLong`, the rest reads as a
-/// missing argument.
+/// A bounded text refused for its content: too long stays `TooLong`, the rest is a bad argument.
 pub(crate) fn bounded<T>(result: Result<T, TextError>) -> Result<T, DropReason> {
     result.map_err(|e| match e {
         TextError::TooLong { .. } => DropReason::TooLong,
-        TextError::Empty | TextError::ControlChar { .. } => DropReason::MissingArgument,
+        TextError::Empty | TextError::ControlChar { .. } => DropReason::BadArgument,
     })
 }
 

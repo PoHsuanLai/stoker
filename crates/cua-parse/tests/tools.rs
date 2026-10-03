@@ -7,7 +7,8 @@ use std::collections::BTreeSet;
 use common::*;
 use cua_action::{
     Button, Choice, Chord, ClickCount, Coord, CuaAction, FinishOutcome, ImageSpace, Length,
-    Modifier, Notches, Repeat, ScrollBy, ScrollDir, Summary, ToolDialect, TypedText, WaitMs,
+    Modifier, Notches, Repeat, ScrollBy, ScrollDir, Summary, Target, ToolDialect, TypedText,
+    WaitMs,
 };
 use cua_parse::{DropReason, ParseError};
 use keyboard_types::Key;
@@ -166,8 +167,20 @@ fn qwen_drag_scroll_wait_and_conclusions() {
     );
     let zero = qwen(r#"{"action":"scroll","coordinate":[5,5],"pixels":0}"#);
     assert_eq!(drops(&zero), [("scroll", DropReason::BadNumber)]);
+    // Qwen's schema makes the coordinate optional: the scroll acts at the centre of the frame.
     let nowhere = qwen(r#"{"action":"scroll","pixels":10}"#);
-    assert_eq!(drops(&nowhere), [("scroll", DropReason::MissingArgument)]);
+    assert_eq!(
+        image_actions(&nowhere),
+        [CuaAction::Scroll {
+            at: Target::Centre,
+            dir: ScrollDir::Up,
+            by: ScrollBy::Distance(Length::new(Coord(10))),
+        }]
+    );
+    let half = qwen(r#"{"action":"scroll","coordinate":[1],"pixels":10}"#);
+    assert_eq!(drops(&half), [("scroll", DropReason::BadNumber)]);
+    let half = qwen(r#"{"action":"scroll","x":1,"pixels":10}"#);
+    assert_eq!(drops(&half), [("scroll", DropReason::MissingArgument)]);
 
     let wait = |s: &str| qwen(&format!(r#"{{"action":"wait","time":{s}}}"#));
     assert_eq!(
@@ -200,7 +213,7 @@ fn qwen_drag_scroll_wait_and_conclusions() {
     };
     assert_eq!((*outcome, summary.as_str()), (FinishOutcome::Done, "42"));
     let bad = qwen(r#"{"action":"terminate","status":"maybe"}"#);
-    assert_eq!(drops(&bad), [("terminate", DropReason::MissingArgument)]);
+    assert_eq!(drops(&bad), [("terminate", DropReason::BadArgument)]);
 }
 
 #[test]
@@ -213,7 +226,11 @@ fn key_spellings_in_tool_calls() {
     assert_eq!(chord(r#"{"action":"key","keys":["alt","tab"]}"#), want);
     assert_eq!(chord(r#"{"action":"key","keys":"Alt+Tab"}"#), want);
     let p = qwen(r#"{"action":"key","keys":[1,2]}"#);
-    assert_eq!(drops(&p), [("key", DropReason::MissingArgument)]);
+    assert_eq!(drops(&p), [("key", DropReason::BadArgument)]);
+    let p = qwen(r#"{"action":"key","keys":"a b"}"#);
+    assert_eq!(drops(&p), [("key", DropReason::BadArgument)]);
+    let p = qwen(r#"{"action":"key","keys":"ctrl+nonsense"}"#);
+    assert_eq!(drops(&p), [("key", DropReason::BadArgument)]);
     let p = qwen(r#"{"action":"key"}"#);
     assert_eq!(drops(&p), [("key", DropReason::MissingArgument)]);
 }

@@ -10,8 +10,9 @@ use model_provider::{
 };
 use model_replay::{
     BuildLabel, Cassette, CassetteError, CassetteHeader, CassetteSink, CassetteVersion,
-    EngineLabel, EngineStamp, Interaction, InteractionId, PartPrint, RecordedAt, RecordingProvider,
-    ReplayError, ReplayMode, ReplayProvider, RequestPrint, SinkError, StreamFault, check_sequence,
+    ContextStamp, EngineLabel, EngineStamp, Interaction, InteractionId, PartPrint, RecordedAt,
+    RecordingProvider, ReplayError, ReplayMode, ReplayProvider, RequestPrint, SinkError,
+    StreamFault, check_sequence,
 };
 use vision_prep::MediaType;
 
@@ -104,6 +105,11 @@ fn header() -> CassetteHeader {
         },
         model: ModelName("holo".into()),
         recorded: RecordedAt(1),
+        context: ContextStamp {
+            loaded: Tokens(8192),
+            trained: Tokens(32768),
+        },
+        speech: None,
     }
 }
 
@@ -375,6 +381,14 @@ fn describe_names_the_cassette_model() {
     let models = block_on(p.describe()).unwrap();
     assert_eq!(models.len(), 1);
     assert_eq!(models[0].name, ModelName("holo".into()));
+}
+
+#[test]
+fn describe_reports_the_context_the_header_recorded() {
+    let p = ReplayProvider::new(cassette(), ReplayMode::InOrder);
+    let models = block_on(p.describe()).unwrap();
+    assert_eq!(models[0].loaded_context, Tokens(8192));
+    assert_eq!(models[0].trained_context, Tokens(32768));
 }
 
 #[derive(Default)]

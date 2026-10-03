@@ -404,8 +404,10 @@ dependencies = [
 name = "model-openai-compat"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "model-http",
  "model-provider",
+ "model-replay",
  "model-wire",
  "proptest",
  "serde",

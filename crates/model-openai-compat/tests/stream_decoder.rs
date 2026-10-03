@@ -745,7 +745,7 @@ fn an_error_envelope_in_a_200_is_unreadable_and_names_its_fault() {
             Err(CodecError::Unreadable),
             "{frame}"
         );
-        let fault = d.fault().cloned();
+        let fault = d.fault();
         assert_eq!(fault.as_ref(), Some(&want), "{frame}");
         assert!(!format!("{fault:?}").contains("secret"));
     }

@@ -199,19 +199,15 @@ impl Supervisor {
         }
     }
 
-    /// Engines out of reach of eviction go to the fixed total (an engine in a turn, or starting);
-    /// the rest are candidates, a stopping one first since its memory is already coming back.
-    fn candidates(&self, cfg: &SupervisorConfig) -> (MiB, Vec<(EngineId, MiB, MonoMs)>) {
+    /// Engines still starting go to the fixed total; every other running engine is a candidate
+    /// with its last use (`budget` keeps the ones in a turn out of the victims), a stopping one
+    /// first since its memory is already coming back.
+    fn candidates(&self) -> (MiB, Vec<(EngineId, MiB, MonoMs)>) {
         let mut fixed = 0u32;
         let mut running = Vec::new();
         for (spec, state) in &self.engines {
             match *state {
                 EngineState::Starting { .. } => fixed = fixed.saturating_add(spec.need.0),
-                EngineState::Ready { last_used, .. }
-                    if elapsed(last_used, self.now) < millis(cfg.probe_every) =>
-                {
-                    fixed = fixed.saturating_add(spec.need.0);
-                }
                 EngineState::Ready { last_used, .. } => {
                     running.push((spec.id.clone(), spec.need, last_used));
                 }
@@ -235,12 +231,19 @@ impl Supervisor {
         let Some(want) = self.spec(id).cloned() else {
             return;
         };
-        let (fixed, running) = self.candidates(cfg);
+        let (fixed, running) = self.candidates();
         let gpu = GpuMemory {
             used_by_others: MiB(self.gpu.used_by_others.0.saturating_add(fixed.0)),
             ..self.gpu
         };
-        match budget(&want, &running, gpu, cfg.headroom) {
+        match budget(
+            &want,
+            &running,
+            gpu,
+            cfg.headroom,
+            self.now,
+            cfg.probe_every,
+        ) {
             BudgetVerdict::Fits => {
                 let now = self.now;
                 out.push(SupervisorOut::Spawn(id.clone(), want.unit));

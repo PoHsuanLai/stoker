@@ -1,5 +1,7 @@
 //! The GPU memory budget: does an engine fit, and whom to evict if not.
 
+use std::time::Duration;
+
 use model_catalog::MiB;
 use serde::{Deserialize, Serialize};
 
@@ -37,16 +39,20 @@ pub enum BudgetVerdict {
 /// is `Fits`; otherwise evict idle engines, least recently used first, until it fits; if that is
 /// still not enough, `NoRoom`. `running` carries each engine's memory and its last use.
 ///
-/// Every engine in `running` is a candidate for eviction: the signature carries no clock, so the
-/// caller (`step`) moves engines in a turn (used within the probe interval), and engines still
-/// starting, out of `running` and into `gpu.used_by_others`, where they count against `free` and
-/// can never be named. `NoRoom::free` is what the budget would be with every candidate evicted.
+/// An engine last used within `probe_every` of `now` is in a turn: its memory counts against
+/// `free` and it is never named as a victim. Every other engine in `running` is a candidate;
+/// `NoRoom::free` is what the budget would be with every candidate evicted. Engines still
+/// starting stay out of `running` and in `gpu.used_by_others`, so they can never be named either.
 pub fn budget(
     want: &EngineSpec,
     running: &[(EngineId, MiB, MonoMs)],
     gpu: GpuMemory,
     headroom: MiB,
+    now: MonoMs,
+    probe_every: Duration,
 ) -> BudgetVerdict {
+    let window = u64::try_from(probe_every.as_millis()).unwrap_or(u64::MAX);
+    let in_turn = |last: MonoMs| now.0.saturating_sub(last.0) < window;
     let required = u64::from(want.need.0) + u64::from(headroom.0);
     let committed = u64::from(gpu.used_by_others.0)
         + running
@@ -57,7 +63,10 @@ pub fn budget(
     if required <= free_now {
         return BudgetVerdict::Fits;
     }
-    let mut order: Vec<&(EngineId, MiB, MonoMs)> = running.iter().collect();
+    let mut order: Vec<&(EngineId, MiB, MonoMs)> = running
+        .iter()
+        .filter(|(_, _, last)| !in_turn(*last))
+        .collect();
     order.sort_by(|a, b| (a.2, &a.0).cmp(&(b.2, &b.0)));
     let victims = order
         .iter()
@@ -88,6 +97,9 @@ mod tests {
         total: MiB(16000),
         used_by_others: MiB(1000),
     };
+
+    const NOW: MonoMs = MonoMs(100_000);
+    const PROBE: Duration = Duration::from_millis(500);
 
     fn run(name: &str, mem: u32, last: u64) -> (EngineId, MiB, MonoMs) {
         (id(name), MiB(mem), MonoMs(last))
@@ -168,7 +180,7 @@ mod tests {
         ];
         for (name, need, running, expected) in cases {
             assert_eq!(
-                budget(&spec("want", need), &running, GPU, MiB(1000)),
+                budget(&spec("want", need), &running, GPU, MiB(1000), NOW, PROBE),
                 expected,
                 "{name}"
             );
@@ -182,11 +194,11 @@ mod tests {
             used_by_others: MiB(12000),
         };
         assert_eq!(
-            budget(&spec("want", 4000), &[], gpu, MiB(0)),
+            budget(&spec("want", 4000), &[], gpu, MiB(0), NOW, PROBE),
             BudgetVerdict::Fits
         );
         assert_eq!(
-            budget(&spec("want", 4001), &[], gpu, MiB(0)),
+            budget(&spec("want", 4001), &[], gpu, MiB(0), NOW, PROBE),
             BudgetVerdict::NoRoom {
                 need: MiB(4001),
                 free: MiB(4000)
@@ -202,8 +214,42 @@ mod tests {
         };
         let running = [run("a", 500, 1)];
         assert_eq!(
-            budget(&spec("want", 100), &running, gpu, MiB(0)),
+            budget(&spec("want", 100), &running, gpu, MiB(0), NOW, PROBE),
             ids(&["a"])
         );
+    }
+
+    #[test]
+    fn an_engine_used_within_the_probe_interval_is_in_a_turn_and_never_a_victim() {
+        let busy = run("busy", 4000, NOW.0 - 499);
+        let idle = run("idle", 4000, NOW.0 - 500);
+        let running = [busy.clone(), idle.clone()];
+        // `busy` is the older candidate by name, but only `idle` is out of its turn.
+        assert_eq!(
+            budget(&spec("want", 9000), &running, GPU, MiB(1000), NOW, PROBE),
+            ids(&["idle"])
+        );
+        // Evicting `idle` is not enough for more: the busy engine's memory stays committed.
+        assert_eq!(
+            budget(&spec("want", 10001), &running, GPU, MiB(1000), NOW, PROBE),
+            BudgetVerdict::NoRoom {
+                need: MiB(10001),
+                free: MiB(11000)
+            }
+        );
+    }
+
+    #[test]
+    fn a_longer_probe_interval_widens_the_turn() {
+        let running = [run("a", 4000, NOW.0 - 1000)];
+        let wide = Duration::from_millis(1001);
+        assert_eq!(
+            budget(&spec("want", 12000), &running, GPU, MiB(1000), NOW, PROBE),
+            ids(&["a"])
+        );
+        assert!(matches!(
+            budget(&spec("want", 12000), &running, GPU, MiB(1000), NOW, wide),
+            BudgetVerdict::NoRoom { .. }
+        ));
     }
 }

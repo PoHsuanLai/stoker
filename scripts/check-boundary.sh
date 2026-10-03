@@ -107,17 +107,21 @@ done
 # The excluded crates (they need a runtime outside the pinned block, so they are not workspace
 # members) are checked from their own manifests: their direct path dependencies are exactly the
 # ones listed, and they reach no porter crate, no audio device crate and no GPL TTS stack. They
-# MAY reach `ort` and `sherpa-onnx`, which is why they are excluded.
+# MAY reach `ort` and `sherpa-onnx`, which is why they are excluded. A nested crate (the fuzz
+# targets of cua-parse: nightly only, its own `[workspace]` table) is named by its path under
+# `crates/`; it is not in the workspace's `exclude` list, which only names top-level crates.
 EXCLUDED=(
   "speech-vad-silero: speech-provider speech-vad"
   "speech-host: speech-provider"
+  "cua-parse/fuzz: cua-action cua-parse model-provider"
 )
 for entry in "${EXCLUDED[@]}"; do
   crate="${entry%%:*}"
   read -r -a allowed <<<"${entry#*:}"
   manifest="crates/$crate/Cargo.toml"
+  # The first line of `cargo tree` is the crate itself, whatever its package is called.
   found=$(cargo tree --manifest-path "$manifest" --depth 1 -e normal,build --prefix none 2>/dev/null \
-    | grep '(/' | awk '{print $1}' | grep -vx "$crate" | sort -u | tr '\n' ' ')
+    | tail -n +2 | grep '(/' | awk '{print $1}' | sort -u | tr '\n' ' ')
   want=$(printf '%s\n' "${allowed[@]}" | grep . | sort -u | tr '\n' ' ')
   if [ "$found" != "$want" ]; then
     echo "EDGE: $crate (excluded) depends on [${found% }], the table allows [${want% }]"

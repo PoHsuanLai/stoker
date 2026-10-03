@@ -4,11 +4,11 @@
 use model_provider::{
     Attempt, BatchMax, CharCount, ChoiceText, Constraint, Count, Dims, EmbedCaps, EmbedEnd,
     EmbedFault, EmbedPrompts, EmbedRole, EmbedTurn, EmbedVector, EngineExtras, Field, FieldName,
-    GuidedBackend, KeepAlive, Knob, LlamaExtras, Milli, ModelName, OllamaExtras, OpaqueText,
-    OutputShape, Part, Permille, PrefixText, PromptCache, ProviderError, RetryClass, RetryPolicy,
-    RetrySeconds, Sampling, SchemaDialect, Seconds, Seed, SequenceFault, ServerStatus, Shape,
-    ShapeKind, ShapeWithTools, SignatureText, SlotId, StopReason, ThoughtSeal, Tokens,
-    ToolParallelism, TurnUsage, Variant, VariantName, VllmExtras, WaitMs,
+    KeepAlive, Knob, LlamaExtras, Milli, ModelName, OllamaExtras, OpaqueText, OutputShape, Part,
+    Permille, PrefixText, PromptCache, ProviderError, RetryClass, RetryPolicy, RetrySeconds,
+    Sampling, SchemaDialect, Seconds, Seed, SequenceFault, ServerStatus, Shape, ShapeKind,
+    ShapeWithTools, SignatureText, SlotId, StopReason, ThoughtSeal, Tokens, ToolParallelism,
+    TurnUsage, Variant, VariantName, VllmExtras, WaitMs,
 };
 
 fn round_trip<T>(value: &T, json: &str)
@@ -54,9 +54,9 @@ fn engine_extras_have_one_arm_per_flavor() {
         ),
         (
             EngineExtras::Vllm(VllmExtras {
-                backend: GuidedBackend::Xgrammar,
+                priority: Knob::Set(Count(3)),
             }),
-            r#"{"kind":"vllm","v":{"backend":"xgrammar"}}"#,
+            r#"{"kind":"vllm","v":{"priority":{"kind":"set","v":3}}}"#,
         ),
         (
             EngineExtras::Ollama(OllamaExtras {
@@ -84,7 +84,6 @@ fn tool_parallelism_and_prompt_cache_slugs() {
     round_trip(&ToolParallelism::One, r#""one""#);
     round_trip(&ToolParallelism::Many, r#""many""#);
     round_trip(&PromptCache::Fresh, r#""fresh""#);
-    round_trip(&GuidedBackend::Llguidance, r#""llguidance""#);
     round_trip(&ShapeWithTools::AfterResult, r#""after_result""#);
 }
 

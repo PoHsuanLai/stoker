@@ -100,6 +100,16 @@ fn rejected_is_a_unit_error_and_round_trips() {
 }
 
 #[test]
+fn a_replay_miss_is_a_unit_error_and_round_trips() {
+    let json = serde_json::to_string(&HttpError::ReplayMiss).unwrap();
+    assert_eq!(json, r#"{"kind":"replay_miss"}"#);
+    assert_eq!(
+        serde_json::from_str::<HttpError>(&json).unwrap(),
+        HttpError::ReplayMiss
+    );
+}
+
+#[test]
 fn a_response_head_round_trips_with_pinned_json() {
     let head = ResponseHead {
         status: HttpStatus(429),

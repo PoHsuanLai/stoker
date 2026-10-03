@@ -32,6 +32,9 @@ pub struct Dropped {
 pub enum DropReason {
     UnsupportedVerb,
     MissingArgument,
+    /// An argument is there but unusable: empty or control-character text, a key name that is no
+    /// key, a direction that is no direction.
+    BadArgument,
     BadNumber,
     TooLong,
     OverBatchLimit,

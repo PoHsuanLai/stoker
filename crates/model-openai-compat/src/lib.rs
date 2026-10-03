@@ -7,18 +7,24 @@
 
 mod assemble;
 mod audio;
+mod classify;
 mod codec;
 mod decode;
+mod embed;
 mod envelope;
+mod messages;
+mod models;
 mod provider;
 mod quirks;
+mod request;
 
 pub use audio::{
     AudioCodecError, MultipartBody, OpenAiSpeech, PcmDecoder, SpeechFlavor, decode_transcription,
     encode_speech_request, encode_transcription,
 };
-pub use codec::{Flavor, OpenAiCodec, RequestJson, encode_request};
+pub use codec::{Flavor, OpenAiCodec, RequestJson};
 pub use decode::StreamDecoder;
 pub use model_wire::CodecError;
 pub use provider::OpenAiCompat;
 pub use quirks::{DimensionsField, Quirks, ToolImages, ToolNaming, UsageAsk};
+pub use request::{encode_request, enforceable};

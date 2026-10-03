@@ -22,8 +22,8 @@ pub use caps::{
     ToolSupport, Zoom,
 };
 pub use control::{
-    EngineExtras, GuidedBackend, KeepAlive, LlamaExtras, OllamaExtras, PromptCache, Sampling,
-    ThoughtSeal, ToolParallelism, VllmExtras,
+    EngineExtras, KeepAlive, LlamaExtras, OllamaExtras, PromptCache, Sampling, ThoughtSeal,
+    ToolParallelism, VllmExtras,
 };
 pub use embed::{
     EmbedCaps, EmbedEnd, EmbedFault, EmbedPrompts, EmbedRole, EmbedTurn, EmbedVector, Embedder,

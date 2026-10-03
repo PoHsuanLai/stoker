@@ -163,7 +163,7 @@ fn a_good_reply_is_done_in_every_mode() {
     ];
     for (label, mode, text, calls) in cases {
         let mut s = session::<Review>(mode, 1);
-        let got = s.absorb_for(&base(), &end(StopReason::EndTurn), text, &calls);
+        let got = s.absorb(&base(), &end(StopReason::EndTurn), text, &calls);
         assert_eq!(got, Extracted::Done(Review { score: 7 }), "{label}");
         assert_eq!(s.left(), RepairsLeft(1), "{label}");
     }
@@ -183,7 +183,7 @@ fn a_bare_choice_or_integer_reply_is_read_as_its_value() {
     ] {
         let mut s = session::<Verdict>(mode, 0);
         assert_eq!(
-            s.absorb_for(&base(), &end(StopReason::EndTurn), text, &[]),
+            s.absorb(&base(), &end(StopReason::EndTurn), text, &[]),
             Extracted::Done(Verdict("deny".into()))
         );
     }
@@ -197,7 +197,7 @@ fn a_bare_choice_or_integer_reply_is_read_as_its_value() {
         }
     }
     let mut s = session::<Int>(ExtractMode::Native(OutputShape::Regex("[0-9]".into())), 0);
-    let Extracted::Done(Int(n)) = s.absorb_for(&base(), &end(StopReason::EndTurn), "7", &[]) else {
+    let Extracted::Done(Int(n)) = s.absorb(&base(), &end(StopReason::EndTurn), "7", &[]) else {
         panic!("done")
     };
     assert_eq!(n, 7);
@@ -207,7 +207,7 @@ fn a_bare_choice_or_integer_reply_is_read_as_its_value() {
 fn one_repair_then_failed() {
     let mut s = session::<Review>(ExtractMode::Prompted, 1);
     let Extracted::Repair(request) =
-        s.absorb_for(&base(), &end(StopReason::EndTurn), r#"{"score":11}"#, &[])
+        s.absorb(&base(), &end(StopReason::EndTurn), r#"{"score":11}"#, &[])
     else {
         panic!("a repair")
     };
@@ -217,17 +217,17 @@ fn one_repair_then_failed() {
     assert_eq!(request.messages.last().unwrap().role, Role::User);
     // The repaired reply is good: done, with no more budget used.
     assert_eq!(
-        s.absorb_for(&base(), &end(StopReason::EndTurn), r#"{"score":3}"#, &[]),
+        s.absorb(&base(), &end(StopReason::EndTurn), r#"{"score":3}"#, &[]),
         Extracted::Done(Review { score: 3 })
     );
     // Another session: the repair also fails.
     let mut s = session::<Review>(ExtractMode::Prompted, 1);
     assert!(matches!(
-        s.absorb_for(&base(), &end(StopReason::EndTurn), "nope", &[]),
+        s.absorb(&base(), &end(StopReason::EndTurn), "nope", &[]),
         Extracted::Repair(_)
     ));
     assert_eq!(
-        s.absorb_for(&base(), &end(StopReason::EndTurn), "still nope", &[]),
+        s.absorb(&base(), &end(StopReason::EndTurn), "still nope", &[]),
         Extracted::Failed(ExtractFailure::Unparseable)
     );
 }
@@ -236,7 +236,7 @@ fn one_repair_then_failed() {
 fn no_budget_at_all_is_over_budget() {
     let mut s = session::<Review>(ExtractMode::Prompted, 0);
     assert_eq!(
-        s.absorb_for(&base(), &end(StopReason::EndTurn), "nope", &[]),
+        s.absorb(&base(), &end(StopReason::EndTurn), "nope", &[]),
         Extracted::Failed(ExtractFailure::OverBudget)
     );
 }
@@ -245,13 +245,13 @@ fn no_budget_at_all_is_over_budget() {
 fn max_tokens_is_failed_not_repaired() {
     let mut s = session::<Review>(ExtractMode::Prompted, 3);
     assert_eq!(
-        s.absorb_for(&base(), &end(StopReason::MaxTokens), r#"{"score":"#, &[]),
+        s.absorb(&base(), &end(StopReason::MaxTokens), r#"{"score":"#, &[]),
         Extracted::Failed(ExtractFailure::Truncated)
     );
     assert_eq!(s.left(), RepairsLeft(3));
     // Truncation wins over a reply that would have fit.
     assert_eq!(
-        s.absorb_for(&base(), &end(StopReason::MaxTokens), r#"{"score":1}"#, &[]),
+        s.absorb(&base(), &end(StopReason::MaxTokens), r#"{"score":1}"#, &[]),
         Extracted::Failed(ExtractFailure::Truncated)
     );
 }
@@ -260,7 +260,7 @@ fn max_tokens_is_failed_not_repaired() {
 fn a_filtered_reply_is_refused() {
     let mut s = session::<Review>(ExtractMode::Prompted, 3);
     assert_eq!(
-        s.absorb_for(&base(), &end(StopReason::ContentFilter), "", &[]),
+        s.absorb(&base(), &end(StopReason::ContentFilter), "", &[]),
         Extracted::Failed(ExtractFailure::Refused)
     );
 }
@@ -274,7 +274,7 @@ fn a_tool_mode_reply_without_the_call_is_a_fault() {
         input: JsonText::new("{}").unwrap(),
     };
     assert!(matches!(
-        s.absorb_for(
+        s.absorb(
             &base(),
             &end(StopReason::ToolUse),
             r#"{"score":1}"#,
@@ -295,8 +295,7 @@ fn repair_message_never_echoes_output() {
     ];
     for text in cases {
         let mut s = session::<Review>(ExtractMode::Prompted, 1);
-        let Extracted::Repair(request) =
-            s.absorb_for(&base(), &end(StopReason::EndTurn), &text, &[])
+        let Extracted::Repair(request) = s.absorb(&base(), &end(StopReason::EndTurn), &text, &[])
         else {
             panic!("a repair for {text}")
         };
@@ -311,7 +310,7 @@ fn repair_message_never_echoes_output() {
 #[test]
 fn a_repair_in_tool_mode_keeps_the_conversation_in_order() {
     let mut s = session::<Review>(ExtractMode::ToolCall { tool: tool() }, 1);
-    let Extracted::Repair(request) = s.absorb_for(
+    let Extracted::Repair(request) = s.absorb(
         &base(),
         &end(StopReason::ToolUse),
         "",
@@ -341,11 +340,11 @@ fn a_session_reads_a_list_shape_through_the_checker_before_the_reader() {
     }
     let mut s = session::<Ids>(ExtractMode::Prompted, 0);
     assert_eq!(
-        s.absorb_for(&base(), &end(StopReason::EndTurn), "[1,2,3]", &[]),
+        s.absorb(&base(), &end(StopReason::EndTurn), "[1,2,3]", &[]),
         Extracted::Failed(ExtractFailure::OverBudget)
     );
     assert!(matches!(
-        s.absorb_for(&base(), &end(StopReason::EndTurn), "[1,2]", &[]),
+        s.absorb(&base(), &end(StopReason::EndTurn), "[1,2]", &[]),
         Extracted::Done(Ids(5))
     ));
 }

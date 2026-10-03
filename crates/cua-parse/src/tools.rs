@@ -175,10 +175,18 @@ fn point<S: CoordSpace>(
     Err(DropReason::MissingArgument)
 }
 
+/// Whether the call says anything about a point under `prefix` (`coordinate`, `x` or `y`).
+fn names_a_point(args: &Args, prefix: &str) -> bool {
+    ["coordinate", "x", "y"]
+        .iter()
+        .any(|key| args.contains_key(&format!("{prefix}{key}")))
+}
+
 fn string<'a>(args: &'a Args, name: &str) -> Verdict<&'a str> {
-    args.get(name)
-        .and_then(Value::as_str)
-        .ok_or(DropReason::MissingArgument)
+    match args.get(name) {
+        None => Err(DropReason::MissingArgument),
+        Some(value) => value.as_str().ok_or(DropReason::BadArgument),
+    }
 }
 
 fn optional_string<'a>(args: &'a Args, name: &str) -> &'a str {
@@ -191,9 +199,10 @@ fn keys(args: &Args) -> Verdict<cua_action::Chord> {
         Some(Value::String(text)) => chord::from_text(text),
         Some(Value::Array(words)) => {
             let words: Option<Vec<&str>> = words.iter().map(Value::as_str).collect();
-            chord::from_words(&words.ok_or(DropReason::MissingArgument)?)
+            chord::from_words(&words.ok_or(DropReason::BadArgument)?)
         }
-        _ => Err(DropReason::MissingArgument),
+        Some(_) => Err(DropReason::BadArgument),
+        None => Err(DropReason::MissingArgument),
     }
 }
 
@@ -205,9 +214,14 @@ enum Axis {
 
 /// Qwen scrolls by `pixels`: positive up (vertical) or right (horizontal), negative the other
 /// way. Holo may instead give a `direction` and scroll by a fixed number of notches. A scroll
-/// has no point to act at unless the call gives one.
+/// that names no point acts at the centre of the frame (Qwen's schema makes the coordinate
+/// optional); a half-given point is still refused.
 fn scroll<S: CoordSpace>(holo: bool, ctx: &Ctx, args: &Args, axis: Axis) -> Verdict<CuaAction<S>> {
-    let at = Target::Point(point(ctx, args, &[""])?);
+    let at = if names_a_point(args, "") {
+        Target::Point(point(ctx, args, &[""])?)
+    } else {
+        Target::Centre
+    };
     match (args.get("pixels"), args.get("direction")) {
         (Some(pixels), _) => {
             let signed = pixels
@@ -238,7 +252,7 @@ fn scroll<S: CoordSpace>(holo: bool, ctx: &Ctx, args: &Args, axis: Axis) -> Verd
         }
         (None, Some(dir)) if holo => Ok(CuaAction::Scroll {
             at,
-            dir: direction(dir.as_str().ok_or(DropReason::MissingArgument)?)?,
+            dir: direction(dir.as_str().ok_or(DropReason::BadArgument)?)?,
             by: ScrollBy::Notches(Notches(SCROLL_NOTCHES)),
         }),
         _ => Err(DropReason::MissingArgument),
@@ -251,7 +265,7 @@ fn direction(word: &str) -> Verdict<ScrollDir> {
         "down" => Ok(ScrollDir::Down),
         "left" => Ok(ScrollDir::Left),
         "right" => Ok(ScrollDir::Right),
-        _ => Err(DropReason::MissingArgument),
+        _ => Err(DropReason::BadArgument),
     }
 }
 
@@ -269,7 +283,7 @@ fn outcome(status: &str) -> Verdict<FinishOutcome> {
         "success" | "done" => Ok(FinishOutcome::Done),
         "failure" | "failed" => Ok(FinishOutcome::Failed),
         "infeasible" => Ok(FinishOutcome::Infeasible),
-        _ => Err(DropReason::MissingArgument),
+        _ => Err(DropReason::BadArgument),
     }
 }
 
@@ -277,16 +291,12 @@ fn choices(args: &Args) -> Verdict<Vec<Choice>> {
     let Some(value) = args.get("choices") else {
         return Ok(Vec::new());
     };
-    let items = value.as_array().ok_or(DropReason::MissingArgument)?;
+    let items = value.as_array().ok_or(DropReason::BadArgument)?;
     if items.len() > Choice::MAX_PER_ASK {
         return Err(DropReason::TooLong);
     }
     items
         .iter()
-        .map(|item| {
-            bounded(Choice::new(
-                item.as_str().ok_or(DropReason::MissingArgument)?,
-            ))
-        })
+        .map(|item| bounded(Choice::new(item.as_str().ok_or(DropReason::BadArgument)?)))
         .collect()
 }

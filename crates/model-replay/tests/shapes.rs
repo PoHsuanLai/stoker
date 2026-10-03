@@ -4,9 +4,9 @@ use model_provider::{
     TurnUsage,
 };
 use model_replay::{
-    BuildLabel, ByteCount, Cassette, CassetteError, CassetteHeader, CassetteVersion, EngineLabel,
-    EngineStamp, ImageDigest, ImagePrint, Interaction, InteractionId, MessagePrint, PartPrint,
-    PrintHash, RecordedAt, RequestPrint,
+    BuildLabel, ByteCount, Cassette, CassetteError, CassetteHeader, CassetteVersion, ContextStamp,
+    EngineLabel, EngineStamp, ImageDigest, ImagePrint, Interaction, InteractionId, MessagePrint,
+    PartPrint, PrintHash, RecordedAt, RequestPrint,
 };
 use vision_prep::MediaType;
 
@@ -65,6 +65,11 @@ fn cassette() -> Cassette {
             engine: stamp("vllm", "v0.12.0"),
             model: ModelName("holo".into()),
             recorded: RecordedAt(1_790_000_000),
+            context: ContextStamp {
+                loaded: Tokens(8192),
+                trained: Tokens(32768),
+            },
+            speech: None,
         },
         interactions: vec![
             Interaction {
@@ -101,7 +106,7 @@ fn header_line_is_pinned() {
     let text = cassette().to_jsonl();
     assert_eq!(
         text.lines().next().unwrap(),
-        r#"{"vocab":1,"engine":{"kind":"vllm","build":"v0.12.0"},"model":"holo","recorded":1790000000}"#
+        r#"{"vocab":1,"engine":{"kind":"vllm","build":"v0.12.0"},"model":"holo","recorded":1790000000,"context":{"loaded":8192,"trained":32768},"speech":null}"#
     );
 }
 
@@ -136,10 +141,11 @@ fn bad_files_name_the_line() {
 
 mod speech {
     use super::stamp;
-    use model_provider::{ModelName, ProviderError};
+    use model_provider::{ModelName, ProviderError, Tokens};
     use model_replay::{
         AudioDigest, AudioPrint, ByteCount, CassetteError, CassetteHeader, CassetteVersion,
-        RecordedAt, SpeechCassette, SpeechInteraction, SttPrint, TextDigest, TextPrint, TtsPrint,
+        ContextStamp, RecordedAt, SpeechCassette, SpeechInteraction, SttPrint, TextDigest,
+        TextPrint, TtsPrint,
     };
     use speech_provider::{
         AudioFormat, AudioMs, HeardText, Lang, LangChoice, PcmFormat, SampleIndex, SampleRate,
@@ -167,6 +173,11 @@ mod speech {
                 engine: stamp("speech_host", "0.1.0"),
                 model: ModelName("nemotron-3.5-asr-streaming".into()),
                 recorded: RecordedAt(1_790_000_000),
+                context: ContextStamp {
+                    loaded: Tokens(8192),
+                    trained: Tokens(32768),
+                },
+                speech: None,
             },
             interactions: vec![
                 SpeechInteraction::Stt {
@@ -253,7 +264,7 @@ mod speech {
         assert_eq!(SpeechCassette::from_jsonl(&text).unwrap(), cassette());
         assert_eq!(
             text.lines().next().unwrap(),
-            r#"{"vocab":1,"engine":{"kind":"speech_host","build":"0.1.0"},"model":"nemotron-3.5-asr-streaming","recorded":1790000000}"#
+            r#"{"vocab":1,"engine":{"kind":"speech_host","build":"0.1.0"},"model":"nemotron-3.5-asr-streaming","recorded":1790000000,"context":{"loaded":8192,"trained":32768},"speech":null}"#
         );
     }
 

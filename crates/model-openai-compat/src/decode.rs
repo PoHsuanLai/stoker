@@ -67,12 +67,6 @@ impl StreamDecoder {
         }
     }
 
-    /// The error a frame carried, after `feed` answered `Unreadable` for an error envelope in a
-    /// 200: what the driver reports instead of a generic unreadable reply.
-    pub fn fault(&self) -> Option<&ProviderError> {
-        self.fault.as_ref()
-    }
-
     fn chunk(&mut self, value: &Value) -> Result<Vec<TurnEvent>, CodecError> {
         if let Some(error) = envelope_error(value) {
             self.fault = Some(error);
@@ -250,6 +244,10 @@ impl ChatDecoder for StreamDecoder {
             return Err(CodecError::Unreadable);
         }
         self.chunk(&value)
+    }
+
+    fn fault(&self) -> Option<ProviderError> {
+        self.fault.clone()
     }
 
     fn finish(self) -> Result<TurnEnd, CodecError> {

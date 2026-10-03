@@ -53,19 +53,15 @@ pub enum PromptCache {
     Fresh,
 }
 
+/// What a request tells vLLM beyond the shared fields. The constrained-decoding backend is not
+/// among them: since vLLM 0.12 it is a serve-time flag (`--structured-outputs-config.backend`), so
+/// it belongs to the engine's command line (`engine-supervisor`), not to a request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct VllmExtras {
-    pub backend: GuidedBackend,
-}
-
-/// Which constrained-decoding backend vLLM uses. The request parameter that names it changed
-/// across vLLM versions; the spelling is pinned at fill (FINDINGS).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum GuidedBackend {
-    Auto,
-    Xgrammar,
-    Llguidance,
+    /// The scheduling priority of this request (`priority`; lower runs first). It acts only
+    /// when the engine was started with `--scheduling-policy priority`, which is how a
+    /// foreground turn gets ahead of a background embedding rebuild.
+    pub priority: Knob<Count>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

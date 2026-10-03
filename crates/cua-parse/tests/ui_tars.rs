@@ -183,12 +183,12 @@ fn refused_arguments_are_dropped_with_a_reason() {
         ("click(start_box='(1,2,3)')", DropReason::BadNumber),
         (
             "scroll(start_box='(1,2)', direction='sideways')",
-            DropReason::MissingArgument,
+            DropReason::BadArgument,
         ),
         ("scroll(start_box='(1,2)')", DropReason::MissingArgument),
         ("hotkey(key='')", DropReason::MissingArgument),
-        ("hotkey(key='ctrl a b')", DropReason::MissingArgument),
-        ("type(content='')", DropReason::MissingArgument),
+        ("hotkey(key='ctrl a b')", DropReason::BadArgument),
+        ("type(content='')", DropReason::BadArgument),
         ("type()", DropReason::MissingArgument),
     ];
     for (call, reason) in cases {

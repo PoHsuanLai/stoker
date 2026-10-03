@@ -1,9 +1,11 @@
 use model_http::{BodyKind, EventName, HttpStatus, RouteRoot, UrlPath, Verb, WaitSeconds};
-use model_provider::{CallIndex, JsonText, ModelName, Seed, ToolCallId, ToolName, TurnEvent};
+use model_provider::{
+    CallIndex, JsonText, ModelName, Seed, Tokens, ToolCallId, ToolName, TurnEvent,
+};
 use model_replay::{
     BackendLabel, BuildLabel, ByteStep, Cassette, CassetteError, CassetteHeader, CassetteVersion,
-    ChunkPlan, EngineLabel, EngineStamp, HeadPrint, RecordedAt, StreamFault, WireBody,
-    WireCassette, WireEnd, WireExchange, WireFrame, WireReply, WireRequest,
+    ChunkPlan, ContextStamp, EngineLabel, EngineStamp, HeadPrint, RecordedAt, StreamFault,
+    WireBody, WireCassette, WireEnd, WireExchange, WireFrame, WireReply, WireRequest,
 };
 
 fn header() -> CassetteHeader {
@@ -15,6 +17,11 @@ fn header() -> CassetteHeader {
         },
         model: ModelName("holo".into()),
         recorded: RecordedAt(1_790_000_000),
+        context: ContextStamp {
+            loaded: Tokens(8192),
+            trained: Tokens(32768),
+        },
+        speech: None,
     }
 }
 
@@ -95,7 +102,7 @@ fn the_header_and_an_exchange_are_pinned() {
     let mut lines = text.lines();
     assert_eq!(
         lines.next().unwrap(),
-        r#"{"vocab":1,"engine":{"kind":"llama_server","build":"b10964-b29c606e2"},"model":"holo","recorded":1790000000}"#
+        r#"{"vocab":1,"engine":{"kind":"llama_server","build":"b10964-b29c606e2"},"model":"holo","recorded":1790000000,"context":{"loaded":8192,"trained":32768},"speech":null}"#
     );
     assert_eq!(
         lines.nth(1).unwrap(),

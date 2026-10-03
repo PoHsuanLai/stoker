@@ -3,7 +3,7 @@
 use std::sync::Mutex;
 
 use model_provider::{
-    Flow, ModelInfo, ModelName, Provider, ProviderError, StopReason, Tokens, TurnEnd, TurnEvent,
+    Flow, ModelInfo, ModelName, Provider, ProviderError, StopReason, TurnEnd, TurnEvent,
     TurnRequest, TurnSink, TurnUsage,
 };
 use serde::{Deserialize, Serialize};
@@ -145,13 +145,12 @@ fn play<K: TurnSink>(
 }
 
 impl Provider for ReplayProvider {
-    /// The cassette's model. The header records no context size, so both are the largest
-    /// value: a replayed conversation is never packed down.
+    /// The cassette's model, with the context sizes its header recorded.
     fn describe(&self) -> impl Future<Output = Result<Vec<ModelInfo>, ProviderError>> + Send {
         std::future::ready(Ok(vec![ModelInfo {
             name: self.cassette.header.model.clone(),
-            loaded_context: Tokens(u32::MAX),
-            trained_context: Tokens(u32::MAX),
+            loaded_context: self.cassette.header.context.loaded,
+            trained_context: self.cassette.header.context.trained,
         }]))
     }
 

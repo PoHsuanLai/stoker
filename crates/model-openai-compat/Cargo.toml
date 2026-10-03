@@ -18,6 +18,8 @@ thiserror = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
+base64 = { workspace = true }
+model-replay = { workspace = true }
 proptest = { workspace = true }
 
 [lints]
