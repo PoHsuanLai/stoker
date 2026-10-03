@@ -238,7 +238,7 @@ fn a_date_grammar_reads_the_days_each_month_has() {
     for (text, ok) in CASES {
         let quoted = format!("\"{text}\"");
         assert_eq!(grammar.accepts(&quoted), *ok, "{text}");
-        assert_eq!(grammar.accepts(text), false, "unquoted {text}");
+        assert!(!grammar.accepts(text), "unquoted {text}");
     }
 }
 

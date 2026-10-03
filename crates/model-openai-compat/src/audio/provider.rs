@@ -134,119 +134,111 @@ async fn drain<A: AudioSource>(audio: &mut A) -> Result<Vec<AudioChunk>, Provide
 }
 
 impl<T: UploadTransport> SpeechToText for OpenAiSpeech<T> {
-    fn describe(&self) -> impl Future<Output = Result<Vec<SpeechModelInfo>, ProviderError>> + Send {
-        async move {
-            if self.flavor != SpeechFlavor::Vllm {
-                return Err(Self::no_endpoint("transcription"));
-            }
-            let mut models = Whole::default();
-            let sent = self.client.exchange(&get("/models"), &mut models).await;
-            let listed = listed_models(&models.into_body(sent)?)?;
-            let known: Vec<SpeechModelInfo> = self
-                .known
-                .iter()
-                .filter(|info| matches!(info.caps.io, SpeechIo::In { .. }))
-                .cloned()
-                .collect();
-            Ok(described(&known, &listed, None))
+    async fn describe(&self) -> Result<Vec<SpeechModelInfo>, ProviderError> {
+        if self.flavor != SpeechFlavor::Vllm {
+            return Err(Self::no_endpoint("transcription"));
         }
+        let mut models = Whole::default();
+        let sent = self.client.exchange(&get("/models"), &mut models).await;
+        let listed = listed_models(&models.into_body(sent)?)?;
+        let known: Vec<SpeechModelInfo> = self
+            .known
+            .iter()
+            .filter(|info| matches!(info.caps.io, SpeechIo::In { .. }))
+            .cloned()
+            .collect();
+        Ok(described(&known, &listed, None))
     }
 
-    fn transcribe<A: AudioSource, K: TranscriptSink>(
+    async fn transcribe<A: AudioSource, K: TranscriptSink>(
         &self,
         request: &SttRequest,
         audio: &mut A,
         sink: &mut K,
-    ) -> impl Future<Output = Result<SttEnd, ProviderError>> + Send {
-        async move {
-            if self.flavor != SpeechFlavor::Vllm {
-                return Err(Self::no_endpoint("transcription"));
-            }
-            let chunks = drain(audio).await?;
-            let (from, to) = span(&chunks);
-            let heard = if chunks.is_empty() {
-                // Nothing was said: there is nothing to send.
-                speech_provider::HeardText(String::new())
-            } else {
-                let form = encode_transcription(request, &chunks).map_err(codec_error)?;
-                let up = Upload {
-                    root: RouteRoot::Base,
-                    path: UrlPath("/audio/transcriptions".into()),
-                    body: RawBody {
-                        content_type: ContentType(form.content_type),
-                        bytes: form.bytes,
-                    },
-                    framing: Framing::Whole,
-                };
-                let mut reply = Whole::default();
-                let sent = self.client.upload(&up, &mut reply).await;
-                decode_transcription(&reply.into_body(sent)?).map_err(|_| {
-                    ProviderError::Unreadable("the transcription is not the documented JSON".into())
-                })?
-            };
-            let audio = length(&chunks);
-            // One final event: the endpoint is batch, so there is nothing to revise.
-            let _ = sink.event(TranscriptEvent::Final {
-                text: heard.clone(),
-                from,
-                to,
-            });
-            Ok(SttEnd {
-                text: heard,
-                audio,
-                served: request.model.clone(),
-            })
+    ) -> Result<SttEnd, ProviderError> {
+        if self.flavor != SpeechFlavor::Vllm {
+            return Err(Self::no_endpoint("transcription"));
         }
+        let chunks = drain(audio).await?;
+        let (from, to) = span(&chunks);
+        let heard = if chunks.is_empty() {
+            // Nothing was said: there is nothing to send.
+            speech_provider::HeardText(String::new())
+        } else {
+            let form = encode_transcription(request, &chunks).map_err(codec_error)?;
+            let up = Upload {
+                root: RouteRoot::Base,
+                path: UrlPath("/audio/transcriptions".into()),
+                body: RawBody {
+                    content_type: ContentType(form.content_type),
+                    bytes: form.bytes,
+                },
+                framing: Framing::Whole,
+            };
+            let mut reply = Whole::default();
+            let sent = self.client.upload(&up, &mut reply).await;
+            decode_transcription(&reply.into_body(sent)?).map_err(|_| {
+                ProviderError::Unreadable("the transcription is not the documented JSON".into())
+            })?
+        };
+        let audio = length(&chunks);
+        // One final event: the endpoint is batch, so there is nothing to revise.
+        let _ = sink.event(TranscriptEvent::Final {
+            text: heard.clone(),
+            from,
+            to,
+        });
+        Ok(SttEnd {
+            text: heard,
+            audio,
+            served: request.model.clone(),
+        })
     }
 }
 
 impl<T: UploadTransport> TextToSpeech for OpenAiSpeech<T> {
-    fn describe(&self) -> impl Future<Output = Result<Vec<SpeechModelInfo>, ProviderError>> + Send {
-        async move {
-            if self.flavor != SpeechFlavor::KokoroFastApi {
-                return Err(Self::no_endpoint("speech"));
-            }
-            let mut models = Whole::default();
-            let sent = self.client.exchange(&get("/models"), &mut models).await;
-            let listed = listed_models(&models.into_body(sent)?)?;
-            let mut voices = Whole::default();
-            let sent = self
-                .client
-                .exchange(&get("/audio/voices"), &mut voices)
-                .await;
-            let voices = listed_voices(&voices.into_body(sent)?)?;
-            let known: Vec<SpeechModelInfo> = self
-                .known
-                .iter()
-                .filter(|info| matches!(info.caps.io, SpeechIo::Out { .. }))
-                .cloned()
-                .collect();
-            Ok(described(&known, &listed, Some(&voices)))
+    async fn describe(&self) -> Result<Vec<SpeechModelInfo>, ProviderError> {
+        if self.flavor != SpeechFlavor::KokoroFastApi {
+            return Err(Self::no_endpoint("speech"));
         }
+        let mut models = Whole::default();
+        let sent = self.client.exchange(&get("/models"), &mut models).await;
+        let listed = listed_models(&models.into_body(sent)?)?;
+        let mut voices = Whole::default();
+        let sent = self
+            .client
+            .exchange(&get("/audio/voices"), &mut voices)
+            .await;
+        let voices = listed_voices(&voices.into_body(sent)?)?;
+        let known: Vec<SpeechModelInfo> = self
+            .known
+            .iter()
+            .filter(|info| matches!(info.caps.io, SpeechIo::Out { .. }))
+            .cloned()
+            .collect();
+        Ok(described(&known, &listed, Some(&voices)))
     }
 
-    fn speak<K: AudioSink>(
+    async fn speak<K: AudioSink>(
         &self,
         request: &TtsRequest,
         sink: &mut K,
-    ) -> impl Future<Output = Result<TtsEnd, ProviderError>> + Send {
-        async move {
-            let body = encode_speech_request(request, self.flavor).map_err(codec_error)?;
-            // The body streams in as the engine makes it: the transport hands each read over as it
-            // arrives and `Whole` applies no framing, so the PCM decoder sees the raw bytes.
-            let ex = Exchange {
-                verb: Verb::PostJson,
-                root: RouteRoot::Base,
-                path: UrlPath("/audio/speech".into()),
-                body: Some(JsonBody(body.0)),
-                framing: Framing::Whole,
-            };
-            let mut played = Pcm::new(request.format, sink);
-            let sent = self.client.exchange(&ex, &mut played).await;
-            Ok(TtsEnd {
-                audio: played.into_played(sent)?,
-                served: request.model.clone(),
-            })
-        }
+    ) -> Result<TtsEnd, ProviderError> {
+        let body = encode_speech_request(request, self.flavor).map_err(codec_error)?;
+        // The body streams in as the engine makes it: the transport hands each read over as it
+        // arrives and `Whole` applies no framing, so the PCM decoder sees the raw bytes.
+        let ex = Exchange {
+            verb: Verb::PostJson,
+            root: RouteRoot::Base,
+            path: UrlPath("/audio/speech".into()),
+            body: Some(JsonBody(body.0)),
+            framing: Framing::Whole,
+        };
+        let mut played = Pcm::new(request.format, sink);
+        let sent = self.client.exchange(&ex, &mut played).await;
+        Ok(TtsEnd {
+            audio: played.into_played(sent)?,
+            served: request.model.clone(),
+        })
     }
 }
