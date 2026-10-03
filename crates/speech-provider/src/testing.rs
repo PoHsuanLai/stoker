@@ -150,7 +150,7 @@ impl TextToSpeech for ScriptedTts {
                 };
                 at += count;
                 if sink.chunk(chunk) == Flow::Stop {
-                    let ms = if rate == 0 { 0 } else { at * 1000 / rate };
+                    let ms = (at * 1000).checked_div(rate).unwrap_or(0);
                     return Ok(TtsEnd {
                         audio: AudioMs(u32::try_from(ms).unwrap_or(u32::MAX)),
                         served,
