@@ -24,9 +24,11 @@ pub trait Provider: Send + Sync {
 pub struct ModelInfo {
     pub name: ModelName,
     /// The context the engine actually loaded (llama.cpp `n_ctx`, vLLM `max_model_len`); the
-    /// planner packs against this one.
+    /// planner packs against this one. `Tokens(0)` when the server does not say (a LiteLLM
+    /// model list): the caller then uses the catalog entry's context.
     pub loaded_context: Tokens,
-    /// The context the model was trained for.
+    /// The context the model was trained for; the loaded one when the server reports only one
+    /// of the two, `Tokens(0)` when it reports neither.
     pub trained_context: Tokens,
 }
 

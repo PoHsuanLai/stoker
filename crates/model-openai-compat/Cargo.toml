@@ -19,6 +19,8 @@ serde_json = { workspace = true }
 
 [dev-dependencies]
 base64 = { workspace = true }
+model-http = { workspace = true, features = ["hyper"] }
+tokio = { workspace = true, features = ["rt", "net", "io-util", "macros", "time"] }
 model-replay = { workspace = true }
 proptest = { workspace = true }
 

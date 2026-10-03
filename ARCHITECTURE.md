@@ -26,7 +26,7 @@ trait), section 6 (copy the recipe).
 | `model-replay` | cassette format, `ReplayProvider`, `RecordingProvider` over a `CassetteSink`; `wire`: wire cassettes recorded and replayed at the `Transport` seam (`RecordingTransport`, `ReplayTransport`, `ChunkPlan`); `check_sequence`; `speech`: speech cassettes (audio as digests), `SpeechReplay`, `RecordingSpeech` | an injected sink |
 | `model-catalog` | `ModelEntry` (chat caps and `SamplingDefaults`, or the `speech` table), `EngineProfile`, `parse_entry`, `merge_catalogs`; the shipped `catalog/*.toml` | none |
 | `engine-supervisor` | the pure `step` and `budget`; `command` (catalog entry to `UnitSpec`); the seams `EngineHost`, `ReadyProbe`, `GpuProbe`; feature `testing`: fakes | none; the daemon fills the seams |
-| `model-http` | `HttpEndpoint` (with `Timeouts` and `ExtraHeader`s), `HttpTarget` (Tcp, Unix, Tls), `AuthHeader`, the pure `SseDecoder` and `NdjsonDecoder`, `ResponseHead`, `BodySink` (head, then chunks), `Exchange`, the `Transport` seam and `HttpClient: Transport` | yes (the transport) |
+| `model-http` | `HttpEndpoint` (with `Timeouts` and `ExtraHeader`s), `HttpTarget` (Tcp, Unix, Tls), `AuthHeader`, the pure `SseDecoder` and `NdjsonDecoder`, `ResponseHead`, `BodySink` (head, then chunks), `Exchange`, the `Transport` seam and `HttpClient: Transport` (hyper over TCP and Unix sockets, behind the `hyper` feature) | yes (the transport) |
 | `model-wire` | the wire half of an endpoint: `ChatCodec`, `ChatDecoder`, `EmbedCodec`, `ErrorWire`, `CodecError`, and `Driver<C, T>`, the `Provider` (and `Embedder`) made of a codec and a transport | none (pure over the `Transport` trait) |
 | `model-extract` | structured extraction as a pure machine: `choose` (native constraint, synthetic tool call or prompted), `ExtractSession`, `Extracted`, `ExtractFailure` | none |
 | `genai-names` | the OpenTelemetry GenAI attribute, metric, operation and finish-reason names as constants; zero dependencies; no content attribute exists | none |
@@ -64,8 +64,9 @@ External boundaries: the pure crates (everything but `model-http`, the one io cr
 `wayland-backend`, `reis`, `atspi`, `oo7`, `ort`, `fastembed`, `rusqlite`, `notify`,
 `cedar-policy` or `rmcp` (default features); `vision-prep` reaches `image` and `fast_image_resize`
 only through `pixels`. `model-wire`, `model-extract` and `model-openai-compat` are pure over the `Transport` trait: they
-reach no HTTP stack and no runtime, so when `HyperTransport` lands in `model-http` it sits behind
-a feature that only a daemon turns on, and their rows keep checking default features. `model-http`
+reach no HTTP stack and no runtime: `HttpClient`'s hyper transport sits behind `model-http`'s
+`hyper` feature, which only a daemon (or a loopback test) turns on, and their rows keep checking
+default features. `model-http`
 never reaches the second half of that list (a bus, a compositor, a database, an inference runtime). No crate reaches a `porter-*` crate. No speech
 crate reaches an audio device crate (`pipewire`, `libpulse-binding`, `libpulse-simple-binding`,
 `cpal`: capture and playback belong to docket's `voiced`) or a TTS stack with a GPL grapheme
@@ -93,7 +94,7 @@ stoker.
 | `model-replay` | `print` < `cassette` < `sequence` < `provider`, `speech`, `wire` |
 | `model-catalog` | `engine`, `entry` < `parse` |
 | `engine-supervisor` | `state` < `unit`, `budget` < `step` < `host` < `fakes` (feature `testing`) |
-| `model-http` | `target`, `auth`, `head` < `sse`, `ndjson` < `client` < `exchange` |
+| `model-http` | `target`, `auth`, `head` < `sse`, `ndjson` < `client` < `exchange` < `hyper_client` (feature `hyper`) |
 | `model-wire` | `codec` < `driver` |
 | `model-extract` | `mode` < `session` |
 | `genai-names` | `lib` |
@@ -264,15 +265,15 @@ on; a change is an edit of SPEC.md first. Every `todo!()` is listed in `FINDINGS
 | `cua-parse`: types and limits | built, tested (UiTars15, QwenComputerUse and a provisional Holo31; `never_panics` proptest; nightly fuzz targets in `crates/cua-parse/fuzz`) |
 | `cua-vendors`: trait, enum, `StepResult` | built; the codec bodies stubbed |
 | `cua-session`: types, `begin` | built; `request`, `absorb` stubbed |
-| `model-replay`: cassette format (engine stamp, interaction id and hash, `Strict` mode), round trip; wire cassette format and round trip | built, tested; the providers, `RequestPrint::{of, hash}`, `check_sequence`, `Cassette::check_sequences`, `RecordingTransport` and `ReplayTransport` stubbed |
+| `model-replay`: cassette format (engine stamp, context sizes, speech caps, interaction id and hash, `Strict` mode), round trip; wire cassette format, `RecordingTransport` and `ReplayTransport` | built, tested (SSE and NDJSON recordings under every chunking); the providers, `RequestPrint::{of, hash}`, `check_sequence`, `Cassette::check_sequences` per their F1 state |
 | `model-catalog`: types, `parse_entry`, `merge_catalogs`, `VramEstimate::need`, `gpu_need`, `SamplingDefaults`, `holo-3.1-4b`, the five speech entries | built, tested |
-| `engine-supervisor`: types, `Supervisor::new`, config defaults, fakes | built, tested; `step`, `budget`, `command` stubbed |
-| `model-http`: types, `ResponseHead`, `BodySink::head`, `Exchange`, `Transport`, `Timeouts`, `ExtraHeader`, `HttpError::Rejected` | built, round-trip and pinned-JSON tested; the SSE and NDJSON decoders and `Transport for HttpClient` stubbed |
-| `model-wire`: `ChatCodec`, `ChatDecoder`, `EmbedCodec`, `ErrorWire`, `CodecError`, `Driver` | types and signatures built, tested with a hand-written codec; the `Driver` bodies stubbed |
-| `model-extract`: `ExtractMode`, `ToolsPresent`, `ExtractSession`, `Extracted`, `ExtractFailure` | types built; `choose`, `request`, `absorb` stubbed |
+| `engine-supervisor`: types, `Supervisor::new`, config defaults, fakes, `step`, `budget`, `command` | built, tested (the lifecycle table, the budget table with the in-turn window, `command` for vLLM, llama-server, the speech host and Kokoro) |
+| `model-http`: types, `ResponseHead`, `BodySink::head`, `Exchange`, `Transport`, `Timeouts`, `ExtraHeader`, `HttpError`, the SSE and NDJSON decoders, `Transport for HttpClient` (feature `hyper`) | built; round-trip, pinned-JSON, proptest and loopback-socket tested (TLS and the egress proxy answer `HttpError::Tls` and `Connect` until the first cloud backend) |
+| `model-wire`: `ChatCodec`, `ChatDecoder`, `EmbedCodec`, `ErrorWire`, `CodecError`, `Driver` | built, tested with a scripted transport and a line codec (head decides, framer, decoder fault, Retry-After, stop, every transport failure, embed checks) |
+| `model-extract`: `ExtractMode`, `ToolsPresent`, `ExtractSession`, `Extracted`, `ExtractFailure`, `choose`, `request`, `absorb` | built, tested |
 | `genai-names`: every name, `Operation`, `Finish` | built, tested (names are values, so there is no stub) |
 | `model-provider` amendment: `Sampling`, `EngineExtras`, `Knob`, `ThoughtSeal`, the `embed`, `shape`, `retry` and `sequence` types, `OutputShape::{Gbnf, Choice}`, `Constraint::{Gbnf, Choice}`, `ProviderError::Server`, `TurnUsage.cached`, `ModelInfo.{loaded_context, trained_context}` | built, round-trip and pinned-JSON tested; `plan_batches`, `EmbedEnd::check`, the `Shape` conversions and checker, `retry_class`, `next_wait`, `Retrying`, `sequence::check` stubbed |
-| `model-openai-compat`: types, `Flavor::quirks` | built, table-pinned; `OpenAiCodec` bodies stubbed (`encode_request`, `encode`, `classify`, `describe`, `parse_models`, `encode_embed`, `decode_embed`, `StreamDecoder`); `audio` types and signatures only, every body stubbed |
+| `model-openai-compat`: types, `Flavor::quirks`, `OpenAiCodec` (`encode_request`, `encode`, `classify`, `describe`, `parse_models`, `encode_embed`, `decode_embed`), `StreamDecoder` | built, tested (golden bodies, the flavor table, error classes, wire cassettes under every chunking, one loopback-socket run of the whole stack); `audio` types and signatures only, every body stubbed |
 | `speech-provider`: every type, the checked names, `AudioChunk::{samples, duration}`, the host framing | built, tested (round trips, pinned JSON, redaction, duration table); the `testing` fakes' bodies stubbed |
 | `speech-vad`: types, defaults | built, tested; `level_of`, `EnergyGate`, `Framer::push`, `endpoint` stubbed |
 | `speech-host-client`: types | built; both trait bodies stubbed |

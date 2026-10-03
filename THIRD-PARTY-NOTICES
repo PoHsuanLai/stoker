@@ -3,7 +3,8 @@ Third-party notices
 rig (https://github.com/0xPlaygrounds/rig, crates/rig-core, commit acdcf34)
 
 Portions of model-provider (the schema sanitiser), model-http (the SSE framer's edge cases) and
-model-openai-compat (tool-call delta assembly) are adapted from rig.
+model-openai-compat (tool-call delta assembly) are adapted from rig. The names of the streaming
+conformance scenarios in model-openai-compat's tests follow rig's suite; their bodies are ours.
 
 MIT License
 

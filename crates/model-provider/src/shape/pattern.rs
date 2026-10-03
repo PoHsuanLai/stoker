@@ -59,9 +59,18 @@ impl Pat {
         }
     }
 
+    /// Whether the rendered text has a `|` at its top level (an alternation of one alternation
+    /// still does).
+    fn is_alternation(&self) -> bool {
+        match self {
+            Pat::Alt(items) => items.len() > 1 || items.iter().any(Pat::is_alternation),
+            _ => false,
+        }
+    }
+
     fn render_in_seq(&self, syntax: Syntax) -> String {
         match self {
-            Pat::Alt(items) if items.len() > 1 => self.group(syntax),
+            Pat::Alt(_) if self.is_alternation() => self.group(syntax),
             _ => self.render(syntax),
         }
     }

@@ -243,6 +243,13 @@ fn an_integer_grammar_accepts_exactly_the_range() {
         (-30, 130),
         (10, 99),
         (1, 100),
+        // A negative range whose digit strings differ in their first digit: the sign applies to
+        // every alternative (found by the proptest as -20..=-19).
+        (-20, -19),
+        (-2, -1),
+        (-10, -9),
+        (-100, -99),
+        (-19, 20),
     ];
     for (min, max) in RANGES {
         let grammar = Grammar::parse(

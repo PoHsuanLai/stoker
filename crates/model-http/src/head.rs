@@ -53,6 +53,17 @@ impl From<RequestId> for String {
 #[serde(transparent)]
 pub struct WaitSeconds(pub u32);
 
+impl WaitSeconds {
+    /// A `Retry-After` header value in its seconds form; the HTTP-date form is not read (`None`).
+    pub fn from_header(value: &str) -> Option<WaitSeconds> {
+        let value = value.trim();
+        let digits = !value.is_empty() && value.bytes().all(|b| b.is_ascii_digit());
+        digits
+            .then(|| value.parse().ok().map(WaitSeconds))
+            .flatten()
+    }
+}
+
 /// What the `Content-Type` says the body is. `Html` catches an error page served as 200.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -62,6 +73,28 @@ pub enum BodyKind {
     NdJson,
     Html,
     Other,
+}
+
+impl BodyKind {
+    /// The kind a `Content-Type` value names, parameters and case ignored.
+    pub fn of(content_type: &str) -> BodyKind {
+        let essence = content_type
+            .split(';')
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase();
+        match essence.as_str() {
+            "text/event-stream" => BodyKind::EventStream,
+            "application/x-ndjson"
+            | "application/ndjson"
+            | "application/jsonl"
+            | "application/x-jsonlines" => BodyKind::NdJson,
+            "text/html" | "application/xhtml+xml" => BodyKind::Html,
+            e if e == "application/json" || e.ends_with("+json") => BodyKind::Json,
+            _ => BodyKind::Other,
+        }
+    }
 }
 
 /// The status and the few headers a codec may read. Delivered once, before any chunk.

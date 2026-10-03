@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{BodySink, HttpClient, HttpError, HttpStatus, JsonBody, UrlPath, WaitMs};
+use crate::{BodySink, HttpError, HttpStatus, JsonBody, UrlPath, WaitMs};
 
 /// How the transport splits the response body into frames before the codec sees it. The wire
 /// chooses; the transport applies.
@@ -69,19 +69,4 @@ pub trait Transport: Send + Sync {
         ex: &Exchange,
         sink: &mut K,
     ) -> impl Future<Output = Result<HttpStatus, HttpError>> + Send;
-}
-
-impl Transport for HttpClient {
-    fn exchange<K: BodySink>(
-        &self,
-        ex: &Exchange,
-        sink: &mut K,
-    ) -> impl Future<Output = Result<HttpStatus, HttpError>> + Send {
-        let _ = (self.endpoint(), ex, &mut *sink);
-        async {
-            todo!(
-                "Transport for HttpClient over hyper: Tcp, Unix or Tls by endpoint.target, proxy via endpoint.proxy"
-            )
-        }
-    }
 }

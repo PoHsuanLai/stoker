@@ -8,12 +8,23 @@ rust-version.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[features]
+# The hyper client behind `Transport for HttpClient`. Off by default so that the codecs (which
+# depend on this crate for the seam types) reach no HTTP stack and no runtime; a daemon turns it
+# on.
+hyper = ["dep:hyper", "dep:hyper-util", "dep:http-body-util", "dep:tokio"]
+
 [dependencies]
 serde = { workspace = true }
 thiserror = { workspace = true }
+hyper = { workspace = true, optional = true, features = ["client", "http1"] }
+hyper-util = { workspace = true, optional = true, features = ["tokio"] }
+http-body-util = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true, features = ["net", "time", "io-util", "rt", "macros"] }
 
 [dev-dependencies]
 proptest = { workspace = true }
+tokio = { workspace = true, features = ["rt", "net", "io-util", "time", "macros"] }
 serde_json = { workspace = true }
 
 [lints]

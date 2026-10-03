@@ -76,7 +76,7 @@ Decisions taken from it:
 
 ## Stubs behind frozen interfaces
 
-Every `todo!()` in the repo (the rig amendment added 27, see `The rig amendment` below; the fill wave F1 lanes remove theirs, and `stoker-shape` removed 19, see `Fill F1: stoker-shape` below). Each is a signature other repos build on; the body arrives with
+Every `todo!()` in the repo (the rig amendment added 27, see `The rig amendment` below; the fill wave F1 lanes remove theirs, `stoker-shape` removed 19 (see `Fill F1: stoker-shape` below) and the F2 lane `stoker-driver` removed 13 more, see `Fill F2: stoker-driver` below; 29 remain). Each is a signature other repos build on; the body arrives with
 the work in the "Closes when" line of its crate.
 
 ### `cua-parse` (0, filled in wave F1)
@@ -100,29 +100,16 @@ Closes when `request` and `absorb` pass the ScriptedProvider tests (history keep
 
 Closes when the first cloud backend is turned on (the user chose open models only).
 
-### `engine-supervisor` (3)
+### `engine-supervisor` (0, filled in waves F1 and F2)
 
-- `src/budget.rs`: budget: fit, LRU eviction of idle engines, NoRoom with numbers
-- `src/step.rs`: step: the engine lifecycle table
-- `src/unit.rs`: command: program, args from the profile, socket flag, HF_HUB_OFFLINE, sandbox
+`step` and `budget` (F1), `command` (F2): see `Fill F2: stoker-driver`. Still open: the io features (`systemd`, `process`, `nvidia`), see `Open` below.
 
-Closes when `step` passes the table of every row of models.md 4.1, `budget` its table (Fits, LRU eviction, never an active engine, NoRoom with numbers), `command` its table for Holo under vLLM.
+### `model-http` (0, filled in waves F1 and F2)
 
-### `model-http` (1)
+`SseDecoder`, `NdjsonDecoder` (F1) and `Transport for HttpClient` over hyper behind the `hyper` feature (F2), with the loopback Unix-socket and TCP tests the stub named. TLS and the egress proxy are not built (see `Fill F2: stoker-driver`).
 
-- `src/exchange.rs`: `Transport for HttpClient`: exchange over hyper (Tcp, Unix or Tls by target, proxy)
+### `model-openai-compat` (8: the `audio` bodies; the chat codec was filled in F1 and F2)
 
-Closes when hyper, hyper-util and http-body-util join the pinned block, then the transport passes a loopback Unix-socket test that checks the head (status, `Content-Type` kind, `Retry-After`, request id) arrives before the first chunk and that a non-success answer is `Rejected` with its body in the sink. (The SSE and NDJSON decoders are filled; see F1.)
-
-### `model-openai-compat` (15)
-
-- `src/codec.rs`: encode_request: messages, images, tools, constraints, sampling, engine extras, stream_options
-- `src/codec.rs`: OpenAiCodec::classify: status classes, the error envelope, an HTML 200
-- `src/codec.rs`: OpenAiCodec::encode: POST /chat/completions, Framing::Sse
-- `src/codec.rs`: OpenAiCodec::describe: GET /models, or /props at the server root for llama-server
-- `src/codec.rs`: OpenAiCodec::parse_models: loaded and trained context per flavor
-- `src/codec.rs`: OpenAiCodec::encode_embed: POST /embeddings, no `dimensions` where the quirk says Ignored
-- `src/codec.rs`: OpenAiCodec::decode_embed: data[].embedding in index order
 - `src/audio/codec.rs`: encode_speech_request: model, input, voice, response_format pcm, stream true
 - `src/audio/codec.rs`: encode_transcription: WAV header over the samples, form fields, boundary
 - `src/audio/codec.rs`: decode_transcription: the `text` field of the JSON
@@ -132,43 +119,19 @@ Closes when hyper, hyper-util and http-body-util join the pinned block, then the
 - `src/audio/provider.rs`: OpenAiSpeech::describe (out): GET /models and /audio/voices
 - `src/audio/provider.rs`: OpenAiSpeech::speak: POST /audio/speech, PcmDecoder into the sink
 
-Closes when `encode_request` passes its golden request and `StreamDecoder` the recorded wire fixtures from vLLM and llama-server (`dev/record-engine.sh`, run by hand, recorded at the `Transport`) and the conformance list in `research-rig.md` sections 3.2, 3.3 and 3.7 (the quirk table, tool-call delta assembly with its four `IfMalformed` outcomes, an index reused for a second call, a call delivered in one chunk, an empty arguments string meaning `{}`, an error envelope inside a 200, a bare `[DONE]` that fabricates nothing, every chunk split offset); `Flavor::quirks` is a pinned table whose rows marked "to verify" in `quirks.rs` are settled by the first recorded fixture of that engine; the `audio` bodies close with `model-http` gaining a multipart or raw-bytes POST (`post_json` cannot carry a WAV file), then `encode_speech_request` and `encode_transcription` pass golden bodies, `PcmDecoder` its chunking proptest, and `OpenAiSpeech` a loopback test against fixtures recorded by `dev/record-speech.sh` (by hand, against the user's own vLLM and Kokoro).
+The chat codec passes its golden requests, the conformance list of `research-rig.md` 3.2, 3.3 and 3.7 (hand-written frames and wire cassettes under every chunking), and still waits for recorded fixtures from vLLM and llama-server (`dev/record-engine.sh`, run by hand, recorded at the `Transport`); `Flavor::quirks` is a pinned table whose rows marked "to verify" in `quirks.rs` are settled by the first recorded fixture of that engine; the `audio` bodies close with `model-http` gaining a multipart or raw-bytes POST (`post_json` cannot carry a WAV file), then `encode_speech_request` and `encode_transcription` pass golden bodies, `PcmDecoder` its chunking proptest, and `OpenAiSpeech` a loopback test against fixtures recorded by `dev/record-speech.sh` (by hand, against the user's own vLLM and Kokoro).
 
-### `model-replay` (18)
+### `model-replay` (0, filled in wave F1)
 
-- `src/print.rs`: RequestPrint::of: blake3 over image bytes
-- `src/print.rs`: RequestPrint::hash: canonical JSON, blake3
-- `src/cassette.rs`: Cassette::check_sequences: check_sequence per interaction, then `from_jsonl` calls it
-- `src/sequence.rs`: check_sequence: the per-index state of every tool call
-- `src/wire.rs`: RecordingTransport::exchange: tee head and frames into a WireExchange, scrub, write
-- `src/wire.rs`: ReplayTransport::exchange: match the request, deliver head then chunks, `WireEnd` as the error
-- `src/provider.rs`: ReplayProvider::describe: the cassette's model
-- `src/provider.rs`: ReplayProvider::turn: match, push events, return the end
-- `src/provider.rs`: RecordingProvider::turn: tee events into an Interaction, write it
-- `src/speech.rs`: AudioPrint::of: blake3 over the samples, summed length and duration
-- `src/speech.rs`: SttPrint::of: the request's fields and AudioPrint::of the chunks
-- `src/speech.rs`: TtsPrint::of: blake3 over the text
-- `src/speech.rs`: SpeechReplay::describe (two impls): the cassette's model
-- `src/speech.rs`: SpeechReplay::transcribe: drain the audio, match, push events, return the end
-- `src/speech.rs`: SpeechReplay::speak: match, push silent chunks of the recorded duration
-- `src/speech.rs`: RecordingSpeech::transcribe: tee audio and events into an interaction
-- `src/speech.rs`: RecordingSpeech::speak: tee the audio into a print, write the interaction
+Prints, sequences, the providers, the speech replay and the wire transports are built (`blake3` is in the workspace). In F2 the header gained the model's context sizes and optional speech caps (ask 18).
 
-Closes when `blake3` joins quire `docs/workspace-deps.toml`, then the providers and transports replay and record against a cassette (chat and speech alike; a speech replay answers silence of the recorded duration, and no audio is ever in a cassette).
+### `model-wire` (0, filled in wave F2)
 
-### `model-wire` (3)
+`Driver::{describe, turn, embed}`: see `Fill F2: stoker-driver`.
 
-- `src/driver.rs`: Driver::describe: exchange codec.describe(), parse_models
-- `src/driver.rs`: Driver::turn: encode, exchange, classify on a bad head, framer into decoder into the sink
-- `src/driver.rs`: Driver::embed: encode_embed, exchange, decode_embed, the per-reply count and width check
+### `model-extract` (0, filled in waves F1 and F2)
 
-Closes with `model-http`'s transport and decoders: the sink adapter buffers a non-success or `Html` body (64 KiB at most) and maps it with `classify`; otherwise the framer the exchange named feeds `ChatDecoder`; `Flow::Stop` answers `ChunkFlow::Stop`; a scripted `Transport` drives it in tests.
-
-### `model-extract` (1)
-
-- `src/session.rs`: ExtractSession::absorb (frozen signature has no base request; see the interface ask under F1)
-
-Closes when the interface ask below is applied: `absorb` takes the base request (`absorb_for` is the working body), and `named_tool_refused_on_llama_server` passes in the codec's `encode` (`ToolChoice::Named` on `LlamaServer` is `UnsupportedShape`).
+`choose`, `request` and `ExtractSession::absorb` (the F1 `absorb_for`, renamed by ask 49 in F2); `named_tool_refused_on_llama_server` passes in `model-openai-compat`'s `encode_request` tests.
 
 ### `speech-host` (2, excluded crate)
 
@@ -356,7 +319,7 @@ Decisions taken in the bodies:
   usage is clamped (`cached <= input`), the first of `reasoning_content` and `reasoning` wins.
   The SSE caps are 1 MiB per line and 8 MiB of data per event (`LineTooLong`); NDJSON 4 MiB per line.
 
-Interface asks (nothing in a frozen signature was changed):
+Interface asks (nothing in a frozen signature was changed in F1; all four were applied in F2, see `Fill F2: stoker-driver`):
 
 1. **`ExtractSession::absorb` cannot build `Extracted::Repair(Box<TurnRequest>)`**: it has no base
    request. Replace `absorb(&mut self, end, text, calls)` with `absorb_for(&mut self, base, end,
@@ -369,6 +332,126 @@ Interface asks (nothing in a frozen signature was changed):
    `Sleeper::jitter(&self) -> Permille` returning zero would be additive.
 4. **`ProviderError::RateLimited(RetrySeconds)` from an envelope has no seconds**: the envelope reader
    answers `RetrySeconds(0)`; the driver replaces it with the head's `Retry-After` when it has one.
+
+## Fill F2: stoker-driver (2026-10-03)
+
+Filled: `model-wire` (`Driver::{describe, turn, embed}`), `model-http` (`Transport for HttpClient`
+over hyper), `model-openai-compat` (`encode_request`, `classify`, `describe`, `parse_models`,
+`encode_embed`, `decode_embed`), `engine-supervisor::command`. 13 `todo!()` removed, 29 left (the
+audio wire, the speech crates, `cua-session`, `cua-vendors`).
+
+### Interface asks closed
+
+| Ask | What changed |
+| --- | --- |
+| 17 | `budget(want, running, gpu, headroom, now, probe_every)`: an engine last used within `probe_every` of `now` is in a turn, counts against `free` and is never a victim; `step` no longer moves those engines into `used_by_others` itself (starting engines still go there) |
+| 18 | `CassetteHeader` gains `context: ContextStamp { loaded, trained }` and `speech: Option<SpeechCaps>` (both written, `null` for none); `ReplayProvider::describe` answers the stamp; `SpeechReplay::describe` answers the header's caps for its direction and falls back to what the calls show when there are none. `CassetteVersion` stays 1: no file exists yet |
+| 19 | `HttpError::ReplayMiss` (`{"kind":"replay_miss"}`); `ReplayTransport` answers it instead of `Connect` |
+| 20 | `engine-supervisor::command` is filled (below) |
+| 21 | SSE and NDJSON recording tests through wire cassettes: `model-replay/tests/wire_framed.rs` (line endings, comments, BOM, split code points, cut streams, a proptest over events and chunkings, replay under every `ChunkPlan`) and `model-openai-compat/tests/driver.rs` (the same cassettes through `Driver`) |
+| 28 | `DropReason::BadArgument`: an argument that is there and unusable (empty or control-character text, a key chord that is not one key plus modifiers, an unknown direction or finish status, a wrongly typed argument). `MissingArgument` stays for none given |
+| 29 | `Target::Centre` (additive, in `cua-action`): a Qwen or Holo `scroll` that names no point acts at the centre of the frame; it passes through every space mapping unchanged and the executor resolves it against the window. A half-given point is still refused |
+| 30 | Already done by `stoker-vision` (the `image_tokens` doc says the factor carries the merge); verified |
+| 31 | `check-boundary.sh`: `EXCLUDED` takes a nested path (`cua-parse/fuzz`), reading the crate's name from the first line of `cargo tree` |
+| 49 | `ExtractSession::absorb(base, end, text, calls)` replaces the stub (it was `absorb_for`); no `todo!()` is left in the crate |
+| 50 | `ChatDecoder::fault(&self) -> Option<ProviderError>`, default `None`; `StreamDecoder` implements it (its inherent `fault` is gone); the driver reports it instead of a generic unreadable reply |
+| 51 | `Sleeper::jitter() -> Permille`, default zero; `Retrying` passes it to `next_wait` |
+| 52 | The driver replaces `RateLimited(RetrySeconds(0))`, from an envelope in a 200 or from `classify`, with the head's `Retry-After` |
+| 53 | Decided: `VllmExtras` has no guided-backend field. `GuidedBackend` is gone; `VllmExtras { priority: Knob<Count> }` carries vLLM's per-request `priority` (it acts only under `--scheduling-policy priority`, which is how a foreground turn gets ahead of a background embedding rebuild). The backend is a serve-time flag for `command` to add when a catalog entry names one |
+
+### The driver
+
+- `turn` encodes, then hands the transport a sink adapter (`sink.rs`). The head decides: a non-2xx
+  status or an `Html` body goes to a buffer (64 KiB at most, then the connection is stopped) and
+  `classify` reads it; anything else is framed by the framing the exchange named (SSE data,
+  NDJSON line, or the whole body) and fed to the decoder, whose events go to the caller's sink. A
+  frame the decoder refuses ends the stream with the decoder's `fault` (an envelope in a 200) or
+  a generic unreadable error; the connection is stopped.
+- `Flow::Stop` stops the connection and ends the turn `Ok` with `StopReason::EndTurn` and the
+  usage seen so far. A transport that fails after the turn was complete (a reset after the finish
+  reason) does not undo the turn.
+- Transport failures: `Connect`, `Tls` and `Broken` are `Unreachable`; `Timeout` is `Timeout`; a
+  bare 5xx status is `Server`, other statuses `BadRequest("http_<n>")`; `ReplayMiss` is
+  `BadRequest("no recorded exchange")`. A turn that was cut after events is not retried by
+  `Retrying` whatever the error, as before.
+- `describe` and `embed` read a whole body (16 MiB at most; error bodies 64 KiB) through the same
+  head rule. `embed` with no inputs asks nothing; the reply is checked for count and width (a
+  width asked for, else the first vector's) before it is returned.
+- Event names of an SSE frame are dropped at the driver: the trait's frame is the data. Anthropic's
+  `ping` and `error` events (a later crate) will need a frame type with the event name.
+
+### The OpenAI-compatible request
+
+Every field a flavor does not understand is left out, never sent hopefully. Verified from the
+engines' docs on 2026-10-03 where F1 recorded it (`grammar`, `response_format`, vLLM's
+`structured_outputs`, `cache_prompt`, `id_slot`); the rest are **to verify against a recorded
+request**:
+
+- `chat_template_kwargs.enable_thinking` for llama-server and vLLM (on and off); `reasoning_effort`
+  for vLLM and LiteLLM and `reasoning: {"effort"}` for OpenRouter when on; nothing when off for
+  those two. llama-server ignores the effort.
+- `top_k`, `min_p`, `seed` as top-level fields everywhere; `repeat_penalty` for llama-server and
+  `repetition_penalty` for the others; `max_tokens` (not `max_completion_tokens`) everywhere.
+- `parallel_tool_calls` is sent whenever tools are, for every flavor.
+- A JSON schema is `response_format: {type: json_schema, json_schema: {name: "reply", strict:
+  true, schema}}` for all flavors; llama-server's `Choice` is a one-rule GBNF grammar; vLLM's
+  `Regex`, `Lark` and `Choice` are `structured_outputs`; anything else is `UnsupportedShape`
+  (`enforceable(flavor)` lists what each flavor takes). A constraint with tools waits for a tool
+  result where the flavor says `AfterResult` and is dropped, not refused, before that.
+- Thoughts are not handed back to these servers; an assistant turn with only calls has
+  `content: ""`; a tool result's images stay in the tool message on llama-server and go to one user
+  message after the tool messages elsewhere (the tool message then carries its text, possibly empty).
+- A `ToolSpec::Native` has no form on this wire and is `UnsupportedShape` (`CodecError` has no
+  variant for it; the name is close enough until a second wire needs the distinction).
+- `describe`: `/props` at the server root for llama-server (the per-slot `n_ctx` is the loaded
+  context, the model name its alias or the file name of `model_path`), `/models` elsewhere
+  (`max_model_len`, `context_length`, `meta.n_ctx_train`). A size the server does not report is
+  `Tokens(0)`: callers use the catalog's context; when only one of the two is reported both take it.
+- `classify`: the status class decides (401 and 403 `Unauthorized`, 408 `Timeout`, 429
+  `RateLimited` with the head's seconds, 5xx `Server` unless the envelope says not ready or a
+  context overflow, anything else the envelope's kind or `BadRequest("http_<n>")`); vLLM's
+  `maximum context length is N tokens` message is read for its number only; an HTML page served as
+  200 is `Unreadable`.
+
+### `HttpClient`
+
+One connection per exchange, driven beside the request (neither is spawned), so dropping the future
+drops the socket. Timeouts are the endpoint's (`WaitMs(0)` is a literal zero: the daemon validates
+its settings); the request is the endpoint's base plus the path (or the path alone for
+`RouteRoot::Server`), `Accept` by framing, the auth header and the extra headers marked sensitive.
+The `hyper` feature is off by default so the codecs reach no HTTP stack; the workspace carries
+`tokio`, `hyper`, `hyper-util` and `http-body-util` from quire's pinned block. **Not built:** TLS (a
+`Tls` target answers `HttpError::Tls`) and the egress proxy (`Via` answers `Connect`); both arrive
+with the first cloud backend and `hyper-rustls`/`rustls`. `OpenAiSpeech` still holds the client
+directly and waits for a multipart or raw-bytes POST (`Verb` has `Get` and `PostJson` only).
+
+### `command`
+
+vLLM: `<python> -m vllm.entrypoints.openai.api_server --model <snapshot> --served-model-name <id>
+--uds <socket>` then the profile's args; llama-server: `--model` and `--mmproj` from the snapshot
+(file names stripped of any directory), `--alias <id>`, `--host <socket>` (llama.cpp takes a Unix
+socket when the host ends in `.sock`, to verify), then the profile's args; the speech host:
+`--model-dir <snapshot>` then the profile's args; Kokoro: `<python> -m uvicorn api.src.main:app`
+then the profile's args (the module path is unverified until spike V-T). `{socket}` is replaced
+in every profile arg. The snapshot is `<hf_cache>/models--<org>--<name>/snapshots/<revision>`
+(each component stripped to `[A-Za-z0-9._-]`, so a catalog entry cannot name a path outside the
+cache); the sandbox reads that repository directory (the snapshot's files are links into its
+`blobs/`) and writes only the socket's directory (vLLM's and torch's own caches are spike S1's
+to place). `memory_max` is host memory: 4096 MiB plus the weights and overhead figures, a
+proposal that spike S1 measures. `HF_HUB_OFFLINE=1` always. A llama-server profile whose weights
+are not GGUF gets no `--model` (the engine refuses to start); `parse_entry` does not yet refuse the
+pairing, which a later catalog change should.
+
+### Consumers
+
+`porter` and `docket` consume stoker by path (`cua-action`, `model-provider`, `speech-vad`). No call
+site of a changed signature exists in either repo (searched for `ExtractSession`, `Sleeper`,
+`Retrying`, `CassetteHeader`, `HttpError`, `VllmExtras`, `GuidedBackend`, `ChatDecoder`,
+`StreamDecoder`, `ModelInfo`, `loaded_context`, `Target::`; docket's `budget` is its own). Two
+things to know: `cua-action::Target` gained a variant, so an exhaustive `match` on it in porter's
+executor (none today) needs the `Centre` arm; and porter's own `DropReason` mirror
+(`porter-infer/src/cua.rs`) has no `BadArgument` yet, which the `cua-parse` to porter mapping will
+need when it is written.
 
 ## Open
 
@@ -397,9 +480,9 @@ Interface asks (nothing in a frozen signature was changed):
 - Proposed settings without design/22 rows (the quire agent owns the rows): `ai.engine.*` (six
   keys, see `SupervisorConfig::default`), `ai.cua.history_frames` (3), `ai.cua.repair_attempts`
   (1), `ai.engine.vllm.python`, `ai.engine.llama_server.path`.
-- The pinned block does not yet carry `hyper`, `hyper-util`, `http-body-util` or `blake3`
-  (SPEC.md 1.4 adopts them); `model-http` and `model-replay` name none of them before it does,
-  so their bodies stay stubbed.
+- The pinned block now carries `hyper`, `hyper-util`, `http-body-util`, `tokio` and `blake3`;
+  the workspace names the first four (verbatim) for `model-http`'s `hyper` feature. It also
+  carries `hyper-rustls` and `rustls`, which stay unnamed until the first cloud backend needs TLS.
 - `deny.toml` is quire's verbatim (the unused MPL allowance warns) plus the `[graph] exclude` of
   the two excluded speech crates.
 - **The excluded crates' `Cargo.lock` and `target/` are untracked** (`.gitignore`), and their
