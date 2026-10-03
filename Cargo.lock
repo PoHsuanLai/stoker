@@ -383,14 +383,18 @@ dependencies = [
 name = "model-extract"
 version = "0.1.0"
 dependencies = [
+ "cua-action",
  "model-provider",
+ "proptest",
  "serde_json",
+ "vision-prep",
 ]
 
 [[package]]
 name = "model-http"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "serde",
  "serde_json",
  "thiserror",
@@ -403,6 +407,7 @@ dependencies = [
  "model-http",
  "model-provider",
  "model-wire",
+ "proptest",
  "serde",
  "serde_json",
  "speech-provider",
@@ -416,6 +421,7 @@ dependencies = [
  "base64",
  "cua-action",
  "genai-names",
+ "proptest",
  "serde",
  "serde_json",
  "thiserror",
