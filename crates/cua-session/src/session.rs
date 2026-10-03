@@ -107,6 +107,7 @@ impl CuaSession {
                 parts.push(Part::Image(frame.clone()));
             }
         }
+        lead.extend(prompt::tree_text(obs));
         lead.push(format!("Step {}. Screenshot:", obs.step.0));
         let mut user = vec![Part::Text(lead.join("\n"))];
         user.extend(parts);
@@ -170,6 +171,7 @@ impl CuaSession {
         };
         let results_carry_the_frame = !user.is_empty();
         user.push(Part::Text(lead.join("\n")));
+        user.extend(prompt::tree_text(obs).map(Part::Text));
         if let (Some(image), false) = (image, results_carry_the_frame) {
             user.push(Part::Image(image));
         }
@@ -196,12 +198,7 @@ impl CuaSession {
     /// request the reply answers: a repair is built from the session's own state and carries no
     /// frame, and the step is remembered without its frame. Prefer `absorb_for`.
     pub fn absorb(self, reply: TurnTranscript, map: &FrameMap) -> (CuaSession, StepOutcome) {
-        let obs = ObservationIn {
-            step: StepIndex(self.taken),
-            cursor: None,
-            prev: Vec::new(),
-            masked: MaskedRegions(0),
-        };
+        let obs = ObservationIn::new(StepIndex(self.taken), None, Vec::new(), MaskedRegions(0));
         let sent = self.build(&obs, map, None);
         self.absorb_for(&sent, reply, map)
     }
@@ -338,7 +335,12 @@ fn step_message(request: &TurnRequest) -> Vec<Part> {
         .iter()
         .rev()
         .find(|m| m.role == Role::User && !images_of(&m.parts).is_empty())
-        .map(|m| m.parts.clone())
+        .map(|m| {
+            // The window's text of an earlier step is not replayed: it is out of date.
+            let kept =
+                |part: &&Part| !matches!(part, Part::Text(t) if t.starts_with(prompt::TREE_HEADER));
+            m.parts.iter().filter(kept).cloned().collect()
+        })
         .unwrap_or_default()
 }
 

@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{BodySink, HttpError, HttpStatus, JsonBody, UrlPath, WaitMs};
+use crate::{BodySink, HttpError, HttpStatus, JsonBody, RawBody, UrlPath, WaitMs};
 
 /// How the transport splits the response body into frames before the codec sees it. The wire
 /// chooses; the transport applies.
@@ -67,6 +67,27 @@ pub trait Transport: Send + Sync {
     fn exchange<K: BodySink>(
         &self,
         ex: &Exchange,
+        sink: &mut K,
+    ) -> impl Future<Output = Result<HttpStatus, HttpError>> + Send;
+}
+
+/// One POST of bytes: what a codec asks for when the body is not JSON (a `multipart/form-data`
+/// upload of audio). The response is read as for an [`Exchange`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Upload {
+    pub root: RouteRoot,
+    pub path: UrlPath,
+    pub body: RawBody,
+    pub framing: Framing,
+}
+
+/// A transport that can also send an [`Upload`]. A separate seam from [`Transport`] so that a
+/// transport that only replays JSON exchanges (the cassette transports) need not pretend.
+pub trait UploadTransport: Transport {
+    /// Sends `up`; delivers the response to `sink` as [`Transport::exchange`] does.
+    fn upload<K: BodySink>(
+        &self,
+        up: &Upload,
         sink: &mut K,
     ) -> impl Future<Output = Result<HttpStatus, HttpError>> + Send;
 }

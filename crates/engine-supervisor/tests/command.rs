@@ -97,7 +97,7 @@ fn llama_server_gets_the_gguf_files_and_the_socket_as_its_host() {
         ],
         weights: WeightFiles::Gguf {
             model: FileName("holo-q4_k_m.gguf".into()),
-            mmproj: FileName("mmproj-f16.gguf".into()),
+            mmproj: Some(FileName("mmproj-f16.gguf".into())),
         },
     };
     let unit = command(&holo, &profile, &paths(), &socket("llama-holo"));
@@ -252,6 +252,29 @@ fn a_repository_or_revision_cannot_leave_the_cache() {
 }
 
 #[test]
+fn a_text_only_gguf_gets_no_projector() {
+    let holo = entry(HOLO);
+    let weights = |mmproj: Option<&str>| EngineProfile {
+        kind: EngineKind::LlamaServer,
+        args: vec![],
+        weights: WeightFiles::Gguf {
+            model: FileName("nomic.gguf".into()),
+            mmproj: mmproj.map(|name| FileName(name.into())),
+        },
+    };
+    // Absent, and the empty name earlier files wrote for it: the same command, no `--mmproj`.
+    let none = command(&holo, &weights(None), &paths(), &socket("t"));
+    let empty = command(&holo, &weights(Some("")), &paths(), &socket("t"));
+    assert_eq!(none, empty);
+    assert!(!args(&none).contains(&"--mmproj"));
+    assert_eq!(
+        args(&none)[..2],
+        ["--model", &format!("{HOLO_DIR}/nomic.gguf")]
+    );
+    assert_eq!(args(&none)[2], "--alias");
+}
+
+#[test]
 fn a_gguf_file_name_with_a_directory_part_stays_in_the_snapshot() {
     let holo = entry(HOLO);
     let profile = EngineProfile {
@@ -259,7 +282,7 @@ fn a_gguf_file_name_with_a_directory_part_stays_in_the_snapshot() {
         args: vec![],
         weights: WeightFiles::Gguf {
             model: FileName("../../outside/model.gguf".into()),
-            mmproj: FileName("/abs/mmproj.gguf".into()),
+            mmproj: Some(FileName("/abs/mmproj.gguf".into())),
         },
     };
     let unit = command(&holo, &profile, &paths(), &socket("x"));
@@ -300,7 +323,7 @@ fn command_is_pure_and_total_over_arbitrary_text() {
                     args: vec![EngineArg(arg)],
                     weights: WeightFiles::Gguf {
                         model: FileName(file.clone()),
-                        mmproj: FileName(file),
+                        mmproj: Some(FileName(file)),
                     },
                 };
                 let a = command(&e, &profile, &paths(), &socket("p"));

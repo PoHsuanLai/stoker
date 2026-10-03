@@ -23,7 +23,7 @@ use tokio::time::timeout;
 use crate::{
     AuthHeader, BodyKind, BodySink, ChunkFlow, Exchange, Framing, HttpClient, HttpEndpoint,
     HttpError, HttpStatus, HttpTarget, Proxy, RequestId, ResponseHead, RouteRoot, Timeouts,
-    Transport, Verb, WaitMs, WaitSeconds,
+    Transport, Upload, UploadTransport, Verb, WaitMs, WaitSeconds,
 };
 
 impl Transport for HttpClient {
@@ -33,28 +33,77 @@ impl Transport for HttpClient {
         sink: &mut K,
     ) -> impl Future<Output = Result<HttpStatus, HttpError>> + Send {
         let endpoint = self.endpoint();
-        async move {
-            let request = build(endpoint, ex)?;
-            let timeouts = &endpoint.timeouts;
-            match (&endpoint.proxy, &endpoint.target) {
-                (Proxy::Via(_), _) => Err(HttpError::Connect),
-                (Proxy::Direct, HttpTarget::Tls { .. }) => Err(HttpError::Tls),
-                (Proxy::Direct, HttpTarget::Tcp { host, port }) => {
-                    let stream = within(
-                        timeouts.connect,
-                        TcpStream::connect((host.0.as_str(), port.0)),
-                    )
-                    .await?
-                    .map_err(|_| HttpError::Connect)?;
-                    talk(stream, request, timeouts, sink).await
-                }
-                (Proxy::Direct, HttpTarget::Unix(path)) => {
-                    let stream = within(timeouts.connect, UnixStream::connect(path))
-                        .await?
-                        .map_err(|_| HttpError::Connect)?;
-                    talk(stream, request, timeouts, sink).await
-                }
-            }
+        let parts = Parts {
+            method: match ex.verb {
+                Verb::Get => Method::GET,
+                Verb::PostJson => Method::POST,
+            },
+            root: ex.root,
+            path: ex.path.0.as_str(),
+            framing: ex.framing,
+            content_type: ex.body.as_ref().map(|_| "application/json"),
+            body: ex
+                .body
+                .as_ref()
+                .map_or_else(Bytes::new, |b| Bytes::from(b.0.clone())),
+        };
+        send(endpoint, parts, sink)
+    }
+}
+
+impl UploadTransport for HttpClient {
+    fn upload<K: BodySink>(
+        &self,
+        up: &Upload,
+        sink: &mut K,
+    ) -> impl Future<Output = Result<HttpStatus, HttpError>> + Send {
+        let parts = Parts {
+            method: Method::POST,
+            root: up.root,
+            path: up.path.0.as_str(),
+            framing: up.framing,
+            content_type: Some(up.body.content_type.0.as_str()),
+            body: Bytes::from(up.body.bytes.clone()),
+        };
+        send(self.endpoint(), parts, sink)
+    }
+}
+
+/// What a request is, whichever seam asked for it.
+struct Parts<'a> {
+    method: Method,
+    root: RouteRoot,
+    path: &'a str,
+    framing: Framing,
+    content_type: Option<&'a str>,
+    body: Bytes,
+}
+
+/// Connects to the endpoint and runs one request on the connection.
+async fn send<K: BodySink>(
+    endpoint: &HttpEndpoint,
+    parts: Parts<'_>,
+    sink: &mut K,
+) -> Result<HttpStatus, HttpError> {
+    let request = build(endpoint, parts)?;
+    let timeouts = &endpoint.timeouts;
+    match (&endpoint.proxy, &endpoint.target) {
+        (Proxy::Via(_), _) => Err(HttpError::Connect),
+        (Proxy::Direct, HttpTarget::Tls { .. }) => Err(HttpError::Tls),
+        (Proxy::Direct, HttpTarget::Tcp { host, port }) => {
+            let stream = within(
+                timeouts.connect,
+                TcpStream::connect((host.0.as_str(), port.0)),
+            )
+            .await?
+            .map_err(|_| HttpError::Connect)?;
+            talk(stream, request, timeouts, sink).await
+        }
+        (Proxy::Direct, HttpTarget::Unix(path)) => {
+            let stream = within(timeouts.connect, UnixStream::connect(path))
+                .await?
+                .map_err(|_| HttpError::Connect)?;
+            talk(stream, request, timeouts, sink).await
         }
     }
 }
@@ -66,29 +115,26 @@ async fn within<T>(wait: WaitMs, future: impl Future<Output = T>) -> Result<T, H
         .map_err(|_| HttpError::Timeout)
 }
 
-/// The request line, headers and body of `ex` against `endpoint`. A header value that cannot be
-/// written (a newline in a secret) is a request that is never sent.
-fn build(endpoint: &HttpEndpoint, ex: &Exchange) -> Result<Request<Full<Bytes>>, HttpError> {
-    let path = match ex.root {
-        RouteRoot::Base => format!("{}{}", endpoint.base.0, ex.path.0),
-        RouteRoot::Server => ex.path.0.clone(),
+/// The request line, headers and body of `parts` against `endpoint`. A header value that cannot
+/// be written (a newline in a secret) is a request that is never sent.
+fn build(endpoint: &HttpEndpoint, parts: Parts<'_>) -> Result<Request<Full<Bytes>>, HttpError> {
+    let path = match parts.root {
+        RouteRoot::Base => format!("{}{}", endpoint.base.0, parts.path),
+        RouteRoot::Server => parts.path.to_owned(),
     };
-    let method = match ex.verb {
-        Verb::Get => Method::GET,
-        Verb::PostJson => Method::POST,
-    };
-    let accept = match ex.framing {
+    let accept = match parts.framing {
         Framing::Sse => "text/event-stream",
         Framing::Ndjson => "application/x-ndjson",
         Framing::Whole => "application/json",
     };
     let mut builder = Request::builder()
-        .method(method)
+        .method(parts.method)
         .uri(path)
         .header(HOST, host_of(&endpoint.target))
         .header(ACCEPT, accept);
-    if ex.body.is_some() {
-        builder = builder.header(CONTENT_TYPE, "application/json");
+    if let Some(content_type) = parts.content_type {
+        let value = HeaderValue::from_str(content_type).map_err(|_| HttpError::Connect)?;
+        builder = builder.header(CONTENT_TYPE, value);
     }
     let secret = |name: WireName, value: &str| {
         HeaderValue::from_str(value)
@@ -116,12 +162,8 @@ fn build(endpoint: &HttpEndpoint, ex: &Exchange) -> Result<Request<Full<Bytes>>,
     for (name, value) in headers {
         builder = builder.header(name, value);
     }
-    let body = ex
-        .body
-        .as_ref()
-        .map_or_else(Bytes::new, |b| Bytes::from(b.0.clone()));
     builder
-        .body(Full::new(body))
+        .body(Full::new(parts.body))
         .map_err(|_| HttpError::Connect)
 }
 

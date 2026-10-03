@@ -21,6 +21,25 @@ impl core::fmt::Debug for JsonBody {
     }
 }
 
+/// The `Content-Type` of a request body: `application/json`, or a `multipart/form-data` value with
+/// its boundary.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ContentType(pub String);
+
+/// A request body that is bytes, with the type that says what they are. What is in it can be
+/// audio the person spoke: `Debug` shows the length only.
+#[derive(Clone, PartialEq, Eq)]
+pub struct RawBody {
+    pub content_type: ContentType,
+    pub bytes: Vec<u8>,
+}
+
+impl core::fmt::Debug for RawBody {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "RawBody(<{} bytes>)", self.bytes.len())
+    }
+}
+
 /// A sink's answer to a chunk: keep reading, or close the connection (which aborts generation).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ChunkFlow {

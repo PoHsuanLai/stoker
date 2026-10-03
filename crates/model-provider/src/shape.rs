@@ -115,6 +115,11 @@ pub enum Shape {
         content: FieldName,
         variants: Vec<Variant>,
     },
+    /// The inner shape, or a handle: `{ "handle": n }` with `n` a non-negative integer. A planner
+    /// that holds a value only by handle (a file, an entity it was shown) names it that way, and
+    /// the router resolves it. An entity is a `Record` of its own fields, so "an entity or a
+    /// handle" is `OrHandle(Record(..))`; a list of them is `List { of: OrHandle(..), .. }`.
+    OrHandle(Box<Shape>),
 }
 
 /// The kind of a shape, for a fault that names where and what without echoing a value.
@@ -161,12 +166,25 @@ pub enum ShapeFault {
 }
 
 impl Shape {
+    /// What a handle is: `{ "handle": n }`, `n` from 0.
+    pub(crate) fn handle() -> Shape {
+        Shape::Record(vec![Field {
+            name: FieldName::new("handle").unwrap_or_else(|_| unreachable!("a valid name")),
+            shape: Shape::Integer {
+                min: 0,
+                max: i64::MAX,
+            },
+        }])
+    }
+
     pub fn to_json_schema(&self, dialect: SchemaDialect) -> SchemaText {
         self.schema_text(dialect)
     }
 
-    /// GBNF for llama-server: Choice, Integer, Text, Record, List and Optional; the rest is
-    /// `NotRepresentable`.
+    /// GBNF for llama-server. Every shape has a form except an empty `Choice`, an empty `Integer`
+    /// range and a `Tagged` with no variants. The grammar is a subset of what `check` accepts: a
+    /// date reads every day a month has, except 29 February (a leap year is not a rule a grammar
+    /// states), and every `Tagged` value writes its tag first.
     pub fn to_gbnf(&self) -> Result<String, ShapeFault> {
         self.gbnf_text()
     }

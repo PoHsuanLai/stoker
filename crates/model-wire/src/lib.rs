@@ -17,3 +17,4 @@ mod sink;
 
 pub use codec::{ChatCodec, ChatDecoder, CodecError, EmbedCodec, ErrorWire};
 pub use driver::Driver;
+pub use errors::http_error;

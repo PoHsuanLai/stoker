@@ -17,8 +17,12 @@ mod sse;
 mod target;
 
 pub use auth::{AuthHeader, ExtraHeader, HeaderName, Secret};
-pub use client::{BodySink, ChunkFlow, HttpClient, HttpError, HttpStatus, JsonBody};
-pub use exchange::{Exchange, Framing, RouteRoot, Timeouts, Transport, Verb};
+pub use client::{
+    BodySink, ChunkFlow, ContentType, HttpClient, HttpError, HttpStatus, JsonBody, RawBody,
+};
+pub use exchange::{
+    Exchange, Framing, RouteRoot, Timeouts, Transport, Upload, UploadTransport, Verb,
+};
 pub use head::{BodyKind, RequestId, RequestIdError, ResponseHead, WaitMs, WaitSeconds};
 pub use ndjson::{LineError, NdjsonDecoder};
 pub use sse::{EventName, SseDecoder, SseError, SseEvent};

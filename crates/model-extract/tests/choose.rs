@@ -142,9 +142,10 @@ fn choose_uses_a_tool_when_nothing_constrains_and_the_prompt_last() {
 
 #[test]
 fn a_grammar_that_cannot_say_the_shape_is_skipped() {
+    // A choice with nothing to choose has no grammar (a date has one now).
     let dated = Shape::Record(vec![Field {
         name: FieldName::new("on").unwrap(),
-        shape: Shape::Date,
+        shape: Shape::Choice(Vec::new()),
     }]);
     assert_eq!(
         choose(&caps(&[Gbnf], Absent), &dated, No, Together),
@@ -154,7 +155,7 @@ fn a_grammar_that_cannot_say_the_shape_is_skipped() {
         choose(
             &caps(&[Gbnf, Choice], ToolSupport::Native),
             &Shape::List {
-                of: Box::new(Shape::Date),
+                of: Box::new(Shape::Choice(Vec::new())),
                 max: Count(2)
             },
             No,

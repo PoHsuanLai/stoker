@@ -11,6 +11,23 @@ use crate::{Shape, ShapeFault};
 
 const UNROLL_MAX: u32 = 256;
 
+/// The calendar a `Date` and a `DateTime` share: the days of each month (29 February is left
+/// out, see `to_gbnf`), the clock and the zone. What the grammar reads, `check` reads too.
+const CALENDAR: &[(&str, &str)] = &[
+    ("day28", r#""0" [1-9] | "1" [0-9] | "2" [0-8]"#),
+    ("day30", r#"day28 | "29" | "30""#),
+    ("day31", r#"day30 | "31""#),
+    (
+        "month-day",
+        r#"("01" | "03" | "05" | "07" | "08" | "10" | "12") "-" day31 | ("04" | "06" | "09" | "11") "-" day30 | "02-" day28"#,
+    ),
+    ("date-body", r#"[0-9]{4} "-" month-day"#),
+    ("hour", r#"[01] [0-9] | "2" [0-3]"#),
+    ("minute", r#"[0-5] [0-9]"#),
+];
+const DATE: &str = r#""\"" date-body "\"""#;
+const DATE_TIME: &str = r#""\"" date-body "T" hour ":" minute ":" minute ("." [0-9]+)? ("Z" | ("+" | "-") hour ":" minute) "\"""#;
+
 const PRELUDE: &str = r#"ws ::= [ \t\n]{0,4}
 char ::= [^"\\\x00-\x1F] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F]{4})
 "#;
@@ -82,10 +99,58 @@ impl Rules {
                     false => format!("\"{{\" ws {} ws \"}}\"", members.join(" ws \",\" ws ")),
                 })
             }
-            Shape::Date | Shape::DateTime | Shape::Tagged { .. } => {
+            Shape::Date => Ok(self.calendar("date", DATE)),
+            Shape::DateTime => Ok(self.calendar("date-time", DATE_TIME)),
+            Shape::Tagged { variants, .. } if variants.is_empty() => {
                 Err(ShapeFault::NotRepresentable)
             }
+            Shape::Tagged {
+                tag,
+                content,
+                variants,
+            } => {
+                let key = |name: &str| gbnf_literal(&json_string(name));
+                let arms = variants
+                    .iter()
+                    .map(|v| {
+                        let value = self.named("content", &v.shape)?;
+                        Ok(format!(
+                            "\"{{\" ws {} ws \":\" ws {} ws \",\" ws {} ws \":\" ws {value} ws \"}}\"",
+                            key(tag.as_str()),
+                            key(v.name.as_str()),
+                            key(content.as_str()),
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, ShapeFault>>()?;
+                Ok(arms.join(" | "))
+            }
+            Shape::OrHandle(inner) => {
+                let inner = self.named("alt", inner)?;
+                let index = int_range(0, i64::MAX)
+                    .map(|p| p.render(Syntax::Gbnf))
+                    .ok_or(ShapeFault::NotRepresentable)?;
+                let index = self.fixed("handle-index", &index);
+                let body = format!("\"{{\" ws \"\\\"handle\\\"\" ws \":\" ws {index} ws \"}}\"");
+                let handle = self.fixed("handle", &body);
+                Ok(format!("{inner} | {handle}"))
+            }
         }
+    }
+
+    /// The shared calendar rules, then `name` with its body; each is written once.
+    fn calendar(&mut self, name: &str, body: &str) -> String {
+        for (rule, text) in CALENDAR {
+            self.fixed(rule, text);
+        }
+        self.fixed(name, body)
+    }
+
+    /// A rule with a fixed name and text, added the first time and returned as a reference.
+    fn fixed(&mut self, name: &str, text: &str) -> String {
+        if !self.defs.iter().any(|(n, _)| n == name) {
+            self.defs.push((name.to_owned(), text.to_owned()));
+        }
+        name.to_owned()
     }
 
     /// A rule for `shape`, returned as a reference.

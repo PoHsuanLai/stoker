@@ -72,12 +72,7 @@ pub fn frame(tag: &str) -> ImageInput {
 }
 
 pub fn obs(step: u32) -> ObservationIn {
-    ObservationIn {
-        step: StepIndex(step),
-        cursor: None,
-        prev: vec![],
-        masked: MaskedRegions(0),
-    }
+    ObservationIn::new(StepIndex(step), None, vec![], MaskedRegions(0))
 }
 
 pub fn end(stop: StopReason) -> TurnEnd {
@@ -98,19 +93,14 @@ pub fn call(name: &str, input: &str) -> ToolCall {
 
 /// A reply of tool calls to the `computer_use` function.
 pub fn calls(inputs: &[&str]) -> TurnTranscript {
-    TurnTranscript {
-        text: String::new(),
-        thought: String::new(),
-        calls: inputs.iter().map(|i| call("computer_use", i)).collect(),
-        end: end(StopReason::ToolUse),
-    }
+    TurnTranscript::new(
+        String::new(),
+        String::new(),
+        inputs.iter().map(|i| call("computer_use", i)).collect(),
+        end(StopReason::ToolUse),
+    )
 }
 
 pub fn said(text: &str) -> TurnTranscript {
-    TurnTranscript {
-        text: text.into(),
-        thought: String::new(),
-        calls: vec![],
-        end: end(StopReason::EndTurn),
-    }
+    TurnTranscript::new(text.into(), String::new(), vec![], end(StopReason::EndTurn))
 }

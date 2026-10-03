@@ -81,6 +81,13 @@ impl Shape {
                     .collect();
                 json!({"oneOf": one_of})
             }
+            // The handle has no upper bound written: it is an index, not a quantity.
+            Shape::OrHandle(inner) => json!({"anyOf": [inner.schema_value(), {
+                "type": "object",
+                "properties": {"handle": {"type": "integer", "minimum": 0}},
+                "required": ["handle"],
+                "additionalProperties": false,
+            }]}),
         }
     }
 

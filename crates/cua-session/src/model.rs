@@ -4,8 +4,8 @@ use cua_action::{CuaAction, CuaDialect, ModelSpace, Point, WindowSpace};
 use cua_parse::{Dropped, ParseError};
 use cua_vendors::StepResult;
 use model_provider::{
-    EngineExtras, Knob, Limits, Milli, Reasoning, Sampling, Tokens, ToolCall, ToolParallelism,
-    TurnEnd, TurnRequest,
+    EngineExtras, ImageCount, ImageLimits, Knob, Limits, Milli, Reasoning, SafetySignal, Sampling,
+    Tokens, ToolCall, ToolParallelism, TurnEnd, TurnRequest,
 };
 use vision_prep::{Encoding, ResizeRule};
 
@@ -20,6 +20,20 @@ pub struct MaskedRegions(pub u16);
 /// How many past frames the prompt keeps.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FrameBudget(pub u8);
+
+impl FrameBudget {
+    /// The most past frames a prompt of `per_prompt` images can keep: the current frame is one of
+    /// the images, so a model limited to three (Holo's `--limit-mm-per-prompt image:3`) keeps
+    /// two earlier ones. A model that takes no image keeps none.
+    pub fn within(per_prompt: ImageCount) -> FrameBudget {
+        FrameBudget(u8::try_from(per_prompt.0.saturating_sub(1)).unwrap_or(u8::MAX))
+    }
+
+    /// `wanted` (the setting `ai.cua.history_frames`), cut to what `per_prompt` allows.
+    pub fn at_most(self, per_prompt: ImageCount) -> FrameBudget {
+        FrameBudget(self.0.min(FrameBudget::within(per_prompt).0))
+    }
+}
 
 /// How many repair prompts a step may spend on a reply that does not parse.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -80,6 +94,28 @@ pub struct CuaProfile {
     pub encoding: Encoding,
 }
 
+impl CuaProfile {
+    /// The profile of a model whose catalog entry says how it takes images: the resize rule and
+    /// the point space come from `images`, and the history is `wanted` cut to
+    /// `images.per_prompt - 1` frames (the current frame is one of the prompt's images).
+    pub fn for_model(
+        dialect: CuaDialect,
+        images: &ImageLimits,
+        wanted: FrameBudget,
+        repair: RepairBudget,
+        encoding: Encoding,
+    ) -> CuaProfile {
+        CuaProfile {
+            dialect,
+            rule: images.rule,
+            space: images.space,
+            history: wanted.at_most(images.per_prompt),
+            repair,
+            encoding,
+        }
+    }
+}
+
 /// The task as the planner states it: typed text from the planner, not a raw untrusted blob.
 #[derive(Clone, PartialEq, Eq)]
 pub struct CuaTaskText {
@@ -99,6 +135,28 @@ impl core::fmt::Debug for CuaTaskText {
     }
 }
 
+/// What the window's own accessibility tree says, as text (window contents, never a secret field
+/// the runner already masked). It is what the person sees, so `Debug` prints a length.
+#[derive(Clone, PartialEq, Eq)]
+pub struct TreeText(pub String);
+
+impl core::fmt::Debug for TreeText {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "TreeText(<{} chars>)", self.0.chars().count())
+    }
+}
+
+/// One line the runner adds about this step (a dialog appeared, the focus moved). Short text of
+/// the runner's own words; `Debug` prints a length because a line can name a window.
+#[derive(Clone, PartialEq, Eq)]
+pub struct StepNote(pub String);
+
+impl core::fmt::Debug for StepNote {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "StepNote(<{} chars>)", self.0.chars().count())
+    }
+}
+
 /// What the runner saw before this step.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObservationIn {
@@ -106,6 +164,40 @@ pub struct ObservationIn {
     pub cursor: Option<Point<WindowSpace>>,
     pub prev: Vec<StepResult>,
     pub masked: MaskedRegions,
+    /// The window's contents as text, when the toolkit gives one.
+    pub tree: Option<TreeText>,
+    /// What the runner noticed since the last step, one line each.
+    pub notes: Vec<StepNote>,
+}
+
+impl ObservationIn {
+    /// An observation with no tree and no notes: the form every step had before they existed.
+    pub fn new(
+        step: StepIndex,
+        cursor: Option<Point<WindowSpace>>,
+        prev: Vec<StepResult>,
+        masked: MaskedRegions,
+    ) -> ObservationIn {
+        ObservationIn {
+            step,
+            cursor,
+            prev,
+            masked,
+            tree: None,
+            notes: Vec::new(),
+        }
+    }
+
+    pub fn with_tree(self, tree: TreeText) -> ObservationIn {
+        ObservationIn {
+            tree: Some(tree),
+            ..self
+        }
+    }
+
+    pub fn with_notes(self, notes: Vec<StepNote>) -> ObservationIn {
+        ObservationIn { notes, ..self }
+    }
 }
 
 /// The model's whole reply to one request.
@@ -115,6 +207,22 @@ pub struct TurnTranscript {
     pub thought: String,
     pub calls: Vec<ToolCall>,
     pub end: TurnEnd,
+    /// What the vendor's safety layer said about the turn. A vendor wire reads it (a block ends
+    /// the run, a confirmation request becomes an ask); the other dialects ignore it.
+    pub safety: Vec<SafetySignal>,
+}
+
+impl TurnTranscript {
+    /// A reply with no safety signals.
+    pub fn new(text: String, thought: String, calls: Vec<ToolCall>, end: TurnEnd) -> Self {
+        TurnTranscript {
+            text,
+            thought,
+            calls,
+            end,
+            safety: Vec::new(),
+        }
+    }
 }
 
 /// What a reply became.

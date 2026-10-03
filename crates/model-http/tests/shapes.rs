@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 
 use model_http::{
-    AuthHeader, BodyKind, ChunkFlow, Exchange, ExtraHeader, Framing, HeaderName, HostName,
-    HttpEndpoint, HttpError, HttpStatus, HttpTarget, JsonBody, NdjsonDecoder, Port, Proxy,
-    RequestId, ResponseHead, RouteRoot, Secret, SseDecoder, Timeouts, UrlPath, Verb, WaitMs,
-    WaitSeconds,
+    AuthHeader, BodyKind, ChunkFlow, ContentType, Exchange, ExtraHeader, Framing, HeaderName,
+    HostName, HttpEndpoint, HttpError, HttpStatus, HttpTarget, JsonBody, NdjsonDecoder, Port,
+    Proxy, RawBody, RequestId, ResponseHead, RouteRoot, Secret, SseDecoder, Timeouts, Upload,
+    UrlPath, Verb, WaitMs, WaitSeconds,
 };
 
 fn timeouts() -> Timeouts {
@@ -200,6 +200,23 @@ fn an_exchange_does_not_print_its_body() {
     };
     assert!(!format!("{ex:?}").contains("private"));
     assert_eq!(ex.clone(), ex);
+}
+
+#[test]
+fn an_upload_does_not_print_its_bytes() {
+    let up = Upload {
+        root: RouteRoot::Base,
+        path: UrlPath("/audio/transcriptions".into()),
+        body: RawBody {
+            content_type: ContentType("multipart/form-data; boundary=b".into()),
+            bytes: b"RIFF private speech".to_vec(),
+        },
+        framing: Framing::Whole,
+    };
+    let shown = format!("{up:?}");
+    assert!(shown.contains("RawBody(<19 bytes>)"), "{shown}");
+    assert!(!shown.contains("RIFF") && !shown.contains("private"));
+    assert_eq!(up.clone(), up);
 }
 
 #[test]

@@ -30,8 +30,14 @@ pub struct FileName(pub String);
 pub enum WeightFiles {
     /// A Hugging Face snapshot directory, as vLLM reads it.
     HfSnapshot,
-    /// A GGUF model and its multimodal projector, as llama-server reads them.
-    Gguf { model: FileName, mmproj: FileName },
+    /// A GGUF model and, when it takes images, its multimodal projector, as llama-server reads
+    /// them. A text-only or embedding model writes no `mmproj` (an empty name counts as none,
+    /// which is how earlier files spelled it).
+    Gguf {
+        model: FileName,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mmproj: Option<FileName>,
+    },
     /// A directory of ONNX files and `tokens.txt`, as the speech host reads it.
     SherpaDir,
 }

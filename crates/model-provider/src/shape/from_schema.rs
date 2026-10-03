@@ -19,6 +19,7 @@
 //! | `{"type":"object","properties":..,"required":[..],"additionalProperties":false}` | `Record`, fields in the order of the sorted property names; a property not required is `Optional` |
 //! | `{"anyOf":[S,{"type":"null"}]}` or `{"type":["T","null"]}` | `Optional` |
 //! | `{"oneOf":[..]}` (or `anyOf`) of `{tag: {enum:[name]}, content: S}` objects | `Tagged` |
+//! | `{"anyOf":[S,H]}` where `H` is `{"handle": integer from 0}` as an object with `additionalProperties: false` | `OrHandle` |
 //!
 //! Annotations (`title`, `description`, `default`, `examples`, `$schema`, `$id`, `$comment`,
 //! `deprecated`, `readOnly`, `writeOnly`) are ignored; every other keyword the reader does not
@@ -386,7 +387,7 @@ fn object(node: &mut Node) -> Found<Shape> {
     Ok(Shape::Record(fields))
 }
 
-/// `anyOf` or `oneOf`: an optional (one alternative is null) or a tagged enum.
+/// `anyOf` or `oneOf`: an optional (one alternative is null), a shape or a handle, or a tagged enum.
 fn alternatives_of(mut node: Node, key: &str, alternatives: &Value) -> Found<Shape> {
     let Value::Array(items) = alternatives else {
         return Err(node.refuse(Refused::BadTagged));
@@ -404,7 +405,29 @@ fn alternatives_of(mut node: Node, key: &str, alternatives: &Value) -> Found<Sha
             let inner = read(node.child(other, &[key, &at.to_string()])?)?;
             Shape::Optional(Box::new(inner))
         }
-        _ => tagged(&mut node, key, items)?,
+        _ => match or_handle(&node, key, items) {
+            Some(shape) => shape,
+            None => tagged(&mut node, key, items)?,
+        },
     };
     node.done(shape)
+}
+
+/// Two alternatives of which exactly one is a handle (the other reads as a shape of its own).
+fn or_handle(node: &Node, key: &str, items: &[Value]) -> Option<Shape> {
+    let [first, second] = items else {
+        return None;
+    };
+    let read_at = |at: usize, value: &Value| {
+        node.child(value, &[key, &at.to_string()])
+            .and_then(read)
+            .ok()
+    };
+    let (first, second) = (read_at(0, first)?, read_at(1, second)?);
+    let handle = Shape::handle();
+    match (first == handle, second == handle) {
+        (false, true) => Some(Shape::OrHandle(Box::new(first))),
+        (true, false) => Some(Shape::OrHandle(Box::new(second))),
+        _ => None,
+    }
 }

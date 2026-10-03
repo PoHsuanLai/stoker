@@ -4,6 +4,7 @@
 
 mod codec;
 mod provider;
+mod reply;
 
 pub use codec::{
     AudioCodecError, KOKORO_FORMAT, MultipartBody, PcmDecoder, SpeechFlavor, decode_transcription,

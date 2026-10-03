@@ -10,7 +10,7 @@ use crate::CodecError;
 /// the transport reports as a bare status is a `Server` error when it is 5xx and a bad request
 /// otherwise. A replay with no exchange left for the request is a bad request: the code under test
 /// asked for something its cassette does not hold.
-pub(crate) fn http_error(error: HttpError) -> ProviderError {
+pub fn http_error(error: HttpError) -> ProviderError {
     match error {
         HttpError::Connect | HttpError::Tls | HttpError::Broken => ProviderError::Unreachable,
         HttpError::Timeout => ProviderError::Timeout,

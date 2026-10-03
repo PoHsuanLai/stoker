@@ -120,12 +120,24 @@ pub fn command(
         ),
         (EngineKind::LlamaServer, weights) => {
             let files = match weights {
-                WeightFiles::Gguf { model, mmproj } => vec![
-                    EngineArg("--model".into()),
-                    path_arg(snapshot.join(file_name(&model.0))),
-                    EngineArg("--mmproj".into()),
-                    path_arg(snapshot.join(file_name(&mmproj.0))),
-                ],
+                WeightFiles::Gguf { model, mmproj } => {
+                    let projector = mmproj
+                        .as_ref()
+                        .filter(|name| !name.0.is_empty())
+                        .map(|name| {
+                            [
+                                EngineArg("--mmproj".into()),
+                                path_arg(snapshot.join(file_name(&name.0))),
+                            ]
+                        });
+                    [
+                        EngineArg("--model".into()),
+                        path_arg(snapshot.join(file_name(&model.0))),
+                    ]
+                    .into_iter()
+                    .chain(projector.into_iter().flatten())
+                    .collect()
+                }
                 // Not GGUF files: the catalog should not pair them (the engine refuses to start
                 // with no model, which the supervisor reports as an exit).
                 WeightFiles::HfSnapshot | WeightFiles::SherpaDir => Vec::new(),

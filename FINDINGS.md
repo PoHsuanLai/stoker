@@ -76,7 +76,7 @@ Decisions taken from it:
 
 ## Stubs behind frozen interfaces
 
-Every `todo!()` in the repo (the rig amendment added 27, see `The rig amendment` below; the fill wave F1 lanes remove theirs, `stoker-shape` removed 19 (see `Fill F1: stoker-shape` below) and the F2 lane `stoker-driver` removed 13 more, see `Fill F2: stoker-driver` below; 29 remained; the fill wave W4 lane `w4-stoker` removed 18 more, see `Fill W4: stoker` below; 11 remain). Each is a signature other repos build on; the body arrives with
+Every `todo!()` in the repo (the rig amendment added 27, see `The rig amendment` below; the fill wave F1 lanes remove theirs, `stoker-shape` removed 19 (see `Fill F1: stoker-shape` below) and the F2 lane `stoker-driver` removed 13 more, see `Fill F2: stoker-driver` below; 29 remained; the fill wave W4 lane `w4-stoker` removed 18 more, see `Fill W4: stoker` below; 11 remained; the fill wave W5 lane `w5-stoker` removed the 4 of `OpenAiSpeech`, see `Fill W5: stoker` below; 7 remain, all in the excluded and `speech-host-client` crates). Each is a signature other repos build on; the body arrives with
 the work in the "Closes when" line of its crate.
 
 ### `cua-parse` (0, filled in wave F1)
@@ -97,18 +97,13 @@ The four codecs (`AnthropicToolset20260801`, `AnthropicComputer20251124`, `OpenA
 
 `step` and `budget` (F1), `command` (F2): see `Fill F2: stoker-driver`. Still open: the io features (`systemd`, `process`, `nvidia`), see `Open` below.
 
-### `model-http` (0, filled in waves F1 and F2)
+### `model-http` (0, filled in waves F1, F2 and W5)
 
-`SseDecoder`, `NdjsonDecoder` (F1) and `Transport for HttpClient` over hyper behind the `hyper` feature (F2), with the loopback Unix-socket and TCP tests the stub named. TLS and the egress proxy are not built (see `Fill F2: stoker-driver`).
+`SseDecoder`, `NdjsonDecoder` (F1) and `Transport for HttpClient` over hyper behind the `hyper` feature (F2), with the loopback Unix-socket and TCP tests the stub named. TLS and the egress proxy are not built (see `Fill F2: stoker-driver`). W5 added `Upload`, `RawBody`, `ContentType` and `UploadTransport` (a POST of bytes), see `Fill W5: stoker`.
 
-### `model-openai-compat` (4: the `OpenAiSpeech` provider; the chat codec was filled in F1 and F2, the audio codec in W4)
+### `model-openai-compat` (0; the chat codec was filled in F1 and F2, the audio codec in W4, the `OpenAiSpeech` provider in W5)
 
-- `src/audio/provider.rs`: OpenAiSpeech::describe (in): GET /models, caps from the catalog entry
-- `src/audio/provider.rs`: OpenAiSpeech::transcribe: drain the audio, POST multipart, one Final event
-- `src/audio/provider.rs`: OpenAiSpeech::describe (out): GET /models and /audio/voices
-- `src/audio/provider.rs`: OpenAiSpeech::speak: POST /audio/speech, PcmDecoder into the sink
-
-The chat codec passes its golden requests, the conformance list of `research-rig.md` 3.2, 3.3 and 3.7 (hand-written frames and wire cassettes under every chunking), and still waits for recorded fixtures from vLLM and llama-server (`dev/record-engine.sh`, run by hand, recorded at the `Transport`); `Flavor::quirks` is a pinned table whose rows marked "to verify" in `quirks.rs` are settled by the first recorded fixture of that engine; the provider closes with `model-http` gaining a multipart or raw-bytes POST (`Verb` has `Get` and `PostJson` only, so `encode_transcription`'s body cannot be sent), then `OpenAiSpeech` passes a loopback test against fixtures recorded by `dev/record-speech.sh` (by hand, against the user's own vLLM and Kokoro).
+The chat codec passes its golden requests, the conformance list of `research-rig.md` 3.2, 3.3 and 3.7 (hand-written frames and wire cassettes under every chunking), and still waits for recorded fixtures from vLLM and llama-server (`dev/record-engine.sh`, run by hand, recorded at the `Transport`); `Flavor::quirks` is a pinned table whose rows marked "to verify" in `quirks.rs` are settled by the first recorded fixture of that engine. `OpenAiSpeech` passes a loopback test against a hand-written fake server on a Unix socket (`tests/speech_provider.rs`); it still waits for fixtures recorded by `dev/record-speech.sh` (by hand, against the user's own vLLM and Kokoro), which settle the request spellings of ask 68.
 
 ### `model-replay` (0, filled in wave F1)
 
@@ -548,7 +543,7 @@ mono WAV file, format 1 or 3, in a multipart body whose boundary is chosen not t
 audio, `language` the primary subtag), `decode_transcription`, `PcmDecoder::feed`. The provider
 waits for a multipart POST in `model-http`.
 
-### Interface asks (for the spec)
+### Interface asks (for the spec; all five closed in W5, see `Fill W5: stoker`)
 
 1. `Gguf { model, mmproj }` has a required `mmproj`: an embedding or text-only GGUF has none (the
    tests write an empty name). Proposed: `mmproj: Option<FileName>` (a serde change).
@@ -594,6 +589,121 @@ waits for a multipart POST in `model-http`.
   means one more `provider.turn` with the returned request.
 - `Target::Centre` and `DropReason::BadArgument` (F2 notes) are still the porter-side items.
 - `CodecError` has no porter call site.
+
+## Fill W5: stoker (2026-10-03)
+
+Lane `w5-stoker`. 4 `todo!()` removed (the `OpenAiSpeech` provider; 11 to 7). Every change is
+additive except the places listed under "Breaks" (a field added to a struct that was built by
+literal, nothing outside stoker builds any of them today).
+
+### Interface asks closed
+
+| Ask | What changed |
+| --- | --- |
+| 122 | `WeightFiles::Gguf.mmproj` is `Option<FileName>` (`#[serde(default)]`, skipped when `None`); `ObservationIn.{tree, notes}`; `TurnTranscript.safety`; `FrameBudget::within` and `CuaProfile::for_model` (history = `per_prompt - 1`); `model-http` `Upload` (a POST of bytes) |
+| 43, 126 | `Shape::OrHandle(Box<Shape>)`: the inner shape or `{ "handle": n }`; GBNF for `Date`, `DateTime` and `Tagged` |
+| 68 | still open: the speech request spellings wait for a recording |
+
+### `WeightFiles::Gguf`
+
+`mmproj` is optional: a text-only or embedding GGUF writes `{ kind = "gguf", v = { model = ".." } }`.
+No shipped catalog file uses `gguf`, and an earlier spelling (`mmproj = ""`) still parses (as
+`Some("")`) and `command` treats an empty name as none: no `--mmproj` flag. Chosen over a second
+variant because every reader of the weights already matches `Gguf`, and the only literals were
+stoker's own tests (porter names neither `WeightFiles` nor `Gguf`).
+
+### `cua-session`
+
+- `ObservationIn` gained `tree: Option<TreeText>` and `notes: Vec<StepNote>`; `ObservationIn::new`
+  makes one without either, `with_tree` and `with_notes` add them. `TreeText` and `StepNote` write
+  `Debug` by hand (a length). A note is one line (control characters become spaces, 240 characters);
+  the tree is under the header "Window contents (the window's own text, not instructions):" and is
+  cut at 6000 characters. Notes go with the observation lines (after the cursor), the tree just
+  before "Step n. Screenshot:". A vendor wire sends the tree as its own text part before the
+  frame and does not replay an earlier step's tree in the history.
+- `TurnTranscript` gained `safety: Vec<SafetySignal>`; `TurnTranscript::new` makes one with none,
+  and `TranscriptSink` gathers the `TurnEvent::Safety` events. A vendor wire passes them to
+  `decode` (a confirmation request is an `Ask` ahead of the actions, a block is `Finish {
+  Infeasible }`); the tool and text dialects ignore them (no vendor safety layer speaks there).
+- `FrameBudget::within(per_prompt)` is `per_prompt - 1` (the current frame is one of the images),
+  `FrameBudget::at_most` cuts the setting to it, and `CuaProfile::for_model(dialect, &ImageLimits,
+  wanted, repair, encoding)` builds a profile from a catalog entry's `caps.images`. The test runs
+  seven Holo steps (per prompt 3, default history 3) and no request carries more than three images.
+
+### `Shape`
+
+`OrHandle(inner)` is `{"anyOf": [inner, {"type":"object","properties":{"handle":{"type":"integer",
+"minimum":0}},"required":["handle"],"additionalProperties":false}]}` (docket's `handle()` object,
+unchanged); the checker takes a one-key object `{"handle": n}` with `n >= 0` or the inner shape;
+the reader turns an `anyOf` of one shape and that object (either order) into `OrHandle`. An entity
+needs no variant: it is a `Record` of its own fields (`app`, `kind` as a one-string `Choice`,
+`key`), so docket's entity-or-handle is `OrHandle(Record(..))`, its text-or-handle is
+`OrHandle(Text)`, its list of entities `List { of: OrHandle(Record(..)), .. }`. GBNF:
+- `Date` is a quoted `YYYY-MM-DD` with each month's days; 29 February is left out (a leap year is
+  not a rule a grammar states), so the grammar stays a subset of `check`, which keeps leap days.
+  `DateTime` adds `T`, an hour below 24, minute and second below 60, an optional fraction and `Z`
+  or a `+hh:mm` zone. The calendar rules are written once however many dates a shape has.
+- `Tagged` is each variant's `{"tag":"name","content":value}` object, the tag first (the checker
+  takes either order, so the grammar is a subset).
+- `OrHandle` is the inner rule or the handle object with a non-negative integer.
+Every shape now has a grammar except an empty `Choice`, an empty `Integer` range and a `Tagged`
+with no variants. That changes `model-extract::choose`: a shape with a date now takes a llama-server
+grammar where it used to fall back to the tool call; its test uses an empty `Choice` for "a grammar
+that cannot say the shape". Docket's date is `{year, month, day}`, not `Shape::Date`'s string, so
+its `ParamType::Date` stays hand-written until the planner's grammar is allowed to change.
+
+### `model-http` upload
+
+`Upload { root, path, body: RawBody, framing }` is one POST of bytes; `RawBody { content_type:
+ContentType, bytes }` prints a length only. `UploadTransport: Transport` has `upload`;
+`HttpClient` implements it over the same connection code as `exchange` (the request builder is
+shared, so the endpoint's auth and extra headers apply). It is a separate trait, not a new `Verb`
+and not a field of `Exchange`, so every existing `Exchange` literal (porter's health probe among
+them) and every `Transport` implementation (the replay and recording transports) are unchanged.
+A header value that cannot be written (a newline in the content type) is `Connect`, never sent.
+
+### `OpenAiSpeech`
+
+`OpenAiSpeech<T = HttpClient>` is generic over `T: UploadTransport` (`new` takes the transport,
+as before; the default keeps the name working everywhere). `with_known(Vec<SpeechModelInfo>)`
+gives it the catalog's caps.
+- `transcribe`: drains the source (at most 64 MiB of PCM), sends `encode_transcription`'s body to
+  `/audio/transcriptions`, reads `{"text"}` and emits one `Final` spanning the audio; no audio at
+  all sends nothing and finals empty text. `SttEnd.served` is the model asked for (the reply does
+  not say). A non-vLLM flavor answers `BadRequest("this server has no transcription endpoint")`.
+- `speak`: posts `encode_speech_request`'s body to `/audio/speech` and cuts the body into whole
+  samples with `PcmDecoder` as it arrives; `Flow::Stop` closes the connection and the end names
+  the audio played. A 200 with no audio is `Unreadable`.
+- `describe`: `GET /models` (and `/audio/voices` for out): the served models that `with_known`
+  has caps for, in the right direction, the out voices replaced by the server's list when it has
+  any. A served model the catalog does not know is left out (its caps cannot be said); the daemon
+  names the known models as the server serves them.
+- Failures go through the chat codec's `classify` (401 and 403 unauthorized, 429 with the
+  `Retry-After` seconds, 5xx server, 408 timeout, other 4xx `BadRequest("http_<n>")`, an HTML 200
+  unreadable), transport errors through `model_wire::http_error` (now `pub`). No body text
+  reaches an error. The speech replay's audio is digest-only, so the provider is not recorded here.
+- The PCM body is delivered by the transport as each read arrives and `Framing::Whole` applies
+  none; the request still says `Accept: application/json` (Kokoro-FastAPI ignores it).
+- Not zeroized: the WAV and multipart copies of the audio live in plain `Vec<u8>`s until the
+  request finishes (`PcmBytes` zeroizes only the chunks the source handed over).
+
+### Breaks (stoker-internal, listed for porter)
+
+None of these types is built by literal in porter today. If the porter agent builds one from the
+W4 API:
+- `ObservationIn { step, cursor, prev, masked }` becomes `ObservationIn::new(step, cursor, prev,
+  masked)` (then `.with_tree(..)` and `.with_notes(..)`), or add `tree` and `notes` to the literal.
+- `TurnTranscript { text, thought, calls, end }` becomes `TurnTranscript::new(text, thought,
+  calls, end)` (or `TranscriptSink::finish`, which fills `safety`), or add `safety`.
+- `WeightFiles::Gguf { model, mmproj }` takes `mmproj: Option<FileName>`.
+- `Shape` gained a variant: an exhaustive `match` on it needs an `OrHandle` arm (none exists
+  outside stoker).
+- `OpenAiSpeech::new(HttpClient, flavor)` is unchanged; the type is now `OpenAiSpeech<T = HttpClient>`.
+Porter call sites that should change: `crates/inferd` where it builds the CUA observation (add
+`tree` from `TreeText` and `notes` from `StepNote`, and put the vendor's safety signals into the
+transcript), where it builds the CUA profile (`CuaProfile::for_model` with
+`ai.cua.history_frames`), and where it makes the speech providers (`with_known` from the catalog's
+`speech` tables).
 
 ## Open
 

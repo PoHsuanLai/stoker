@@ -288,6 +288,67 @@ fn tagged_values() {
 }
 
 #[test]
+fn an_or_handle_takes_the_inner_shape_or_a_handle() {
+    const CASES: &[(&str, bool)] = &[
+        (r#""hello""#, true),
+        (r#""hello world""#, false),
+        (r#"{"handle":0}"#, true),
+        (r#"{"handle":41}"#, true),
+        (r#"{"handle":9223372036854775807}"#, true),
+        (r#"{"handle":-1}"#, false),
+        (r#"{"handle":1.5}"#, false),
+        (r#"{"handle":"1"}"#, false),
+        (r#"{"handle":1,"extra":2}"#, false),
+        (r#"{}"#, false),
+        ("3", false),
+        ("null", false),
+    ];
+    let shape = Shape::OrHandle(Box::new(Shape::Text { max: CharCount(5) }));
+    for (text, ok) in CASES {
+        assert_eq!(shape.check(&json(text)).is_ok(), *ok, "{text}");
+    }
+}
+
+#[test]
+fn an_entity_or_handle_checks_the_entity_by_its_fields() {
+    let entity = Shape::Record(vec![
+        field("app", Shape::Text { max: CharCount(8) }),
+        field("kind", Shape::Choice(vec![ChoiceText("file".into())])),
+        field("key", Shape::Text { max: CharCount(8) }),
+    ]);
+    let one = Shape::OrHandle(Box::new(entity));
+    assert_eq!(
+        one.check(&json(r#"{"app":"files","kind":"file","key":"a"}"#)),
+        Ok(())
+    );
+    assert_eq!(one.check(&json(r#"{"handle":3}"#)), Ok(()));
+    // A fault in the entity names the entity's own field, not the handle.
+    assert_eq!(
+        one.check(&json(r#"{"app":"files","kind":"note","key":"a"}"#)),
+        mismatch("kind", ShapeKind::Choice)
+    );
+    assert_eq!(
+        one.check(&json(r#"{"app":"files","kind":"file"}"#)),
+        Err(ShapeFault::Missing { field: name("key") })
+    );
+    // A list of them.
+    let many = Shape::List {
+        of: Box::new(one),
+        max: Count(2),
+    };
+    assert_eq!(
+        many.check(&json(
+            r#"[{"handle":1},{"app":"f","kind":"file","key":"k"}]"#
+        )),
+        Ok(())
+    );
+    assert!(
+        many.check(&json(r#"[{"handle":1},{"handle":-2}]"#))
+            .is_err()
+    );
+}
+
+#[test]
 fn deep_nesting_is_total() {
     let mut shape = Shape::Integer { min: 0, max: 1 };
     let mut text = "1".to_owned();

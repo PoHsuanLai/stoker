@@ -288,6 +288,48 @@ fn what_the_vocabulary_cannot_say_is_refused_with_a_path_and_a_reason() {
 }
 
 #[test]
+fn an_alternative_that_is_a_handle_reads_as_or_handle() {
+    let handle = json!({
+        "type": "object",
+        "properties": {"handle": {"type": "integer", "minimum": 0}},
+        "required": ["handle"],
+        "additionalProperties": false,
+    });
+    let entity = json!({
+        "type": "object",
+        "properties": {
+            "app": {"type": "string", "maxLength": 20},
+            "kind": {"const": "file"},
+            "key": {"type": "string", "maxLength": 80},
+        },
+        "required": ["app", "kind", "key"],
+        "additionalProperties": false,
+    });
+    let want = Shape::OrHandle(Box::new(Shape::Record(vec![
+        field("app", Shape::Text { max: CharCount(20) }),
+        field("key", Shape::Text { max: CharCount(80) }),
+        field("kind", Shape::Choice(vec![ChoiceText("file".into())])),
+    ])));
+    // Either order, either keyword.
+    assert_eq!(read(&json!({"anyOf": [entity, handle]})), Ok(want.clone()));
+    assert_eq!(read(&json!({"oneOf": [handle, entity]})), Ok(want));
+    // Text or a handle, the shape of a planner's text argument.
+    assert_eq!(
+        read(&json!({"anyOf": [{"type": "string", "maxLength": 9}, handle]})),
+        Ok(Shape::OrHandle(Box::new(Shape::Text { max: CharCount(9) })))
+    );
+    // Two handles, or an object that is nearly a handle, are not it.
+    assert!(read(&json!({"anyOf": [handle, handle]})).is_err());
+    let nearly = json!({
+        "type": "object",
+        "properties": {"handle": {"type": "integer", "minimum": 1}},
+        "required": ["handle"],
+        "additionalProperties": false,
+    });
+    assert!(read(&json!({"anyOf": [{"type": "string", "maxLength": 9}, nearly]})).is_err());
+}
+
+#[test]
 fn nesting_is_bounded_by_the_limit() {
     let mut schema = json!({"type": "string", "maxLength": 1});
     for _ in 0..5 {
@@ -333,6 +375,7 @@ fn shape() -> impl Strategy<Value = Shape> {
                 max: Count(n)
             }),
             inner.clone().prop_map(|s| Shape::Optional(Box::new(s))),
+            inner.clone().prop_map(|s| Shape::OrHandle(Box::new(s))),
             proptest::collection::vec(inner.clone(), 0..3).prop_map(|shapes| Shape::Record(
                 shapes
                     .into_iter()

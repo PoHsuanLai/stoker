@@ -14,7 +14,7 @@ mod window;
 
 pub use model::{
     CuaProfile, CuaTaskText, FrameBudget, MaskedRegions, ObservationIn, RepairBudget, StepIndex,
-    StepLines, StepOutcome, TurnSettings, TurnTranscript,
+    StepLines, StepNote, StepOutcome, TreeText, TurnSettings, TurnTranscript,
 };
 pub use session::CuaSession;
 pub use transcript::TranscriptSink;

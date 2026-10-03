@@ -83,6 +83,49 @@ fn a_malformed_embed_table_is_refused_by_name() {
 }
 
 #[test]
+fn a_gguf_projector_is_optional_and_an_empty_name_is_one_spelling_of_none() {
+    use model_catalog::FileName;
+    let with = |weights: &str| {
+        let text = EMBED_ONLY.replace(
+            r#"{ kind = "gguf", v = { model = "nomic.gguf", mmproj = "" } }"#,
+            weights,
+        );
+        parse_entry(&text).unwrap().engines[0].weights.clone()
+    };
+    let model = FileName("nomic.gguf".into());
+    assert_eq!(
+        with(r#"{ kind = "gguf", v = { model = "nomic.gguf" } }"#),
+        WeightFiles::Gguf {
+            model: model.clone(),
+            mmproj: None
+        }
+    );
+    assert_eq!(
+        with(r#"{ kind = "gguf", v = { model = "nomic.gguf", mmproj = "vision.gguf" } }"#),
+        WeightFiles::Gguf {
+            model: model.clone(),
+            mmproj: Some(FileName("vision.gguf".into()))
+        }
+    );
+    assert_eq!(
+        with(r#"{ kind = "gguf", v = { model = "nomic.gguf", mmproj = "" } }"#),
+        WeightFiles::Gguf {
+            model,
+            mmproj: Some(FileName(String::new()))
+        }
+    );
+    // A missing projector is not written back.
+    let none = WeightFiles::Gguf {
+        model: FileName("a.gguf".into()),
+        mmproj: None,
+    };
+    assert_eq!(
+        serde_json::to_string(&none).unwrap(),
+        r#"{"kind":"gguf","v":{"model":"a.gguf"}}"#
+    );
+}
+
+#[test]
 fn a_llama_server_profile_must_name_gguf_weights() {
     let entry = parse_entry(EMBED_ONLY).unwrap();
     assert!(matches!(entry.engines[0].weights, WeightFiles::Gguf { .. }));

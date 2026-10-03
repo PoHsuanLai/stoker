@@ -1,16 +1,17 @@
 //! Gathering a streamed turn into the transcript `absorb` reads.
 
-use model_provider::{Flow, ToolCall, TurnEnd, TurnEvent, TurnSink};
+use model_provider::{Flow, SafetySignal, ToolCall, TurnEnd, TurnEvent, TurnSink};
 
 use crate::TurnTranscript;
 
-/// A [`TurnSink`] that keeps what a turn said: its text, its thoughts and its finished tool
-/// calls, in order. `finish` makes the transcript once the turn has ended.
+/// A [`TurnSink`] that keeps what a turn said: its text, its thoughts, its finished tool
+/// calls and the vendor's safety signals, in order. `finish` makes the transcript once the turn has ended.
 #[derive(Debug, Default)]
 pub struct TranscriptSink {
     text: String,
     thought: String,
     calls: Vec<ToolCall>,
+    safety: Vec<SafetySignal>,
 }
 
 impl TranscriptSink {
@@ -24,6 +25,7 @@ impl TranscriptSink {
             thought: self.thought,
             calls: self.calls,
             end,
+            safety: self.safety,
         }
     }
 }
@@ -34,10 +36,10 @@ impl TurnSink for TranscriptSink {
             TurnEvent::TextDelta(text) => self.text.push_str(&text),
             TurnEvent::ThoughtDelta(text) => self.thought.push_str(&text),
             TurnEvent::ToolCallDone(call) => self.calls.push(call),
+            TurnEvent::Safety(signal) => self.safety.push(signal),
             TurnEvent::ThoughtSealed(_)
             | TurnEvent::ToolCallStarted { .. }
             | TurnEvent::ToolCallDelta { .. }
-            | TurnEvent::Safety(_)
             | TurnEvent::Usage(_) => {}
         }
         Flow::Continue

@@ -19,7 +19,7 @@ pub(crate) fn parse(
         CuaDialect::Tool(tool) => parse_tool_calls(tool, space, &reply.calls, limits),
         CuaDialect::Wire(_) if reply.calls.is_empty() => finished_by_talking(&reply.text),
         CuaDialect::Wire(wire) => codec(wire)
-            .decode(&reply.calls, &[])
+            .decode(&reply.calls, &reply.safety)
             .map_err(|_| ParseError::Malformed { at: ByteOffset(0) }),
     }
 }

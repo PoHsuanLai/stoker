@@ -22,6 +22,8 @@ impl Shape {
         match (self, value) {
             (Shape::Optional(_), Value::Null) => Ok(()),
             (Shape::Optional(inner), _) => inner.check_value(value, at),
+            (Shape::OrHandle(_), Value::Object(map)) if is_handle(map) => Ok(()),
+            (Shape::OrHandle(inner), _) => inner.check_value(value, at),
             (Shape::Choice(choices), Value::String(text)) => choices
                 .iter()
                 .any(|c| &c.0 == text)
@@ -69,10 +71,19 @@ impl Shape {
             Shape::DateTime => ShapeKind::DateTime,
             Shape::Record(_) => ShapeKind::Record,
             Shape::List { .. } => ShapeKind::List,
-            Shape::Optional(inner) => inner.kind(),
+            Shape::Optional(inner) | Shape::OrHandle(inner) => inner.kind(),
             Shape::Tagged { .. } => ShapeKind::Tagged,
         }
     }
+}
+
+/// `{ "handle": n }` with `n` a whole number from 0 and nothing else in the object.
+fn is_handle(map: &Map<String, Value>) -> bool {
+    map.len() == 1
+        && map
+            .get("handle")
+            .and_then(Value::as_i64)
+            .is_some_and(|n| n >= 0)
 }
 
 fn root() -> FieldName {
