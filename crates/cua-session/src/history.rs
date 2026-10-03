@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 
 use cua_action::{CoordSpace, CuaAction, Target};
 use cua_parse::InSpace;
-use model_provider::ImageInput;
+use model_provider::{ImageInput, Part, ToolCall, ToolResult};
 
 use crate::{FrameBudget, StepLines};
 
@@ -22,6 +22,25 @@ pub(crate) struct HistoryTurn {
     pub(crate) reply: String,
     /// The frame the model was shown, while it is within the frame budget.
     pub(crate) frame: Option<ImageInput>,
+    /// For a vendor wire, whose history is real messages: the user message this step was asked
+    /// in (the results of the step before, the words, the frame), and the calls the model made.
+    pub(crate) user: Vec<Part>,
+    pub(crate) calls: Vec<ToolCall>,
+}
+
+/// `parts` without any image, in a tool result too.
+pub(crate) fn without_images(parts: &[Part]) -> Vec<Part> {
+    parts
+        .iter()
+        .filter_map(|part| match part {
+            Part::Image(_) => None,
+            Part::ToolResult(result) => Some(Part::ToolResult(ToolResult {
+                parts: without_images(&result.parts),
+                ..result.clone()
+            })),
+            other => Some(other.clone()),
+        })
+        .collect()
 }
 
 /// The turns the prompt keeps: at most `lines` of them, the newest last, and only the last
@@ -37,10 +56,10 @@ pub(crate) fn push(
         history.pop_front();
     }
     let keep_from = history.len().saturating_sub(usize::from(frames.0));
-    history
-        .iter_mut()
-        .take(keep_from)
-        .for_each(|turn| turn.frame = None);
+    history.iter_mut().take(keep_from).for_each(|turn| {
+        turn.frame = None;
+        turn.user = without_images(&turn.user);
+    });
 }
 
 pub(crate) fn cut(reply: &str) -> String {

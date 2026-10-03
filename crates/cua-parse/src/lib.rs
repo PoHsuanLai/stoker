@@ -12,6 +12,8 @@ mod scan;
 mod tools;
 mod ui_tars;
 
+pub use chord::{from_text as chord_from_text, from_words as chord_from_words};
+pub use common::{Batch, bounded};
 pub use limits::{ActionCount, ByteLen, ByteOffset, ParseLimits};
 pub use outcome::{DropReason, Dropped, InSpace, ParseError, Parsed, VerbText, VerbTextError};
 pub use parse::{parse_text, parse_tool_calls};

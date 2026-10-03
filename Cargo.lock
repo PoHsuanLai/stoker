@@ -175,6 +175,7 @@ dependencies = [
  "cua-action",
  "cua-parse",
  "model-provider",
+ "proptest",
  "serde",
  "serde_json",
  "thiserror",

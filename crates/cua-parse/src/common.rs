@@ -90,14 +90,14 @@ impl<S: CoordSpace> Collected<S> {
 
 /// The actions kept so far, up to the batch limit, and every verb that was not kept.
 #[derive(Debug)]
-pub(crate) struct Batch<S: CoordSpace> {
+pub struct Batch<S: CoordSpace> {
     limit: usize,
     actions: Vec<CuaAction<S>>,
     dropped: Vec<Dropped>,
 }
 
 impl<S: CoordSpace> Batch<S> {
-    pub(crate) fn new(limits: ParseLimits) -> Self {
+    pub fn new(limits: ParseLimits) -> Self {
         Batch {
             limit: usize::from(limits.max_actions.0),
             actions: Vec::new(),
@@ -106,7 +106,7 @@ impl<S: CoordSpace> Batch<S> {
     }
 
     /// Keeps a verb's action while there is room; otherwise records why the verb is gone.
-    pub(crate) fn push(&mut self, verb: &str, result: Result<CuaAction<S>, DropReason>) {
+    pub fn push(&mut self, verb: &str, result: Result<CuaAction<S>, DropReason>) {
         match result {
             Ok(action) if self.actions.len() < self.limit => self.actions.push(action),
             Ok(_) => self.drop(verb, DropReason::OverBatchLimit),
@@ -137,8 +137,20 @@ impl<S: CoordSpace> Batch<S> {
     }
 }
 
+impl<S: CoordSpace> Batch<S> {
+    /// The batch as a [`Parsed`], for a decoder outside this crate (the vendor wires): the same
+    /// rule as the parsers, so a reply with no verb at all is `NoAction`.
+    pub fn into_parsed(
+        self,
+        thought: Option<String>,
+        wrap: impl FnOnce(Vec<CuaAction<S>>) -> InSpace,
+    ) -> Result<Parsed, ParseError> {
+        self.finish(thought).map(|collected| collected.parsed(wrap))
+    }
+}
+
 /// A bounded text refused for its content: too long stays `TooLong`, the rest is a bad argument.
-pub(crate) fn bounded<T>(result: Result<T, TextError>) -> Result<T, DropReason> {
+pub fn bounded<T>(result: Result<T, TextError>) -> Result<T, DropReason> {
     result.map_err(|e| match e {
         TextError::TooLong { .. } => DropReason::TooLong,
         TextError::Empty | TextError::ControlChar { .. } => DropReason::BadArgument,

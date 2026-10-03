@@ -168,7 +168,9 @@ pub(crate) fn observation_lines(
     map: &FrameMap,
 ) -> Vec<String> {
     let mut out = Vec::new();
-    if !goal_in_system(dialect) {
+    // A vendor wire says the goal once, in the first message; its history is real messages.
+    let wire = matches!(dialect, CuaDialect::Wire(_));
+    if !goal_in_system(dialect) && !(wire && !history.is_empty()) {
         out.push(format!("Goal: {}", task.goal));
         out.extend(task.hints.iter().map(|hint| format!("Hint: {hint}")));
     }
@@ -178,11 +180,11 @@ pub(crate) fn observation_lines(
         .skip(history.len().saturating_sub(usize::from(lines.0)))
         .filter(|turn| !(goal_in_system(dialect) && turn.frame.is_some()))
         .collect();
-    if !shown.is_empty() {
+    if !shown.is_empty() && !wire {
         out.push("Earlier actions:".to_owned());
         out.extend(shown.into_iter().map(earlier_line));
     }
-    if !obs.prev.is_empty() {
+    if !obs.prev.is_empty() && !wire {
         let results: Vec<String> = obs.prev.iter().map(result_text).collect();
         out.push(format!(
             "What happened to your last actions: {}.",

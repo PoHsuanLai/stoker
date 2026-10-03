@@ -4,6 +4,7 @@ use std::collections::VecDeque;
 
 use cua_action::{CuaDialect, TextDialect};
 use cua_parse::{DropReason, ParseLimits, Parsed};
+use cua_vendors::{WireCodec, codec};
 use model_provider::{
     ImageInput, Message, ModelName, OutputShape, Part, Role, ToolChoice, TurnRequest,
 };
@@ -66,6 +67,9 @@ impl CuaSession {
 
     fn build(&self, obs: &ObservationIn, map: &FrameMap, image: Option<ImageInput>) -> TurnRequest {
         let dialect = self.profile.dialect;
+        if let CuaDialect::Wire(wire) = dialect {
+            return self.build_wire(wire, obs, map, image);
+        }
         let mut messages: Vec<Message> = prompt::system_text(dialect, map, &self.task)
             .map(|text| Message {
                 role: Role::System,
@@ -115,6 +119,68 @@ impl CuaSession {
             model: self.model.clone(),
             messages,
             tools: prompt::tools(dialect, map),
+            tool_choice: ToolChoice::Auto,
+            tool_calls: self.settings.tool_calls,
+            output: OutputShape::Free,
+            limits: self.settings.limits.clone(),
+            sampling: self.settings.sampling,
+            reasoning: self.settings.reasoning,
+            engine: self.settings.engine,
+        }
+    }
+
+    /// A vendor wire keeps its history as real messages: each earlier step is the user message it
+    /// was asked in and an assistant message of the calls the model made; this step's user
+    /// message starts with the vendor's tool results for those calls (`obs.prev`).
+    fn build_wire(
+        &self,
+        wire: cua_action::WireDialect,
+        obs: &ObservationIn,
+        map: &FrameMap,
+        image: Option<ImageInput>,
+    ) -> TurnRequest {
+        let codec = codec(wire);
+        let mut messages = Vec::new();
+        for turn in &self.history {
+            messages.push(Message {
+                role: Role::User,
+                parts: turn.user.clone(),
+            });
+            let said = if turn.calls.is_empty() {
+                vec![Part::Text(turn.reply.clone())]
+            } else {
+                turn.calls.iter().cloned().map(Part::ToolCall).collect()
+            };
+            messages.push(Message {
+                role: Role::Assistant,
+                parts: said,
+            });
+        }
+        let lead = prompt::observation_lines(
+            self.profile.dialect,
+            &self.task,
+            &self.history,
+            self.settings.lines,
+            obs,
+            map,
+        );
+        let mut user = match (&image, obs.prev.is_empty()) {
+            (Some(image), false) => codec.results(&obs.prev, image),
+            _ => Vec::new(),
+        };
+        let results_carry_the_frame = !user.is_empty();
+        user.push(Part::Text(lead.join("\n")));
+        if let (Some(image), false) = (image, results_carry_the_frame) {
+            user.push(Part::Image(image));
+        }
+        messages.push(Message {
+            role: Role::User,
+            parts: user,
+        });
+        TurnRequest {
+            model: self.model.clone(),
+            messages,
+            tools: prompt::tools(self.profile.dialect, map),
             tool_choice: ToolChoice::Auto,
             tool_calls: self.settings.tool_calls,
             output: OutputShape::Free,
@@ -220,11 +286,18 @@ impl CuaSession {
     }
 
     fn remember(&mut self, sent: &TurnRequest, reply: &TurnTranscript, actions: Vec<String>) {
+        let wire = matches!(self.profile.dialect, CuaDialect::Wire(_));
         let turn = HistoryTurn {
             number: self.taken,
             actions,
             reply: history::cut(&reply.text),
             frame: last_image(sent),
+            user: if wire { step_message(sent) } else { Vec::new() },
+            calls: if wire {
+                reply.calls.clone()
+            } else {
+                Vec::new()
+            },
         };
         history::push(
             &mut self.history,
@@ -237,17 +310,36 @@ impl CuaSession {
     }
 }
 
+/// The images of some parts, in order, a tool result's included.
+fn images_of(parts: &[Part]) -> Vec<ImageInput> {
+    parts
+        .iter()
+        .flat_map(|part| match part {
+            Part::Image(image) => vec![image.clone()],
+            Part::ToolResult(result) => images_of(&result.parts),
+            _ => Vec::new(),
+        })
+        .collect()
+}
+
 /// The last image a request carries: the frame of the step it asked about.
 fn last_image(request: &TurnRequest) -> Option<ImageInput> {
     request
         .messages
         .iter()
         .rev()
-        .flat_map(|m| m.parts.iter().rev())
-        .find_map(|part| match part {
-            Part::Image(image) => Some(image.clone()),
-            _ => None,
-        })
+        .find_map(|m| images_of(&m.parts).pop())
+}
+
+/// The user message the step was asked in: the last one that carries a frame.
+fn step_message(request: &TurnRequest) -> Vec<Part> {
+    request
+        .messages
+        .iter()
+        .rev()
+        .find(|m| m.role == Role::User && !images_of(&m.parts).is_empty())
+        .map(|m| m.parts.clone())
+        .unwrap_or_default()
 }
 
 fn thought_of(reply: &TurnTranscript) -> Option<String> {

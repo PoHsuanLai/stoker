@@ -10,7 +10,7 @@ use crate::DropReason;
 
 /// A chord from the words of one hotkey string: split on whitespace when there is any, else on
 /// `+` (a lone `+` is the plus key).
-pub(crate) fn from_text(text: &str) -> Result<Chord, DropReason> {
+pub fn from_text(text: &str) -> Result<Chord, DropReason> {
     let words: Vec<&str> = if text.split_whitespace().nth(1).is_some() {
         text.split_whitespace().collect()
     } else if text.trim() == "+" {
@@ -23,7 +23,7 @@ pub(crate) fn from_text(text: &str) -> Result<Chord, DropReason> {
 
 /// A chord from key names: every modifier name joins `mods`, and exactly one other key is the
 /// key. A lone modifier is pressed as the key itself (the Super key opens an overview).
-pub(crate) fn from_words<S: AsRef<str>>(words: &[S]) -> Result<Chord, DropReason> {
+pub fn from_words<S: AsRef<str>>(words: &[S]) -> Result<Chord, DropReason> {
     let mut mods = BTreeSet::new();
     let mut keys = Vec::new();
     for word in words {

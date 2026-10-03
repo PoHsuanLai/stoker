@@ -1,6 +1,6 @@
 [package]
 name = "cua-vendors"
-description = "The vendor computer-use encodings (Anthropic, OpenAI, Gemini): tool specs, decode, result encode. Trait and enum frozen; bodies arrive with the cloud backends."
+description = "The vendor computer-use encodings (Anthropic, OpenAI, Gemini): tool specs, decode, result encode. Pure: the tool declarations, the decoders and the result encoders, ready for the cloud backends."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,10 +13,11 @@ cua-action = { workspace = true }
 model-provider = { workspace = true }
 cua-parse = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-serde_json = { workspace = true }
+proptest = { workspace = true }
 
 [lints]
 workspace = true
