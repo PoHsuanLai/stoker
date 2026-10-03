@@ -76,7 +76,7 @@ Decisions taken from it:
 
 ## Stubs behind frozen interfaces
 
-Every `todo!()` in the repo (the rig amendment added 27, see `The rig amendment` below; the fill wave F1 lanes remove theirs, `stoker-shape` removed 19 (see `Fill F1: stoker-shape` below) and the F2 lane `stoker-driver` removed 13 more, see `Fill F2: stoker-driver` below; 29 remain). Each is a signature other repos build on; the body arrives with
+Every `todo!()` in the repo (the rig amendment added 27, see `The rig amendment` below; the fill wave F1 lanes remove theirs, `stoker-shape` removed 19 (see `Fill F1: stoker-shape` below) and the F2 lane `stoker-driver` removed 13 more, see `Fill F2: stoker-driver` below; 29 remained; the fill wave W4 lane `w4-stoker` removed 18 more, see `Fill W4: stoker` below; 11 remain). Each is a signature other repos build on; the body arrives with
 the work in the "Closes when" line of its crate.
 
 ### `cua-parse` (0, filled in wave F1)
@@ -85,20 +85,13 @@ Both entry points are built. `parse_text` reads the UI-TARS-1.5 grammar (the mod
 
 Still open: the `Holo31` schema is ours, provisional. The chat template names no computer-use function, so the parser reads Qwen's schema plus flat verbs (`click`, `drag`, `move`, `finish`, `ask`, `observe`; a point as `x` and `y` or `coordinate`), and `fixtures/holo_31/` and `fixtures/qwen_cu/` are hand-written from those schemas, not recorded. Closes when `dev/record-engine.sh` records real calls from Holo-3.1-4B and the fixtures and the verb tables are corrected to match. The nightly targets are `crates/cua-parse/fuzz/` (`dev/fuzz-cua-parse.sh`, needs `cargo-fuzz`); `never_panics` (proptest) runs on stable.
 
-### `cua-session` (2)
+### `cua-session` (0, filled in wave W4)
 
-- `src/session.rs`: CuaSession::request: system prompt, history window, observation, frame
-- `src/session.rs`: CuaSession::absorb: parse, one repair, map, history
+`CuaSession::request` and `absorb` are built (with `absorb_for`, `with_settings` and `TranscriptSink`); see `Fill W4: stoker`. The prompt files are in `crates/cua-session/prompts/` with their sources in their headers. Still open: the Holo and Qwen tool schemas are ours until a recorded step (`dev/cua-step-holo.sh`) confirms them.
 
-Closes when `request` and `absorb` pass the ScriptedProvider tests (history keeps the last N frames, one repair then unparseable, out-of-frame becomes dropped); prompt files in `prompts/` carry their model-card attribution.
+### `cua-vendors` (0, filled in wave W4)
 
-### `cua-vendors` (3)
-
-- `src/codec.rs`: WireCodecs::tools: one declaration per vendor
-- `src/codec.rs`: WireCodecs::decode: one decoder per vendor
-- `src/codec.rs`: WireCodecs::results: stop-at-first-failure text per vendor
-
-Closes when the first cloud backend is turned on (the user chose open models only).
+The four codecs (`AnthropicToolset20260801`, `AnthropicComputer20251124`, `OpenAiComputer`, `GeminiComputerUse`) decode, declare and encode results, written from the vendors' documentation of 2026-10-03; no cloud backend exists yet to call them.
 
 ### `engine-supervisor` (0, filled in waves F1 and F2)
 
@@ -108,18 +101,14 @@ Closes when the first cloud backend is turned on (the user chose open models onl
 
 `SseDecoder`, `NdjsonDecoder` (F1) and `Transport for HttpClient` over hyper behind the `hyper` feature (F2), with the loopback Unix-socket and TCP tests the stub named. TLS and the egress proxy are not built (see `Fill F2: stoker-driver`).
 
-### `model-openai-compat` (8: the `audio` bodies; the chat codec was filled in F1 and F2)
+### `model-openai-compat` (4: the `OpenAiSpeech` provider; the chat codec was filled in F1 and F2, the audio codec in W4)
 
-- `src/audio/codec.rs`: encode_speech_request: model, input, voice, response_format pcm, stream true
-- `src/audio/codec.rs`: encode_transcription: WAV header over the samples, form fields, boundary
-- `src/audio/codec.rs`: decode_transcription: the `text` field of the JSON
-- `src/audio/codec.rs`: PcmDecoder::feed: join the carry, keep the partial sample, number the chunk
 - `src/audio/provider.rs`: OpenAiSpeech::describe (in): GET /models, caps from the catalog entry
 - `src/audio/provider.rs`: OpenAiSpeech::transcribe: drain the audio, POST multipart, one Final event
 - `src/audio/provider.rs`: OpenAiSpeech::describe (out): GET /models and /audio/voices
 - `src/audio/provider.rs`: OpenAiSpeech::speak: POST /audio/speech, PcmDecoder into the sink
 
-The chat codec passes its golden requests, the conformance list of `research-rig.md` 3.2, 3.3 and 3.7 (hand-written frames and wire cassettes under every chunking), and still waits for recorded fixtures from vLLM and llama-server (`dev/record-engine.sh`, run by hand, recorded at the `Transport`); `Flavor::quirks` is a pinned table whose rows marked "to verify" in `quirks.rs` are settled by the first recorded fixture of that engine; the `audio` bodies close with `model-http` gaining a multipart or raw-bytes POST (`post_json` cannot carry a WAV file), then `encode_speech_request` and `encode_transcription` pass golden bodies, `PcmDecoder` its chunking proptest, and `OpenAiSpeech` a loopback test against fixtures recorded by `dev/record-speech.sh` (by hand, against the user's own vLLM and Kokoro).
+The chat codec passes its golden requests, the conformance list of `research-rig.md` 3.2, 3.3 and 3.7 (hand-written frames and wire cassettes under every chunking), and still waits for recorded fixtures from vLLM and llama-server (`dev/record-engine.sh`, run by hand, recorded at the `Transport`); `Flavor::quirks` is a pinned table whose rows marked "to verify" in `quirks.rs` are settled by the first recorded fixture of that engine; the provider closes with `model-http` gaining a multipart or raw-bytes POST (`Verb` has `Get` and `PostJson` only, so `encode_transcription`'s body cannot be sent), then `OpenAiSpeech` passes a loopback test against fixtures recorded by `dev/record-speech.sh` (by hand, against the user's own vLLM and Kokoro).
 
 ### `model-replay` (0, filled in wave F1)
 
@@ -147,24 +136,13 @@ Closes when spike V-H shows an offline source build of sherpa-onnx with `-DSHERP
 
 Closes when `tokio` (pinned block: `net`, `io-util`) joins the workspace lines, then both bodies pass a loopback Unix-socket test against a fake host that speaks `host_wire`.
 
-### `speech-provider` (4, feature `testing`)
+### `speech-provider` (0, feature `testing`, filled in wave W4)
 
-- `src/testing.rs`: ScriptedStt::transcribe: pull audio, push each event once its index passes
-- `src/testing.rs`: ScriptedTts::speak: silent chunks until the audio length, stop on Flow::Stop
-- `src/testing.rs`: ScriptedVad::push: the next verdict, with probability 1000 or 0
-- `src/testing.rs`: ScriptedVad::reset: back to the start of the script
+The fakes `ScriptedStt`, `ScriptedTts` and `ScriptedVad` play their scripts (tests in `tests/fakes.rs`).
 
-Closes when the fakes pass tests of their own: events arrive once the pulled audio passes their index, `Flow::Stop` ends a synthesis, a request is recorded before its script plays.
+### `speech-vad` (0, filled in wave W4)
 
-### `speech-vad` (5)
-
-- `src/level.rs`: level_of: integer RMS, dBFS from a table, clamp -60..0 to 0..=1000
-- `src/energy.rs`: EnergyGate::push: level_of against the threshold, hangover frames
-- `src/energy.rs`: EnergyGate::reset: no loud frame seen
-- `src/framer.rs`: Framer::push: decode S16, join the carry, cut 512-sample frames
-- `src/endpoint.rs`: endpoint: Waiting to InSpeech on speech, Trailing on silence, Ended after silence_end
-
-Closes when `level_of` passes a table (silence is 0, full scale is 1000, -40 dBFS is 333) with no floats, `EnergyGate` its hangover table, `Framer` a proptest (any chunking gives the same frames, the remainder carries), and `endpoint` the state table of voice.md 4.2 including `min_speech` and `NoSpeech`.
+`level_of` (integer fixed-point logarithm, -40 dBFS is 333), `EnergyGate`, `Framer` and `endpoint`; see `Fill W4: stoker`.
 
 ### `speech-vad-silero` (3, excluded crate)
 
@@ -452,6 +430,170 @@ things to know: `cua-action::Target` gained a variant, so an exhaustive `match` 
 executor (none today) needs the `Centre` arm; and porter's own `DropReason` mirror
 (`porter-infer/src/cua.rs`) has no `BadArgument` yet, which the `cua-parse` to porter mapping will
 need when it is written.
+
+## Fill W4: stoker (2026-10-03)
+
+Lane `w4-stoker`. 18 `todo!()` removed (29 to 11): `cua-session` 2, `cua-vendors` 3, the speech
+codec of `model-openai-compat` 4, the `speech-provider` fakes 4, `speech-vad` 5.
+
+### Interface asks closed
+
+| Ask | What changed |
+| --- | --- |
+| 65 | `CodecError::NativeToolUnsupported` (`model-wire`); `encode_request` answers it for a `ToolSpec::Native`; the driver maps it to `BadRequest("native tools are not supported by this wire")` |
+| 66 | `parse_entry` refuses a llama-server profile whose weights are not `gguf` (`CatalogError::LlamaServerWithoutGguf`) |
+| 98 | `ModelEntry.embed: Option<EmbedCaps>` (the `embed` table: `dims`, `max_batch`, `max_input`, `prompts`), skipped when absent so every shipped file is unchanged. It belongs to the `embeddings` role (`CatalogError::EmbedTableWithoutEmbeddingsRole`), and an entry that has it needs no chat fields for that role. An `embeddings` entry without the table still needs them, as before |
+| 99 | `Reasoning::EngineDefault` (`{"kind":"engine_default"}`): the OpenAI-compatible codec sends no `chat_template_kwargs`, `reasoning_effort` or `reasoning` for it |
+| 100 | `Shape::from_json_schema(&SchemaText, SchemaLimits) -> Result<Shape, SchemaRefusal>` and `model_extract::ShapedSession` (the typed session's machine over a shape held as a value) |
+| 68 | still open: the request spellings, `--host <x>.sock` and the Kokoro module path wait for a recording (spike S1) |
+
+### `Shape::from_json_schema`
+
+The subset: string enums and consts (`Choice`), integers with bounds (a bound left out is the `i64`
+edge), strings with `maxLength` or `format: date | date-time`, arrays with `items` and `maxItems`,
+objects with `properties`, `required` and `additionalProperties: false` (a property not required is
+`Optional`), `anyOf`/`oneOf` with a null (`Optional`) or of `{tag, content}` objects (`Tagged`),
+`type: [T, "null"]`. Everything `to_json_schema` writes, in the plain and the strict dialect,
+reads back to the same shape (property test). The rest is a typed `SchemaRefusal` naming the JSON
+pointer and a `Refused` reason: a number or boolean, `pattern`, `$ref`, `allOf`, `minItems` or
+`minLength` above 0, `uniqueItems`, an open object (the schema must say `additionalProperties:
+false`), a name outside `[A-Za-z0-9_]{1,64}`, an ambiguous tagged enum. A schema left open (no
+`maxLength`, no `maxItems`) takes `SchemaLimits::open_text` and `open_list`, which the daemon's
+settings supply; `SchemaLimits::depth` bounds the walk. Two properties are looser than the schema
+(an `Optional` field also accepts `null` when the schema required it and did not allow null) and
+the field order is the sorted property names (serde_json keeps no insertion order here): both
+only matter to a grammar made from the shape, never to `check`.
+
+### `cua-session`
+
+- **Request**: a tool dialect (`QwenComputerUse`, `Holo31`) gets the dialect's system prompt
+  (`prompts/*.txt`, the header lines starting with `#` are not sent), one `computer_use` function
+  (`prompts/computer_use.schema.json`, Holo's adds `ask`; the description says the resolution),
+  and one user message: goal and hints, one line per earlier step (the model's own coordinates;
+  typed text and key names are never repeated), what happened to the last actions, the masked
+  regions, the cursor in the model's coordinates, then the last `history` frames each under
+  "Earlier screenshot (step n):" and the current frame. `UiTars15` has no tools, the goal in its
+  system prompt, and its history as its own turns (a frame, then the reply it got); a vendor wire
+  keeps real messages (the user message of each step, an assistant message of its calls) and puts
+  the vendor's tool results first in the next user message.
+- **`absorb_for(sent, reply, map)`** is the real transition; `absorb(reply, map)` is the frozen
+  signature and builds the repair from the session's own state, so its repair carries no frame
+  and its step is remembered without one (ask 49 made the same change for `ExtractSession`).
+  A reply that does not parse, or whose actions were all refused or out of frame, is answered with
+  one `Repair` per unit of the repair budget: `sent` plus a message that names the problem and
+  never repeats the reply (the text dialect also replays what it wrote). With none left, an
+  unparseable reply is `Unparseable` and refused actions come back as `Actions` with empty
+  `actions` and their reasons. A reply that parses counts as a step, so does an unparseable one;
+  the repair budget refills at each step.
+- **Mapping**: the parse is read in `map.space`; a point outside the frame is dropped
+  (`OutOfFrame`, verb `click`, ...), a scroll distance maps with the points.
+- **`TurnSettings`** (sampling, limits, reasoning, tool parallelism, engine extras, how many
+  earlier steps are listed) is not in the frozen `CuaProfile`; `begin` uses greedy sampling,
+  `Reasoning::Off`, 1024 tokens and eight lines, and the daemon replaces them with
+  `with_settings` from the catalog's `reasoning_off` sampling and `max_output`.
+- **`TranscriptSink`** gathers a streamed turn into the `TurnTranscript` that `absorb_for` reads.
+- A vendor reply of text alone (no calls) is a `Finish { Done }` with the text as its summary.
+
+Wire-cassette tests (`tests/cassette.rs`): a three-step Holo run, a Qwen run with one repair and a
+UI-TARS run go through `Driver<OpenAiCodec, RecordingTransport<..>>` over canned vLLM streams, and
+the cassette is replayed in strict mode under 19 chunk plans (the request must be the same bytes,
+the outcome the same). The streams are hand-written, not recorded.
+
+### `cua-vendors`
+
+Written from Anthropic's computer-use reference, OpenAI's computer-use guide and Google's
+computer-use page (read 2026-10-03). A call is a `ToolCall` whose name and input the (future)
+backend takes from the vendor's block: Anthropic's toolset names the member (`left_click`), the 2025
+tool is `computer` with `input.action`, OpenAI's is `computer` with `{"actions": [...]}` (the
+`call_id` is the id), Gemini's is the function name with its `args` (the backend mints the id).
+Anthropic and OpenAI points are `ImageSpace`; Gemini's are `Grid(1000)` (0..=999). Decisions:
+- Dropped as `UnsupportedVerb`: `left_mouse_down`, `left_mouse_up`, `cursor_position`, `hold_key`;
+  Gemini's `navigate`, `go_back`, `go_forward`, `open_app`, `long_press`; OpenAI's back and forward
+  buttons are a `BadArgument`. A click, scroll or move with no coordinate is `MissingArgument`
+  ("at the cursor" is not a place we can name).
+- A reply none of whose calls is a tool of the dialect is `WireError::UnknownTool`, and one none of
+  whose inputs is an object `BadArguments`; any other fault is a per-call drop.
+- OpenAI `wait` waits 2000 ms (the action names none); a scroll with both axes acts along the
+  longer; a drag goes first point to last. Gemini scroll pixels become notches at 100 a notch.
+- `results`: the stop-at-first-failure rule is applied by the codec (everything after the first
+  call that was not done is `NotRun` with Anthropic's required text); Anthropic puts the new
+  screenshot in the last result that ran, OpenAI and Gemini in every result.
+- Safety signals only add: a confirmation request is an `Ask` ahead of the actions; a block
+  replaces the actions with `Finish { Infeasible }`.
+- The 2026-08-01 toolset declaration carries no display size (the screenshot says it); the 2025
+  tool's carries `display_width_px` and `display_height_px` from the image size.
+- `cua-parse` now exports `Batch`, `bounded`, `chord_from_text` and `chord_from_words`, so the
+  vendor decoders share the parsers' batch limit, drop reporting and key names.
+
+### `speech-vad` and the speech fakes
+
+`level_of` is an integer fixed-point `log2` of the sum of squares (16 fraction bits, rows agree
+with the float reference to 0.55 for every constant amplitude). `EnergyGate`: a frame at or above
+the threshold is speech and so are the `hangover` frames after the last one (probability 1000 or
+0). `Framer` joins a sample cut by a chunk boundary (an extra private field holds the low byte),
+numbers frames from the chunk's own position when nothing is carried (a gap in the audio is a gap
+in the numbers), and gives the same frames for any cutting of the same bytes (proptest).
+`endpoint`: a burst shorter than `min_speech` returns to `Waiting`; speech that resumes after a
+pause is `InSpeech` with `since` set back by `min_speech`, so a short resumed word is not a burst;
+`Waiting` with silence for `silence_end` is `Ended(NoSpeech)`; `lead` is the caller's. The fakes:
+`ScriptedStt` records the request, then pushes each event once the audio pulled reaches its index
+and flushes the rest at the end of the audio (`Flow::Stop` ends with the scripted end);
+`ScriptedTts` makes silent chunks and a stop answers the audio played so far; `ScriptedVad`
+plays its verdicts, then silence.
+
+### `model-openai-compat::audio`
+
+`encode_speech_request` (Kokoro only, 24 kHz S16 mono, `KOKORO_FORMAT`), `encode_transcription` (a
+mono WAV file, format 1 or 3, in a multipart body whose boundary is chosen not to appear in the
+audio, `language` the primary subtag), `decode_transcription`, `PcmDecoder::feed`. The provider
+waits for a multipart POST in `model-http`.
+
+### Interface asks (for the spec)
+
+1. `Gguf { model, mmproj }` has a required `mmproj`: an embedding or text-only GGUF has none (the
+   tests write an empty name). Proposed: `mmproj: Option<FileName>` (a serde change).
+2. `ObservationIn` has no place for porter's window-contents text (`TreeText`) or notes
+   (`StepNote`); inferd's `cua_step` puts both in the prompt today. Proposed: `tree: Option<String>`
+   and `notes: Vec<Note>` on `ObservationIn` (porter builds it by struct literal, so this breaks
+   it once), or a `Context` passed to `request`.
+3. `TurnTranscript` has no safety signals: a vendor's `SafetySignal`s cannot reach `decode`
+   through `absorb`. Proposed: `safety: Vec<SafetySignal>` on `TurnTranscript`.
+4. `FrameBudget` counts past frames, so a prompt holds `history + 1` images: Holo's catalog
+   limits a prompt to 3 (`--limit-mm-per-prompt image:3`), so the daemon must build the profile
+   with `history = per_prompt - 1`, not the `ai.cua.history_frames` default of 3.
+5. `model-http` needs a multipart (or raw-bytes) POST before `OpenAiSpeech` can send
+   `encode_transcription`'s body.
+
+### Porter call sites that should change (porter was not edited)
+
+- `crates/inferd/src/bridge/request.rs:195-199` `reasoning`: map `pi::Reasoning::EngineDefault`
+  to `sp::Reasoning::EngineDefault` (it maps to `Off` today), and `:215-219` `default_sampling`
+  needs an arm for it (choose `reasoning_on` when the model's `caps.reasoning` is `Present`, else
+  `reasoning_off`); the tests at `bridge/request/tests.rs:81` and `:345` expect `Off` and change
+  with it. `cua_step.rs:300` keeps `Off` on purpose.
+- `crates/inferd/src/catalog.rs` (`EmbedSpec`, `claims_of`, `capabilities_of`, `embed_cap`),
+  `local.rs:96,146,158`, `config.rs:36-38` (`[[embedding]]`), `main.rs:53`, `testkit.rs:41`,
+  `bridge/request.rs:341` (`model.embed`) and the tests in `config/tests.rs`, `local/tests.rs`,
+  `bridge/request/tests.rs:366,407`: read `entry.embed` (`EmbedCaps`: `dims`, `max_batch`,
+  `max_input`, `prompts.query`, `prompts.document`) instead of `EmbedSpec`; keep `[[embedding]]`
+  as an override only if wanted. An `embeddings` entry with an `embed` table now parses without
+  chat fields (`caps` is `None`), so `capabilities_of` matches `(Embeddings, _)` on `entry.embed`.
+- `crates/inferd/src/bridge/request.rs:143-151` `shape` and the chat path in `runner.rs:268-290`:
+  for `ReplyShape::Json(schema)` call `Shape::from_json_schema` (limits from settings) and, when it
+  reads, run `ShapedSession::request` / `absorb` around `provider.turn` (and `choose` for the
+  mode); when it is refused, send the schema as the constraint without validating, as today.
+  `ReplyShape::Choice` can use `Shape::Choice` the same way. The test at
+  `bridge/request/tests.rs:182-189` (`{"type":"object"}`) is the refused case (an open object).
+- `crates/inferd/src/cua_run.rs:49` (`todo!` mentioned in the interface asks) and `cua_step.rs`
+  (the interim prompt, history and parse): replace with `CuaSession::begin`, `request`, one turn
+  through a `TranscriptSink`, `absorb_for`; build `CuaProfile` from `caps.images` and
+  `caps.computer_use`, `TurnSettings` from the catalog's `sampling.reasoning_off` and `max_output`,
+  `ObservationIn.prev` from `PrevResult` (`Done` to `StepResult::Done`, `Refused`, `NotRun`; the
+  other `PrevResult`s map to `Refused` with their words), and the `DropReason` mirror
+  (`cua_step.rs:dropped_reason`, `porter-infer/src/cua.rs`) is unchanged. `StepOutcome::Repair`
+  means one more `provider.turn` with the returned request.
+- `Target::Centre` and `DropReason::BadArgument` (F2 notes) are still the porter-side items.
+- `CodecError` has no porter call site.
 
 ## Open
 

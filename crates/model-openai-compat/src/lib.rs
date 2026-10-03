@@ -19,8 +19,8 @@ mod quirks;
 mod request;
 
 pub use audio::{
-    AudioCodecError, MultipartBody, OpenAiSpeech, PcmDecoder, SpeechFlavor, decode_transcription,
-    encode_speech_request, encode_transcription,
+    AudioCodecError, KOKORO_FORMAT, MultipartBody, OpenAiSpeech, PcmDecoder, SpeechFlavor,
+    decode_transcription, encode_speech_request, encode_transcription,
 };
 pub use codec::{Flavor, OpenAiCodec, RequestJson};
 pub use decode::StreamDecoder;

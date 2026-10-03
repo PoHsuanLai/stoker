@@ -21,10 +21,10 @@ trait), section 6 (copy the recipe).
 | `vision-prep` | `ResizeRule`, `fit`, `image_tokens`, `FrameMap`, `RawFrame`, `prepare` (feature `pixels`) | none; `pixels` is CPU only |
 | `model-provider` | `TurnRequest`, `Message`, `Part`, `ToolSpec`, `TurnEvent`, `TurnSink`, `Caps`, the `Provider` trait, `ProviderError`; the controls (`Sampling`, `ToolParallelism`, `EngineExtras`, `ThoughtSeal`, `Knob`); `embed` (`Embedder`, `EmbedTurn`, `EmbedRole`, `plan_batches`); `shape` (`Shape`, `Extract`, the schema, GBNF and regex conversions); `retry` (`RetryClass`, `next_wait`, `Retrying`); `sequence` (`check`); feature `testing`: `ScriptedProvider` | none |
 | `cua-parse` | `parse_text`, `parse_tool_calls`, `Parsed`, `Dropped`, `ParseLimits` | none |
-| `cua-vendors` | the `WireCodec` trait and one codec per `WireDialect` (formerly `cua-wire`) | none |
-| `cua-session` | `CuaSession`: history window, prompt assembly, parse with one repair, mapping to window space | none |
+| `cua-vendors` | the `WireCodec` trait and one codec per `WireDialect` (formerly `cua-wire`): tool declarations, decoders and result encoders for the Anthropic, OpenAI and Gemini computer-use tools | none |
+| `cua-session` | `CuaSession`: history window, prompt assembly (`prompts/`), parse with one repair, mapping to window space; `TurnSettings`, `TranscriptSink` | none |
 | `model-replay` | cassette format, `ReplayProvider`, `RecordingProvider` over a `CassetteSink`; `wire`: wire cassettes recorded and replayed at the `Transport` seam (`RecordingTransport`, `ReplayTransport`, `ChunkPlan`); `check_sequence`; `speech`: speech cassettes (audio as digests), `SpeechReplay`, `RecordingSpeech` | an injected sink |
-| `model-catalog` | `ModelEntry` (chat caps and `SamplingDefaults`, or the `speech` table), `EngineProfile`, `parse_entry`, `merge_catalogs`; the shipped `catalog/*.toml` | none |
+| `model-catalog` | `ModelEntry` (chat caps and `SamplingDefaults`, or the `speech` table, or the `embed` table), `EngineProfile`, `parse_entry`, `merge_catalogs`; the shipped `catalog/*.toml` | none |
 | `engine-supervisor` | the pure `step` and `budget`; `command` (catalog entry to `UnitSpec`); the seams `EngineHost`, `ReadyProbe`, `GpuProbe`; feature `testing`: fakes | none; the daemon fills the seams |
 | `model-http` | `HttpEndpoint` (with `Timeouts` and `ExtraHeader`s), `HttpTarget` (Tcp, Unix, Tls), `AuthHeader`, the pure `SseDecoder` and `NdjsonDecoder`, `ResponseHead`, `BodySink` (head, then chunks), `Exchange`, the `Transport` seam and `HttpClient: Transport` (hyper over TCP and Unix sockets, behind the `hyper` feature) | yes (the transport) |
 | `model-wire` | the wire half of an endpoint: `ChatCodec`, `ChatDecoder`, `EmbedCodec`, `ErrorWire`, `CodecError`, and `Driver<C, T>`, the `Provider` (and `Embedder`) made of a codec and a transport | none (pure over the `Transport` trait) |
@@ -87,16 +87,16 @@ stoker.
 | --- | --- |
 | `cua-action` | `space` < `geometry`, `target`, `text`, `keys` < `dialect`, `action` |
 | `vision-prep` | `rule` < `frame_map` < `pixels` |
-| `model-provider` | `units`, `ids` < `control`, `request` < `caps`, `event` < `provider` < `embed`, `shape`, `sequence` < `retry` < `scripted` (feature `testing`) |
+| `model-provider` | `units`, `ids` < `control`, `request` < `caps`, `event` < `provider` < `embed`, `shape` (`check`, `gbnf`, `pattern`, `schema`, `from_schema`), `sequence` < `retry` < `scripted` (feature `testing`) |
 | `cua-parse` | `limits` < `outcome` < `common`, `scan`, `chord` < `ui_tars`, `tools` < `parse` |
-| `cua-vendors` | `step_result` < `codec` |
-| `cua-session` | `model` < `session` |
+| `cua-vendors` | `step_result`, `args`, `safety`, `results` < `anthropic`, `openai`, `gemini` < `codec` |
+| `cua-session` | `model`, `history`, `prompt`, `reply`, `window`, `transcript` < `session` |
 | `model-replay` | `print` < `cassette` < `sequence` < `provider`, `speech`, `wire` |
 | `model-catalog` | `engine`, `entry` < `parse` |
 | `engine-supervisor` | `state` < `unit`, `budget` < `step` < `host` < `fakes` (feature `testing`) |
 | `model-http` | `target`, `auth`, `head` < `sse`, `ndjson` < `client` < `exchange` < `hyper_client` (feature `hyper`) |
 | `model-wire` | `codec` < `driver` |
-| `model-extract` | `mode` < `session` |
+| `model-extract` | `mode` < `session` < `shaped` |
 | `genai-names` | `lib` |
 | `model-openai-compat` | `quirks`, `codec` < `provider`; `audio` (`codec` < `provider`) |
 | `speech-provider` | `audio`, `text` < `vad`, `stt`, `tts`, `caps` < `host_wire` < `testing` (feature `testing`) |
@@ -263,8 +263,8 @@ on; a change is an edit of SPEC.md first. Every `todo!()` is listed in `FINDINGS
 | `vision-prep`: types and serde | built, tested (`fit` against the reference `smart_resize`, the map tables and proptest, `prepare` with the `pixels` feature) |
 | `model-provider`: every type, `JsonText`, `ToolName`, `ImageBytes`, `ScriptedProvider` | built, tested |
 | `cua-parse`: types and limits | built, tested (UiTars15, QwenComputerUse and a provisional Holo31; `never_panics` proptest; nightly fuzz targets in `crates/cua-parse/fuzz`) |
-| `cua-vendors`: trait, enum, `StepResult` | built; the codec bodies stubbed |
-| `cua-session`: types, `begin` | built; `request`, `absorb` stubbed |
+| `cua-vendors`: trait, enum, `StepResult`, the four codecs | built, tested (doc examples, stop-at-first-failure, safety only adds, a total-decoding proptest); no cloud backend calls them yet |
+| `cua-session`: types, `begin`, `request`, `absorb`, `absorb_for` | built, tested (history window, one repair, mapping, vendor wire history, wire-cassette runs of Holo, Qwen and UI-TARS); the Holo and Qwen schemas are ours until a recorded step |
 | `model-replay`: cassette format (engine stamp, context sizes, speech caps, interaction id and hash, `Strict` mode), round trip; wire cassette format, `RecordingTransport` and `ReplayTransport` | built, tested (SSE and NDJSON recordings under every chunking); the providers, `RequestPrint::{of, hash}`, `check_sequence`, `Cassette::check_sequences` per their F1 state |
 | `model-catalog`: types, `parse_entry`, `merge_catalogs`, `VramEstimate::need`, `gpu_need`, `SamplingDefaults`, `holo-3.1-4b`, the five speech entries | built, tested |
 | `engine-supervisor`: types, `Supervisor::new`, config defaults, fakes, `step`, `budget`, `command` | built, tested (the lifecycle table, the budget table with the in-turn window, `command` for vLLM, llama-server, the speech host and Kokoro) |
@@ -273,9 +273,9 @@ on; a change is an edit of SPEC.md first. Every `todo!()` is listed in `FINDINGS
 | `model-extract`: `ExtractMode`, `ToolsPresent`, `ExtractSession`, `Extracted`, `ExtractFailure`, `choose`, `request`, `absorb` | built, tested |
 | `genai-names`: every name, `Operation`, `Finish` | built, tested (names are values, so there is no stub) |
 | `model-provider` amendment: `Sampling`, `EngineExtras`, `Knob`, `ThoughtSeal`, the `embed`, `shape`, `retry` and `sequence` types, `OutputShape::{Gbnf, Choice}`, `Constraint::{Gbnf, Choice}`, `ProviderError::Server`, `TurnUsage.cached`, `ModelInfo.{loaded_context, trained_context}` | built, round-trip and pinned-JSON tested; `plan_batches`, `EmbedEnd::check`, the `Shape` conversions and checker, `retry_class`, `next_wait`, `Retrying`, `sequence::check` stubbed |
-| `model-openai-compat`: types, `Flavor::quirks`, `OpenAiCodec` (`encode_request`, `encode`, `classify`, `describe`, `parse_models`, `encode_embed`, `decode_embed`), `StreamDecoder` | built, tested (golden bodies, the flavor table, error classes, wire cassettes under every chunking, one loopback-socket run of the whole stack); `audio` types and signatures only, every body stubbed |
-| `speech-provider`: every type, the checked names, `AudioChunk::{samples, duration}`, the host framing | built, tested (round trips, pinned JSON, redaction, duration table); the `testing` fakes' bodies stubbed |
-| `speech-vad`: types, defaults | built, tested; `level_of`, `EnergyGate`, `Framer::push`, `endpoint` stubbed |
+| `model-openai-compat`: types, `Flavor::quirks`, `OpenAiCodec` (`encode_request`, `encode`, `classify`, `describe`, `parse_models`, `encode_embed`, `decode_embed`), `StreamDecoder` | built, tested (golden bodies, the flavor table, error classes, wire cassettes under every chunking, one loopback-socket run of the whole stack); the `audio` codec (`encode_speech_request`, `encode_transcription`, `decode_transcription`, `PcmDecoder`) is built and tested; `OpenAiSpeech` is stubbed (it needs a multipart POST) |
+| `speech-provider`: every type, the checked names, `AudioChunk::{samples, duration}`, the host framing, the `testing` fakes | built, tested (round trips, pinned JSON, redaction, duration table, the fakes' scripts) |
+| `speech-vad`: types, defaults, `level_of`, `EnergyGate`, `Framer::push`, `endpoint` | built, tested (level rows, gate table, framer proptest, endpoint table, the chain over synthetic audio) |
 | `speech-host-client`: types | built; both trait bodies stubbed |
 | `speech-vad-silero`, `speech-host` | skeletons (excluded from the workspace); every body stubbed |
 | `model-replay::speech`: cassette format, round trip | built, tested; the prints, `SpeechReplay` and `RecordingSpeech` stubbed |

@@ -6,7 +6,7 @@ mod codec;
 mod provider;
 
 pub use codec::{
-    AudioCodecError, MultipartBody, PcmDecoder, SpeechFlavor, decode_transcription,
+    AudioCodecError, KOKORO_FORMAT, MultipartBody, PcmDecoder, SpeechFlavor, decode_transcription,
     encode_speech_request, encode_transcription,
 };
 pub use provider::OpenAiSpeech;
