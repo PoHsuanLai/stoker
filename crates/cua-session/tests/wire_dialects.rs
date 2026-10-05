@@ -33,7 +33,8 @@ fn the_history_is_real_messages_and_the_results_lead_the_next_turn() {
     );
 
     let reply = tool_use("left_click", r#"{"coordinate":[100,50]}"#, "toolu_1");
-    let (s, outcome) = s.absorb_for(&first, reply, &m);
+    let mut s = s;
+    let outcome = s.absorb_for(&first, reply, &m);
     let StepOutcome::Actions { actions, .. } = outcome else {
         panic!("actions")
     };
@@ -55,7 +56,7 @@ fn the_history_is_real_messages_and_the_results_lead_the_next_turn() {
     assert_eq!(check_sequence(&second.messages), Ok(()));
     // The first frame is still there (history of one frame), then it ages out.
     assert!(matches!(&second.messages[0].parts.last(), Some(Part::Image(i)) if *i == frame("f0")));
-    let (s, _) = s.absorb_for(&second, tool_use("type", r#"{"text":"x"}"#, "toolu_2"), &m);
+    s.absorb_for(&second, tool_use("type", r#"{"text":"x"}"#, "toolu_2"), &m);
     let mut o = obs(2);
     o.prev = vec![StepResult::Done(ToolCallId("toolu_2".into()))];
     let third = s.request(&o, &m, frame("f2"));
@@ -78,7 +79,7 @@ fn a_reply_of_text_alone_finishes_the_run() {
     let mut reply = calls(&[]);
     reply.text = "The file is saved.".into();
     reply.end.stop = StopReason::EndTurn;
-    let (_, outcome) = s.clone().absorb_for(&sent, reply, &m);
+    let outcome = s.clone().absorb_for(&sent, reply, &m);
     let StepOutcome::Actions { actions, .. } = outcome else {
         panic!("actions")
     };
@@ -95,7 +96,7 @@ fn a_reply_of_text_alone_finishes_the_run() {
         (FinishOutcome::Done, "The file is saved.")
     );
     // Nothing at all is not a finish.
-    let (_, outcome) = s.absorb_for(&sent, calls(&[]), &m);
+    let outcome = s.clone().absorb_for(&sent, calls(&[]), &m);
     assert!(matches!(outcome, StepOutcome::Repair(_)));
 }
 
@@ -109,7 +110,7 @@ fn gemini_needs_a_grid_map_and_decodes_into_it() {
     let mut c = call("click", r#"{"x":500,"y":250}"#);
     c.id = ToolCallId("g1".into());
     reply.calls = vec![c];
-    let (_, outcome) = s.absorb_for(&sent, reply, &m);
+    let outcome = s.clone().absorb_for(&sent, reply, &m);
     let StepOutcome::Actions {
         actions, dropped, ..
     } = outcome

@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use model_provider::{Caps, EmbedCaps, Sampling, Tokens};
+use model_provider::{Caps, EmbedCaps, Reasoning, Sampling, Tokens};
 use serde::{Deserialize, Serialize};
 use speech_provider::{SpeechCaps, SpeechDir};
 
@@ -125,6 +125,34 @@ impl CatalogKind {
 pub struct SamplingDefaults {
     pub reasoning_on: Sampling,
     pub reasoning_off: Sampling,
+    /// What the model does when a request says nothing about reasoning (`Reasoning::EngineDefault`:
+    /// the codec sends no switch, so the model's chat template decides). Written in every chat
+    /// entry so that the sampling a caller takes for that case is the one the model really runs
+    /// with.
+    pub reasoning_default: ReasoningDefault,
+}
+
+/// Whether a model thinks when nothing asks it to or not to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReasoningDefault {
+    On,
+    Off,
+}
+
+impl SamplingDefaults {
+    /// The sampling for a request's reasoning setting: `On(_)` takes `reasoning_on`, `Off` takes
+    /// `reasoning_off`, and `EngineDefault` takes whichever the model's `reasoning_default` names.
+    pub fn for_reasoning(&self, reasoning: Reasoning) -> &Sampling {
+        match reasoning {
+            Reasoning::On(_) => &self.reasoning_on,
+            Reasoning::Off => &self.reasoning_off,
+            Reasoning::EngineDefault => match self.reasoning_default {
+                ReasoningDefault::On => &self.reasoning_on,
+                ReasoningDefault::Off => &self.reasoning_off,
+            },
+        }
+    }
 }
 
 /// The file's serde form: the chat capability fields sit at the top level beside the rest, the

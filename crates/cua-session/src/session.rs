@@ -49,6 +49,13 @@ impl CuaSession {
         CuaSession { settings, ..self }
     }
 
+    /// Gives the repair budget back in full. A caller whose step failed after a repair (the model
+    /// went away mid-step) calls it so the same step can be asked again with its whole budget; a
+    /// step that finishes refills the budget itself.
+    pub fn refill_repairs(&mut self) {
+        self.repairs_left = self.profile.repair;
+    }
+
     pub fn repairs_left(&self) -> RepairBudget {
         self.repairs_left
     }
@@ -194,10 +201,10 @@ impl CuaSession {
     }
 
     /// Parses the reply, maps its points into window space and pushes the step into the history,
-    /// as [`absorb_for`](Self::absorb_for) does, except that the session has not been told which
+    /// in place (the caller keeps one session and no copy), as [`absorb_for`](Self::absorb_for) does, except that the session has not been told which
     /// request the reply answers: a repair is built from the session's own state and carries no
     /// frame, and the step is remembered without its frame. Prefer `absorb_for`.
-    pub fn absorb(self, reply: TurnTranscript, map: &FrameMap) -> (CuaSession, StepOutcome) {
+    pub fn absorb(&mut self, reply: TurnTranscript, map: &FrameMap) -> StepOutcome {
         let obs = ObservationIn::new(StepIndex(self.taken), None, Vec::new(), MaskedRegions(0));
         let sent = self.build(&obs, map, None);
         self.absorb_for(&sent, reply, map)
@@ -212,11 +219,11 @@ impl CuaSession {
     /// was wrong and never repeating the reply); with none left it is `Unparseable`, or the
     /// refused actions with their reasons. Either way the step counts and is remembered.
     pub fn absorb_for(
-        mut self,
+        &mut self,
         sent: &TurnRequest,
         reply: TurnTranscript,
         map: &FrameMap,
-    ) -> (CuaSession, StepOutcome) {
+    ) -> StepOutcome {
         let dialect = self.profile.dialect;
         let parsed = reply::parse(dialect, map.space, &reply, ParseLimits::default());
         let (fault, spent) = match parsed {
@@ -238,14 +245,11 @@ impl CuaSession {
                 } else {
                     let thought = thought.or_else(|| thought_of(&reply));
                     self.remember(sent, &reply, lines);
-                    return (
-                        self,
-                        StepOutcome::Actions {
-                            thought,
-                            actions: mapped,
-                            dropped,
-                        },
-                    );
+                    return StepOutcome::Actions {
+                        thought,
+                        actions: mapped,
+                        dropped,
+                    };
                 }
             }
             Err(error) if self.repairs_left.0 > 0 => (Fault::Unparsed(error), None),
@@ -255,11 +259,11 @@ impl CuaSession {
             None => {
                 self.repairs_left = RepairBudget(self.repairs_left.0.saturating_sub(1));
                 let repair = self.repair(sent, &reply, &fault);
-                (self, StepOutcome::Repair(repair))
+                StepOutcome::Repair(repair)
             }
             Some(error) => {
                 self.remember(sent, &reply, Vec::new());
-                (self, StepOutcome::Unparseable(error))
+                StepOutcome::Unparseable(error)
             }
         }
     }

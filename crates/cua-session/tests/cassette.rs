@@ -166,8 +166,7 @@ fn run<T: Transport>(
         loop {
             let mut sink = TranscriptSink::new();
             let end = block_on(driver.turn(&request, &mut sink))?;
-            let (next, outcome) = session.absorb_for(&request, sink.finish(end), map);
-            session = next;
+            let outcome = session.absorb_for(&request, sink.finish(end), map);
             match outcome {
                 StepOutcome::Actions { actions, .. } => {
                     steps.push(Step::Acted(actions));

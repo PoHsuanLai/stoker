@@ -99,13 +99,28 @@ fn missing_field_refuses() {
 
 #[test]
 fn a_chat_entry_writes_its_sampling_defaults() {
-    use model_provider::{Count, Knob, Milli};
+    use model_catalog::ReasoningDefault;
+    use model_provider::{Count, Effort, Knob, Milli, Reasoning};
     let entry = parse_entry(&holo_text()).unwrap();
     let sampling = entry.sampling.unwrap();
     assert_eq!(sampling.reasoning_on.temperature, Milli(600));
     assert_eq!(sampling.reasoning_on.top_k, Knob::Set(Count(20)));
     assert_eq!(sampling.reasoning_off.temperature, Milli(0));
     assert_eq!(sampling.reasoning_off.top_p, Knob::Off);
+    assert_eq!(sampling.reasoning_default, ReasoningDefault::On);
+    // Nothing said about reasoning takes the sampling of what the model does by itself.
+    assert_eq!(
+        sampling.for_reasoning(Reasoning::EngineDefault),
+        &sampling.reasoning_on
+    );
+    assert_eq!(
+        sampling.for_reasoning(Reasoning::Off),
+        &sampling.reasoning_off
+    );
+    assert_eq!(
+        sampling.for_reasoning(Reasoning::On(Effort::Low)),
+        &sampling.reasoning_on
+    );
 
     let without: String = holo_text()
         .lines()
@@ -116,13 +131,19 @@ fn a_chat_entry_writes_its_sampling_defaults() {
         parse_entry(&without),
         Err(CatalogError::ChatRoleWithoutSampling)
     );
+
+    let undecided = holo_text().replace(", reasoning_default = \"on\"", "");
+    assert!(matches!(
+        parse_entry(&undecided),
+        Err(CatalogError::Toml(_))
+    ));
 }
 
 #[test]
 fn a_speech_entry_may_not_write_sampling() {
     let text = std::fs::read_to_string(catalog_dir().join("kokoro-82m.toml")).unwrap();
     let with = format!(
-        "{}\nsampling = {{ reasoning_on = {{ temperature = 0, top_p = {{ kind = \"off\" }}, top_k = {{ kind = \"off\" }}, min_p = {{ kind = \"off\" }}, repeat_penalty = {{ kind = \"off\" }}, seed = {{ kind = \"off\" }} }}, reasoning_off = {{ temperature = 0, top_p = {{ kind = \"off\" }}, top_k = {{ kind = \"off\" }}, min_p = {{ kind = \"off\" }}, repeat_penalty = {{ kind = \"off\" }}, seed = {{ kind = \"off\" }} }} }}",
+        "{}\nsampling = {{ reasoning_on = {{ temperature = 0, top_p = {{ kind = \"off\" }}, top_k = {{ kind = \"off\" }}, min_p = {{ kind = \"off\" }}, repeat_penalty = {{ kind = \"off\" }}, seed = {{ kind = \"off\" }} }}, reasoning_off = {{ temperature = 0, top_p = {{ kind = \"off\" }}, top_k = {{ kind = \"off\" }}, min_p = {{ kind = \"off\" }}, repeat_penalty = {{ kind = \"off\" }}, seed = {{ kind = \"off\" }} }}, reasoning_default = \"off\" }}",
         text.split("[[engine]]").next().unwrap().trim_end()
     ) + "\n[[engine]]"
         + text.split("[[engine]]").nth(1).unwrap();

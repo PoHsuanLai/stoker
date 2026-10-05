@@ -118,7 +118,8 @@ fn a_vendor_wire_keeps_the_tree_apart_and_does_not_replay_an_old_one() {
     let parts = &first.messages[0].parts;
     assert!(matches!(&parts[parts.len() - 2], Part::Text(t) if t.starts_with(HEADER)));
     assert!(matches!(parts.last(), Some(Part::Image(_))));
-    let (s, _) = s.absorb_for(
+    let mut s = s;
+    s.absorb_for(
         &first,
         tool_use("left_click", r#"{"coordinate":[10,10]}"#, "t1"),
         &m,
@@ -164,7 +165,7 @@ fn a_vendor_wire_reads_the_safety_signals_and_the_other_dialects_do_not() {
         let sent = s.request(&obs(0), &m, frame("f"));
         let mut reply = tool_use("left_click", click, "t1");
         reply.safety = vec![signal];
-        let StepOutcome::Actions { actions, .. } = s.absorb_for(&sent, reply, &m).1 else {
+        let StepOutcome::Actions { actions, .. } = s.clone().absorb_for(&sent, reply, &m) else {
             panic!("actions")
         };
         actions
@@ -189,7 +190,8 @@ fn a_vendor_wire_reads_the_safety_signals_and_the_other_dialects_do_not() {
     let sent = s.request(&obs(0), &map(grid()), frame("f"));
     let mut reply = calls(&[r#"{"action":"left_click","coordinate":[500,250]}"#]);
     reply.safety = vec![SafetySignal::Blocked("x".into())];
-    let StepOutcome::Actions { actions, .. } = s.absorb_for(&sent, reply, &map(grid())).1 else {
+    let StepOutcome::Actions { actions, .. } = s.clone().absorb_for(&sent, reply, &map(grid()))
+    else {
         panic!("actions")
     };
     assert!(matches!(&actions[..], [CuaAction::Click { .. }]));
@@ -249,13 +251,11 @@ fn holos_profile_keeps_two_earlier_frames_and_a_prompt_never_holds_more_than_thr
         let request = s.request(&obs(step), &m, frame(&format!("f{step}")));
         assert_eq!(images(&request), step.min(2) as usize + 1, "step {step}");
         assert_eq!(check_sequence(&request.messages), Ok(()));
-        s = s
-            .absorb_for(
-                &request,
-                calls(&[r#"{"action":"left_click","coordinate":[500,250]}"#]),
-                &m,
-            )
-            .0;
+        s.absorb_for(
+            &request,
+            calls(&[r#"{"action":"left_click","coordinate":[500,250]}"#]),
+            &m,
+        );
     }
 }
 

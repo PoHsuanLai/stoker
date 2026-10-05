@@ -753,3 +753,39 @@ transcript), where it builds the CUA profile (`CuaProfile::for_model` with
   capability fields sit at the top level beside `id` and `label`.
 - The cassette file is JSON Lines: a header line, then one `Interaction` per line; a wire cassette (`<name>.wire.jsonl`) is the same header and one `WireExchange` per line.
 - Nothing here records, downloads or starts anything; the dev scripts that do are run by hand.
+
+## Fill F4: stoker (2026-10-05)
+
+Lane `f4-stoker`. No `todo!()` removed (7 remain, all in the speech crates, which wait for voice).
+Asks 65, 66, 99, 100 and the stoker half of 122 were already closed in W4 and W5 (the table
+above); this lane checked each against the code and tests and found no gap.
+
+### Interface asks closed
+
+| Ask | What changed |
+| --- | --- |
+| 141 | `CuaSession::absorb_for(&mut self, sent, reply, map) -> StepOutcome` and `absorb(&mut self, reply, map) -> StepOutcome` change the session in place; the caller keeps one session and no copy. `refill_repairs(&mut self)` gives the repair budget back when a step fails after a repair. `StepNote` keeps `NoteFrom` on the porter side (stoker's `StepNote` is the one line of text) |
+| 142 | `SamplingDefaults.reasoning_default: ReasoningDefault` (`on` or `off`, written in every chat entry) and `SamplingDefaults::for_reasoning(Reasoning) -> &Sampling`: `On(_)` takes `reasoning_on`, `Off` takes `reasoning_off`, `EngineDefault` takes the one the model's default names. `holo-3.1-4b` says `on` (Qwen3.5 templates think unless `enable_thinking` is false; a proposal the first recorded step confirms) |
+
+### Still open for spike S1 (ask 68, needs a real engine)
+
+- request spellings: `chat_template_kwargs.enable_thinking`, `reasoning_effort`, OpenRouter's
+  `reasoning: {effort}`, `parallel_tool_calls`, `top_k`/`min_p`/`seed`, `repetition_penalty` vs
+  `repeat_penalty`, `max_tokens`; the `shape_with_tools` rows in `quirks.rs`;
+- llama-server `--host <x>.sock` taking a Unix socket;
+- Kokoro-FastAPI's module path `api.src.main:app` and `--uds`;
+- `command`'s `memory_max` (4096 MiB plus weights and overhead) and the sandbox's cache paths;
+- `reasoning_default` and the `reasoning_on`/`reasoning_off` sampling of Holo-3.1-4B, `GridMax(1000)`;
+- the speech request spellings (record with `dev/record-speech.sh`).
+
+### Porter call sites that follow (porter was not edited)
+
+- `crates/inferd/src/cua_step.rs` `step`: take `session: &mut CuaSession`, call
+  `session.absorb_for(&sent, tee.finish(end), &map)` (it returns the outcome), drop the
+  `let (next, outcome)` and `session = next`; `Unparseable` no longer needs `kept` (the session is
+  already updated). On a failure after a repair call `session.refill_repairs()`.
+- `crates/inferd/src/cua_run.rs` `step`: keep `self.session` as the one session
+  (`get_or_insert_with` on `cua_step::open`), pass `&mut` to `cua_step::step`; the `.clone()` and
+  the `Failed.kept` box go.
+- `bridge/request.rs` `default_sampling`: replace the `EngineDefault` arm by
+  `sampling.for_reasoning(reasoning)` and send `sp::Reasoning::EngineDefault` unchanged.
