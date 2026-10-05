@@ -27,6 +27,20 @@ pub enum Licence {
     Proprietary,
 }
 
+/// The model family a weights set belongs to (`qwen`, `whisper`): lowercase, the same string for
+/// every size and fine-tune of one lineage. A router uses it for the "a reviewer of a different
+/// family" rule; it says nothing about quality.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Family(pub String);
+
+/// An estimate, in whole seconds, of how long a cold engine takes from start to ready (weights
+/// read, engine warm-up). It is a figure written by hand from the engine kind, not a measurement;
+/// a router only compares it to other estimates and never treats it as a promise.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ColdStartEstimateS(pub u16);
+
 /// A Hugging Face repository, `Org/Name`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -169,6 +183,9 @@ pub struct ModelEntry {
     pub id: CatalogId,
     pub label: String,
     pub licence: Licence,
+    pub family: Family,
+    /// An estimate, not a measurement (see `ColdStartEstimateS`).
+    pub cold_start_estimate_s: ColdStartEstimateS,
     pub source: WeightSource,
     pub vram: VramEstimate,
     pub roles: BTreeSet<CatalogKind>,

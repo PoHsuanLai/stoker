@@ -10,6 +10,8 @@
 id = "kokoro-82m"
 label = "Kokoro 82M"
 licence = { kind = "open", v = "Apache-2.0" }
+family = "kokoro"
+cold_start_estimate_s = 10
 source = { kind = "hugging_face", v = { repo = "hexgrad/Kokoro-82M", revision = "f3ff3571791e39611d31c381e3a41a3af07b4987" } }
 vram = { weights_mib = 0, kv_per_1k_ctx_mib = 0, overhead_mib = 0 }
 roles = ["speech_out"]

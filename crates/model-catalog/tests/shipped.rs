@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use cua_action::{CuaDialect, GridMax, ModelSpace, ToolDialect};
 use model_catalog::{
-    CatalogError, CatalogId, CatalogKind, EngineKind, GpuNeed, MiB, ModelEntry, VramEstimate,
-    WeightFiles, merge_catalogs, parse_entry,
+    CatalogError, CatalogId, CatalogKind, ColdStartEstimateS, EngineKind, Family, GpuNeed, MiB,
+    ModelEntry, VramEstimate, WeightFiles, merge_catalogs, parse_entry,
 };
 use model_provider::{CuaSupport, Support, Tokens};
 use speech_provider::{
@@ -411,4 +411,38 @@ fn speech_slugs_are_stable() {
         serde_json::to_string(&WeightFiles::SherpaDir).unwrap(),
         r#"{"kind":"sherpa_dir"}"#
     );
+}
+
+#[test]
+fn every_entry_names_its_family_and_a_cold_start_estimate() {
+    for (id, family, secs) in [
+        ("holo-3.1-4b", "qwen", 180),
+        ("kokoro-82m", "kokoro", 10),
+        ("whisper-large-v3", "whisper", 90),
+        ("whisper-large-v3-turbo", "whisper", 60),
+        ("breeze-asr-25", "whisper", 90),
+        ("nemotron-3.5-asr-streaming", "nemotron", 5),
+    ] {
+        let entry = shipped(id);
+        assert_eq!(entry.family, Family(family.into()), "{id}");
+        assert_eq!(
+            entry.cold_start_estimate_s,
+            ColdStartEstimateS(secs),
+            "{id}"
+        );
+        assert_eq!(entry.family.0, entry.family.0.to_lowercase(), "{id}");
+    }
+}
+
+#[test]
+fn a_file_without_family_or_estimate_is_refused() {
+    for line in ["family = \"qwen\"\n", "cold_start_estimate_s = 180\n"] {
+        let text = holo_text();
+        assert!(text.contains(line));
+        let Err(CatalogError::Toml(msg)) = parse_entry(&text.replace(line, "")) else {
+            panic!("a missing field must be refused");
+        };
+        let field = line.split(' ').next().unwrap();
+        assert!(msg.contains(field), "{msg}");
+    }
 }

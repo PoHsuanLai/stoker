@@ -13,6 +13,8 @@
 id = "nemotron-3.5-asr-streaming"
 label = "Nemotron Speech 3.5"
 licence = { kind = "open", v = "OpenMDW-1.1" }
+family = "nemotron"
+cold_start_estimate_s = 5
 source = { kind = "hugging_face", v = { repo = "csukuangfj2/sherpa-onnx-nemotron-3.5-asr-streaming-0.6b-560ms-int8-2026-06-11", revision = "ab43d895f5985b1bbab8b6eac8607fcdc05343f3" } }
 vram = { weights_mib = 0, kv_per_1k_ctx_mib = 0, overhead_mib = 0 }
 roles = ["speech_in"]

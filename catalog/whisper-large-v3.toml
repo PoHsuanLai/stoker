@@ -9,6 +9,8 @@
 id = "whisper-large-v3"
 label = "Whisper large-v3"
 licence = { kind = "open", v = "Apache-2.0" }
+family = "whisper"
+cold_start_estimate_s = 90
 source = { kind = "hugging_face", v = { repo = "openai/whisper-large-v3", revision = "06f233fe06e710322aca913c1bc4249a0d71fce1" } }
 vram = { weights_mib = 2960, kv_per_1k_ctx_mib = 0, overhead_mib = 1500 }
 roles = ["speech_in"]

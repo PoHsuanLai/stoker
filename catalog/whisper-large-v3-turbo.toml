@@ -9,6 +9,8 @@
 id = "whisper-large-v3-turbo"
 label = "Whisper large-v3 turbo"
 licence = { kind = "open", v = "MIT" }
+family = "whisper"
+cold_start_estimate_s = 60
 source = { kind = "hugging_face", v = { repo = "openai/whisper-large-v3-turbo", revision = "41f01f3fe87f28c78e2fbf8b568835947dd65ed9" } }
 vram = { weights_mib = 1550, kv_per_1k_ctx_mib = 0, overhead_mib = 1500 }
 roles = ["speech_in"]

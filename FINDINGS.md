@@ -789,3 +789,15 @@ above); this lane checked each against the code and tests and found no gap.
   the `Failed.kept` box go.
 - `bridge/request.rs` `default_sampling`: replace the `EngineDefault` arm by
   `sampling.for_reasoning(reasoning)` and send `sp::Reasoning::EngineDefault` unchanged.
+
+## Fill F4: routing facts in the catalog (2026-10-06)
+
+Lane `f4-routing`. `ModelEntry` gains two written-in-full fields for the router: `family`
+(lowercase lineage, `qwen` for Holo, `whisper` for the three Whisper-lineage speech entries) and
+`cold_start_estimate_s` (whole seconds from cold to ready).
+
+| Item | Closes when |
+| --- | --- |
+| `cold_start_estimate_s` is an estimate written by hand from the engine kind (vLLM 60 to 180, CPU engines 5 to 10), not a measurement | an engine-fill run records each model's real start time and the entries are corrected |
+| `family` for `breeze-asr-25` is `whisper` (a Whisper-large-v2 fine-tune by its card) | the first reviewer rule that compares families reads it; correct the entry if the rule needs a finer lineage |
+| `engine-supervisor::budget` already answers the speculative question (who would be unloaded to load X now, and never an engine within `probe_every` of `now`), so no new query was added; inferd calls it from `swap::swap_cost` | standing |

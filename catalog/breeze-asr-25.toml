@@ -7,6 +7,8 @@
 id = "breeze-asr-25"
 label = "Breeze ASR 25"
 licence = { kind = "open", v = "Apache-2.0" }
+family = "whisper"
+cold_start_estimate_s = 90
 source = { kind = "hugging_face", v = { repo = "MediaTek-Research/Breeze-ASR-25", revision = "cffe7ccb404d025296a00758d0a33468bec3a9d0" } }
 vram = { weights_mib = 2960, kv_per_1k_ctx_mib = 0, overhead_mib = 1500 }
 roles = ["speech_in"]

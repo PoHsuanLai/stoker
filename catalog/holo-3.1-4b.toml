@@ -19,6 +19,8 @@
 id = "holo-3.1-4b"
 label = "Holo 3.1 4B"
 licence = { kind = "open", v = "Apache-2.0" }
+family = "qwen"
+cold_start_estimate_s = 180
 source = { kind = "hugging_face", v = { repo = "Hcompany/Holo-3.1-4B", revision = "8c88265a5a159bfd1492db9243733dd2e6e04a6e" } }
 vram = { weights_mib = 10400, kv_per_1k_ctx_mib = 32, overhead_mib = 1500 }
 roles = ["llm", "computer_use"]
