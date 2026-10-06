@@ -13,11 +13,11 @@ mod session;
 use std::path::PathBuf;
 
 use model_provider::ProviderError;
-use tokio::net::UnixStream;
 use serde::{Deserialize, Serialize};
 use speech_provider::{
     AudioSource, SpeechModelInfo, SpeechToText, SttEnd, SttRequest, TranscriptSink,
 };
+use tokio::net::UnixStream;
 
 /// The host's Unix socket.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -73,4 +73,3 @@ async fn connect(socket: &HostSocket) -> Result<UnixStream, ProviderError> {
         .await
         .map_err(|_| ProviderError::Unreachable)
 }
-

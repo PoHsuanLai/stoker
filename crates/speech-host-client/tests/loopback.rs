@@ -52,7 +52,10 @@ impl Conn {
 
     async fn send(&mut self, message: &HostOut) {
         let frame = encode_frame(message).expect("encodes");
-        self.0.write_all(&frame).await.expect("the client is listening");
+        self.0
+            .write_all(&frame)
+            .await
+            .expect("the client is listening");
     }
 
     async fn hello(&mut self) {
@@ -100,7 +103,9 @@ fn model() -> SpeechModelInfo {
 fn request() -> SttRequest {
     SttRequest {
         model: ModelName("nemotron".to_owned()),
-        mode: SttMode::Streaming { chunk: AudioMs(160) },
+        mode: SttMode::Streaming {
+            chunk: AudioMs(160),
+        },
         lang: LangChoice::Prefer(vec![Lang::new("en").expect("a language tag")]),
         format: format(),
     }
@@ -314,7 +319,10 @@ async fn a_frame_that_is_not_the_vocabulary_is_unreadable() {
     let fake = fake(|mut conn| async move {
         conn.hello_and_begin().await;
         let body = br#"{"kind":"nonsense"}"#;
-        let mut frame = u32::try_from(body.len()).expect("fits").to_be_bytes().to_vec();
+        let mut frame = u32::try_from(body.len())
+            .expect("fits")
+            .to_be_bytes()
+            .to_vec();
         frame.extend_from_slice(body);
         conn.0.write_all(&frame).await.expect("write");
         let _ = conn.recv().await;
@@ -367,9 +375,7 @@ async fn a_dropped_client_cancels_and_closes_the_connection() {
     let client = fake.client.clone();
     let task = tokio::spawn(async move {
         let mut sink = Collect::all();
-        client
-            .transcribe(&request(), &mut Fed(rx), &mut sink)
-            .await
+        client.transcribe(&request(), &mut Fed(rx), &mut sink).await
     });
     seen_rx.await.expect("host saw the audio");
     task.abort();
