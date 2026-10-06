@@ -213,13 +213,21 @@ fn file_name(name: &str) -> String {
 
 /// `<hf_cache>/models--<org>--<name>`: the cache's directory for one repository.
 fn repo_dir(hf_cache: &Path, source: &WeightSource) -> PathBuf {
-    let WeightSource::HuggingFace { repo, .. } = source;
-    let parts: Vec<String> = repo.0.split('/').map(component).collect();
+    // A hosted entry has no weights and no engine, so no unit is ever built for it; a directory
+    // that cannot exist keeps the function total.
+    let name = match source {
+        WeightSource::HuggingFace { repo, .. } => repo.0.as_str(),
+        WeightSource::Hosted => "hosted/none",
+    };
+    let parts: Vec<String> = name.split('/').map(component).collect();
     hf_cache.join(format!("models--{}", parts.join("--")))
 }
 
 /// `<repo dir>/snapshots/<revision>`: one exact set of files.
 fn snapshot_dir(repo_dir: &Path, source: &WeightSource) -> PathBuf {
-    let WeightSource::HuggingFace { revision, .. } = source;
-    repo_dir.join("snapshots").join(component(&revision.0))
+    let revision = match source {
+        WeightSource::HuggingFace { revision, .. } => revision.0.as_str(),
+        WeightSource::Hosted => "none",
+    };
+    repo_dir.join("snapshots").join(component(revision))
 }

@@ -241,7 +241,9 @@ fn stays_inside(path: &std::path::Path) -> bool {
 #[test]
 fn a_repository_or_revision_cannot_leave_the_cache() {
     let mut holo = entry(HOLO);
-    let model_catalog::WeightSource::HuggingFace { repo, revision } = &mut holo.source;
+    let model_catalog::WeightSource::HuggingFace { repo, revision } = &mut holo.source else {
+        panic!("holo is a Hugging Face entry");
+    };
     repo.0 = "../../etc/passwd".into();
     revision.0 = "../../../root".into();
     let unit = command(&holo, &holo.engines[0], &paths(), &socket("x"));
@@ -325,7 +327,10 @@ fn command_is_pure_and_total_over_arbitrary_text() {
                 let model_catalog::WeightSource::HuggingFace {
                     repo: r,
                     revision: v,
-                } = &mut e.source;
+                } = &mut e.source
+                else {
+                    panic!("the test entry is a Hugging Face entry");
+                };
                 r.0 = repo;
                 v.0 = revision;
                 let profile = EngineProfile {
