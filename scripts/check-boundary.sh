@@ -42,6 +42,7 @@ RULES=(
   "speech-provider: $EFFECTS $PORTER $AUDIO_DEVICES $GPL_TTS"
   "speech-vad: $EFFECTS $PORTER $AUDIO_DEVICES $GPL_TTS"
   "speech-host-client: $IO_FORBIDDEN $PORTER $AUDIO_DEVICES $GPL_TTS"
+  "speech-host: $EFFECTS $PORTER $AUDIO_DEVICES $GPL_TTS"
 )
 fail=0
 
@@ -89,6 +90,7 @@ EDGES=(
   "speech-provider: model-provider"
   "speech-vad: speech-provider"
   "speech-host-client: model-provider speech-provider"
+  "speech-host: model-provider speech-provider"
 )
 for edge in "${EDGES[@]}"; do
   crate="${edge%%:*}"
@@ -112,7 +114,7 @@ done
 # `crates/`; it is not in the workspace's `exclude` list, which only names top-level crates.
 EXCLUDED=(
   "speech-vad-silero: speech-provider speech-vad"
-  "speech-host: speech-provider"
+  "speech-host-sherpa: model-provider speech-host speech-provider"
   "cua-parse/fuzz: cua-action cua-parse model-provider"
 )
 for entry in "${EXCLUDED[@]}"; do
