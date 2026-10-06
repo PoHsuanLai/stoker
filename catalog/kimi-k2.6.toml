@@ -1,0 +1,22 @@
+# Kimi K2.6, a hosted model reached through the providers below. Facts checked on 2026-10-06:
+# - Moonshot: https://platform.kimi.ai/docs/guide/kimi-k2-6-quickstart and https://platform.kimi.ai/docs/pricing/chat, read 2026-10-06: id kimi-k2.6, 256K (262,144) context, 32,768 max output, image input, tool use, $0.95 / $4.00 per MTok; base URL https://api.moonshot.ai/v1. The page does not mention structured output, so none is claimed.
+# - OpenRouter: https://openrouter.ai/api/v1/models listing, read 2026-10-06: id moonshotai/kimi-k2.6, context 262144, $0.00000095 / $0.000004 per token, tools listed (it lists a larger max completion, 235929; the smaller Moonshot figure is used).
+# - every field below is from those pages; prices are micro-USD per million tokens.
+# - image_in: the pages give no per-request image limits, so this claims one image, no resizing and the
+#   image's own pixels as its space: a floor, not a limit. text_out: reasoning is on by default or selectable;
+#   no sampling is written (the provider's defaults apply). licence: hosted only, the provider's terms.
+id = "kimi-k2.6"
+label = "Kimi K2.6"
+licence = { kind = "proprietary" }
+family = "kimi"
+cold_start_estimate_s = 0
+source = { kind = "hosted" }
+vram = { weights_mib = 0, kv_per_1k_ctx_mib = 0, overhead_mib = 0 }
+locality = { kind = "remote", v = { reach = [
+  { provider = "moonshot", model = "kimi-k2.6", price = { input_per_mtok = 950000, output_per_mtok = 4000000 }, wire = "open_ai_compat" },
+  { provider = "openrouter", model = "moonshotai/kimi-k2.6", price = { input_per_mtok = 950000, output_per_mtok = 4000000 }, wire = "open_ai_compat" },
+] } }
+inputs = ["text", "image"]
+outputs = ["text"]
+text_out = { tools = "native", structured = [], reasoning = "present", streaming = "present", context = 262144, max_output = 32768 }
+image_in = { per_prompt = 1, rule = { kind = "identity" }, space = { kind = "image" } }

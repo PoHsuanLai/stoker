@@ -12,16 +12,19 @@ mod file;
 mod legacy;
 mod modality;
 mod parse;
+mod reach;
 mod slot;
 mod view;
 
 pub use capabilities::{Capabilities, DetailTable, Side, TextOut};
 pub use engine::{EngineArg, EngineKind, EngineProfile, FileName, WeightFiles};
 pub use entry::{
-    CatalogId, CatalogKind, ColdStartEstimateS, Family, GitRevision, GpuNeed, HfRepo, Licence, MiB,
-    ModelEntry, ReasoningDefault, SamplingDefaults, Spdx, VramEstimate, WeightSource,
+    CatalogId, CatalogKind, ColdStartEstimateS, Family, GitRevision, GpuNeed, HfRepo, Licence,
+    Locality, MiB, MicroUsd, ModelEntry, Price, ProviderId, Reach, ReasoningDefault, RemoteModelId,
+    SamplingDefaults, Spdx, VramEstimate, WeightSource, Wire,
 };
 pub use file::EntryFile;
 pub use modality::{Modalities, Modality};
 pub use parse::{CatalogError, merge_catalogs, parse_entry};
-pub use slot::{Signature, Slot, fits, slot_members};
+pub use reach::reachable;
+pub use slot::{Signature, Slot, ToolNeed, fits, slot_members};

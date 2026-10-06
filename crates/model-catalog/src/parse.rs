@@ -2,7 +2,9 @@
 
 use crate::CatalogKind;
 use crate::file::EntryFile;
-use crate::{DetailTable, EngineKind, GpuNeed, Modality, ModelEntry, WeightFiles, check, legacy};
+use crate::{
+    DetailTable, EngineKind, GpuNeed, Locality, Modality, ModelEntry, WeightFiles, check, legacy,
+};
 
 /// Why a catalog file was refused.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -37,6 +39,10 @@ pub enum CatalogError {
     LlamaServerWithoutGguf,
     #[error("the `embed` table needs the embeddings role")]
     EmbedTableWithoutEmbeddingsRole,
+    #[error("a remote entry runs on the providers and lists no engine")]
+    RemoteWithEngines,
+    #[error("a remote entry lists no way to reach it")]
+    RemoteWithoutReach,
     #[error("the entry takes no input")]
     NoInputs,
     #[error("the entry gives no output")]
@@ -80,11 +86,16 @@ pub fn parse_entry(text: &str) -> Result<ModelEntry, CatalogError> {
 
 fn parse_new(text: &str) -> Result<ModelEntry, CatalogError> {
     let file: EntryFile = toml::from_str(text).map_err(|e| CatalogError::Toml(e.to_string()))?;
-    if file.engines.is_empty() {
-        return Err(CatalogError::NoEngine);
+    match (&file.locality, file.engines.is_empty()) {
+        (Locality::OnDevice, true) => return Err(CatalogError::NoEngine),
+        (Locality::Remote { .. }, false) => return Err(CatalogError::RemoteWithEngines),
+        (Locality::Remote { reach }, true) if reach.is_empty() => {
+            return Err(CatalogError::RemoteWithoutReach);
+        }
+        _ => {}
     }
     let capabilities = file.capabilities();
-    check::capabilities(&capabilities)?;
+    check::capabilities(&capabilities, &file.locality)?;
     check::narrowing(&capabilities, &file.engines)?;
     Ok(file.into_entry())
 }

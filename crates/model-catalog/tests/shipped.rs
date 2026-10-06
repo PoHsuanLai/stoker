@@ -15,6 +15,18 @@ const IDS: [&str; 6] = [
     "breeze-asr-25",
 ];
 
+/// The curated hosted entries, in catalogue order.
+const REMOTE: [&str; 8] = [
+    "claude-opus-5.5",
+    "claude-haiku-4.5",
+    "gemini-3.1-pro",
+    "gemini-3.8-flash",
+    "kimi-k3",
+    "kimi-k2.6",
+    "gpt-6-astra",
+    "gpt-6-luna",
+];
+
 fn read(dir: &str, id: &str) -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join(dir)
@@ -46,11 +58,11 @@ fn every_shipped_file_is_listed_here_and_has_its_id_as_stem() {
             })
             .collect();
     found.sort();
-    let mut listed: Vec<String> = IDS.iter().map(|s| (*s).to_owned()).collect();
+    let mut listed: Vec<String> = IDS.iter().chain(&REMOTE).map(|s| (*s).to_owned()).collect();
     listed.sort();
     assert_eq!(found, listed);
-    for id in IDS {
-        assert_eq!(shipped(id).id.0, id);
+    for id in IDS.iter().chain(&REMOTE) {
+        assert_eq!(&shipped(id).id.0, id);
     }
 }
 
@@ -114,7 +126,7 @@ fn the_older_kinds_are_the_ones_declared_before() {
 
 #[test]
 fn the_shipped_slots() {
-    let catalogue: Vec<ModelEntry> = IDS.iter().map(|id| shipped(id)).collect();
+    let catalogue: Vec<ModelEntry> = IDS.iter().chain(&REMOTE).map(|id| shipped(id)).collect();
     let here = [
         EngineKind::Vllm,
         EngineKind::SpeechHost,
@@ -126,8 +138,13 @@ fn the_shipped_slots() {
             .map(|e| e.id.0.clone())
             .collect()
     };
-    assert_eq!(members(Slot::Text), ["holo-3.1-4b"]);
-    assert_eq!(members(Slot::ImageIn), ["holo-3.1-4b"]);
+    // The hosted entries join Text and ImageIn like any entry: each takes images and has tools.
+    let hosted = REMOTE.map(String::from);
+    assert_eq!(
+        members(Slot::Text),
+        [vec!["holo-3.1-4b".to_owned()], hosted.to_vec()].concat()
+    );
+    assert_eq!(members(Slot::ImageIn), members(Slot::Text));
     assert_eq!(members(Slot::ComputerUse), ["holo-3.1-4b"]);
     assert_eq!(members(Slot::VoiceOut), ["kokoro-82m"]);
     assert_eq!(members(Slot::Embeddings), Vec::<String>::new());
@@ -164,7 +181,7 @@ fn the_catalog_ranks_nothing() {
         "premium",
         "default tier",
     ];
-    for id in IDS {
+    for id in IDS.iter().chain(&REMOTE) {
         let text = read("../../catalog", id).to_lowercase();
         for word in WORDS {
             assert!(!text.contains(word), "{id} says {word:?}");
@@ -183,5 +200,90 @@ fn every_entry_names_its_family() {
         ("nemotron-3.5-asr-streaming", "nemotron"),
     ] {
         assert_eq!(shipped(id).family, Family(family.into()), "{id}");
+    }
+}
+
+#[test]
+fn the_hosted_entries_are_remote_chat_models_with_tools_and_two_reaches() {
+    use model_catalog::{ColdStartEstimateS, Locality, Modality, ProviderId, Wire};
+    use model_provider::{Support, ToolSupport};
+    for id in REMOTE {
+        let entry = shipped(id);
+        assert_eq!(entry.cold_start_estimate_s, ColdStartEstimateS(0), "{id}");
+        assert!(entry.engines.is_empty(), "{id}");
+        assert_eq!(
+            entry.capabilities.inputs,
+            [Modality::Text, Modality::Image].into(),
+            "{id}"
+        );
+        assert_eq!(entry.capabilities.outputs, [Modality::Text].into(), "{id}");
+        let text = entry.capabilities.text_out.as_ref().unwrap();
+        assert_eq!(
+            text.tools,
+            ToolSupport::Native,
+            "{id}: tool calling is required"
+        );
+        assert_eq!(text.reasoning, Support::Present, "{id}");
+        assert!(
+            text.max_output <= text.context && text.sampling.is_none(),
+            "{id}"
+        );
+        let Locality::Remote { reach } = &entry.locality else {
+            panic!("{id} is not remote");
+        };
+        assert_eq!(reach.len(), 2, "{id}");
+        assert_eq!(reach[1].provider, ProviderId("openrouter".into()), "{id}");
+        assert!(
+            reach[1].model.0.contains('/'),
+            "{id}: OpenRouter ids are org/name"
+        );
+        let direct = reach[0].provider.0.as_str();
+        assert!(
+            ["anthropic", "google-ai", "moonshot", "openai"].contains(&direct),
+            "{id}"
+        );
+        let wire = if direct == "anthropic" {
+            Wire::AnthropicMessages
+        } else {
+            Wire::OpenAiCompat
+        };
+        assert_eq!(reach[0].wire, wire, "{id}");
+        assert_eq!(reach[1].wire, Wire::OpenAiCompat, "{id}");
+        for r in reach {
+            assert!(
+                r.price.input_per_mtok.0 > 0
+                    && r.price.output_per_mtok.0 >= r.price.input_per_mtok.0,
+                "{id}"
+            );
+        }
+        // The file says where each fact was read and when.
+        let text = read("../../catalog", id);
+        assert!(
+            text.contains("https://") && text.contains("2026-10-06"),
+            "{id}"
+        );
+    }
+}
+
+#[test]
+fn the_hosted_entries_round_trip_and_keep_their_older_view() {
+    use model_catalog::CatalogKind;
+    for id in REMOTE {
+        let entry = shipped(id);
+        assert_eq!(
+            parse_entry(&toml::to_string(&entry).unwrap()).unwrap(),
+            entry,
+            "{id}"
+        );
+        assert_eq!(entry.roles, [CatalogKind::Llm].into(), "{id}");
+        assert!(entry.caps.is_some() && entry.sampling.is_none(), "{id}");
+    }
+}
+
+#[test]
+fn the_local_entries_stay_on_device() {
+    use model_catalog::Locality;
+    for id in IDS {
+        assert_eq!(shipped(id).locality, Locality::OnDevice, "{id}");
     }
 }

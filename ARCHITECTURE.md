@@ -24,7 +24,7 @@ trait), section 6 (copy the recipe).
 | `cua-vendors` | the `WireCodec` trait and one codec per `WireDialect` (formerly `cua-wire`): tool declarations, decoders and result encoders for the Anthropic, OpenAI and Gemini computer-use tools | none |
 | `cua-session` | `CuaSession`: history window, prompt assembly (`prompts/`), parse with one repair, mapping to window space; `TurnSettings`, `TranscriptSink` | none |
 | `model-replay` | cassette format, `ReplayProvider`, `RecordingProvider` over a `CassetteSink`; `wire`: wire cassettes recorded and replayed at the `Transport` seam (`RecordingTransport`, `ReplayTransport`, `ChunkPlan`); `check_sequence`; `speech`: speech cassettes (audio as digests), `SpeechReplay`, `RecordingSpeech` | an injected sink |
-| `model-catalog` | `ModelEntry` (`family`, `cold_start_estimate_s`, `Capabilities`: `Modality` inputs and outputs with the detail tables `text_out`, `image_in`, `audio_in`, `audio_out`, `vector_out`, `actions_out`), `EngineProfile` (may narrow inputs and outputs), `Slot`, `fits`, `slot_members`, `parse_entry`, `merge_catalogs`; the shipped `catalog/*.toml`. The older view (`roles`, `caps`, `sampling`, `speech`, `embed`) is derived and deprecated: use `Slot` | none |
+| `model-catalog` | `ModelEntry` (`family`, `cold_start_estimate_s`, `Capabilities`: `Modality` inputs and outputs with the detail tables `text_out`, `image_in`, `audio_in`, `audio_out`, `vector_out`, `actions_out`), `EngineProfile` (may narrow inputs and outputs), `Locality` (`OnDevice`, or `Remote { reach }` with `Reach { provider, model, price, wire }`), `Slot`, `fits`, `slot_members`, `reachable`, `parse_entry`, `merge_catalogs`; the shipped `catalog/*.toml`. The older view (`roles`, `caps`, `sampling`, `speech`, `embed`) is derived and deprecated: use `Slot` | none |
 | `engine-supervisor` | the pure `step` and `budget`; `command` (catalog entry to `UnitSpec`); the seams `EngineHost`, `ReadyProbe`, `GpuProbe`; feature `testing`: fakes | none; the daemon fills the seams |
 | `model-http` | `HttpEndpoint` (with `Timeouts` and `ExtraHeader`s), `HttpTarget` (Tcp, Unix, Tls), `AuthHeader`, the pure `SseDecoder` and `NdjsonDecoder`, `ResponseHead`, `BodySink` (head, then chunks), `Exchange`, the `Transport` seam, `Upload` and `UploadTransport` (a POST of bytes), and `HttpClient: Transport + UploadTransport` (hyper over TCP and Unix sockets, behind the `hyper` feature) | yes (the transport) |
 | `model-wire` | the wire half of an endpoint: `ChatCodec`, `ChatDecoder`, `EmbedCodec`, `ErrorWire`, `CodecError`, and `Driver<C, T>`, the `Provider` (and `Embedder`) made of a codec and a transport | none (pure over the `Transport` trait) |
@@ -92,7 +92,7 @@ stoker.
 | `cua-vendors` | `step_result`, `args`, `safety`, `results` < `anthropic`, `openai`, `gemini` < `codec` |
 | `cua-session` | `model`, `history`, `prompt`, `reply`, `window`, `transcript` < `session` |
 | `model-replay` | `print` < `cassette` < `sequence` < `provider`, `speech`, `wire` |
-| `model-catalog` | `modality`, `engine` < `capabilities` < `slot`, `view` < `entry` < `file`, `check`, `legacy` < `parse` |
+| `model-catalog` | `modality`, `engine` < `capabilities` < `slot`, `view` < `entry` < `reach`, `file`, `check`, `legacy` < `parse` |
 | `engine-supervisor` | `state` < `unit`, `budget` < `step` < `host` < `fakes` (feature `testing`) |
 | `model-http` | `target`, `auth`, `head` < `sse`, `ndjson` < `client` < `exchange` < `hyper_client` (feature `hyper`) |
 | `model-wire` | `codec` < `driver` |
@@ -273,7 +273,7 @@ on; a change is an edit of SPEC.md first. Every `todo!()` is listed in `FINDINGS
 | `cua-vendors`: trait, enum, `StepResult`, the four codecs | built, tested (doc examples, stop-at-first-failure, safety only adds, a total-decoding proptest); no cloud backend calls them yet |
 | `cua-session`: types, `begin`, `request`, `absorb`, `absorb_for` (both `&mut self`, in place) | built, tested (history window, one repair, mapping, vendor wire history, wire-cassette runs of Holo, Qwen and UI-TARS); the Holo and Qwen schemas are ours until a recorded step |
 | `model-replay`: cassette format (engine stamp, context sizes, speech caps, interaction id and hash, `Strict` mode), round trip; wire cassette format, `RecordingTransport` and `ReplayTransport` | built, tested (SSE and NDJSON recordings under every chunking); the providers, `RequestPrint::{of, hash}`, `check_sequence`, `Cassette::check_sequences` per their F1 state |
-| `model-catalog`: types, `parse_entry`, `merge_catalogs`, `VramEstimate::need`, `gpu_need`, `SamplingDefaults`, `holo-3.1-4b`, the five speech entries, `Modality`, `Capabilities::on_engine`, `Slot`, `fits`, `slot_members`, older-shape files | built, tested |
+| `model-catalog`: types, `parse_entry`, `merge_catalogs`, `VramEstimate::need`, `gpu_need`, `SamplingDefaults`, `holo-3.1-4b`, the five speech entries, `Modality`, `Capabilities::on_engine`, `Slot`, `fits`, `slot_members`, `reachable`, the eight hosted entries (Claude, Gemini, Kimi, GPT), older-shape files | built, tested |
 | `engine-supervisor`: types, `Supervisor::new`, config defaults, fakes, `step`, `budget`, `command` | built, tested (the lifecycle table, the budget table with the in-turn window, `command` for vLLM, llama-server, the speech host and Kokoro) |
 | `model-http`: types, `ResponseHead`, `BodySink::head`, `Exchange`, `Transport`, `Timeouts`, `ExtraHeader`, `HttpError`, the SSE and NDJSON decoders, `Transport for HttpClient` (feature `hyper`) | built; round-trip, pinned-JSON, proptest and loopback-socket tested (TLS and the egress proxy answer `HttpError::Tls` and `Connect` until the first cloud backend) |
 | `model-wire`: `ChatCodec`, `ChatDecoder`, `EmbedCodec`, `ErrorWire`, `CodecError`, `Driver` | built, tested with a scripted transport and a line codec (head decides, framer, decoder fault, Retry-After, stop, every transport failure, embed checks) |
@@ -316,6 +316,15 @@ Files in the older shape (`roles`, `speech`, `embed`) still load.
 (program, flags, socket flag, sandbox) with a row in the `command_is_pure` table; its
 `EnginePaths` field and the settings key that fills it (`SpeechHost`: `ai.engine.speech_host.path`;
 `KokoroFastApi`: `ai.engine.kokoro.python`).
+
+**Add a hosted entry**: a `catalog/<id>.toml` with `locality = { kind = "remote", v = { reach = [...] } }`
+(each reach: `provider` as porter's provider file id, `model` the provider's own id, `price` in
+micro-USD per million tokens, `wire`), `source = { kind = "hosted" }`, zero `vram`, no `[[engine]]`,
+`cold_start_estimate_s = 0`, and the usual capability tables (tool calling is required for the Text
+slot). Every id, limit and price is read from the company's own docs and the gateway's model data,
+with the URLs and the date in a comment in the file; a fact that cannot be read leaves the entry
+out. `reachable(entry, granted, wires)` picks the reach: a direct provider before the gateway
+(`openrouter`), only among granted providers and wires this build speaks.
 
 **Add a speech model**: a `catalog/<id>.toml` as above: `inputs = ["audio"]`, `outputs = ["text"]`
 with `audio_in` (and a `text_out` with zero `context` and `max_output`, since it has no chat

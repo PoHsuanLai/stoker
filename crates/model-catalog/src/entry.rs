@@ -54,7 +54,69 @@ pub struct GitRevision(pub String);
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "v", rename_all = "snake_case")]
 pub enum WeightSource {
-    HuggingFace { repo: HfRepo, revision: GitRevision },
+    HuggingFace {
+        repo: HfRepo,
+        revision: GitRevision,
+    },
+    /// A hosted model: no weights here; the reaches in `Locality::Remote` say where it runs.
+    Hosted,
+}
+
+/// A provider as porter's provider files name it: `openrouter`, `anthropic`, `google-ai`,
+/// `moonshot`, `openai`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ProviderId(pub String);
+
+/// A model's id at one provider (`anthropic/claude-opus-5.5` at OpenRouter, `claude-opus-5-5` at
+/// Anthropic).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct RemoteModelId(pub String);
+
+/// Money in millionths of a US dollar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct MicroUsd(pub u64);
+
+/// A model's price at one provider, per million tokens, in whole micro-dollars (the names are
+/// porter's `PriceTable`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Price {
+    pub input_per_mtok: MicroUsd,
+    pub output_per_mtok: MicroUsd,
+}
+
+/// The wire a provider speaks: which client codec an engine of ours needs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Wire {
+    /// Chat completions as OpenAI wrote them (OpenRouter, OpenAI, Moonshot, Gemini's
+    /// compatibility endpoint).
+    OpenAiCompat,
+    /// Anthropic's Messages API.
+    AnthropicMessages,
+}
+
+/// One way to reach a hosted model: a provider, the model's id there, what it costs there and the
+/// wire to speak.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Reach {
+    pub provider: ProviderId,
+    pub model: RemoteModelId,
+    pub price: Price,
+    pub wire: Wire,
+}
+
+/// Where an entry runs. The names mirror porter's `Locality` (`OnDevice`; `Remote` is its cloud).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "v", rename_all = "snake_case")]
+pub enum Locality {
+    /// On this computer: weights, an engine profile and a GPU estimate.
+    #[default]
+    OnDevice,
+    /// On providers' servers, reached through any of several accounts (never empty).
+    Remote { reach: Vec<Reach> },
 }
 
 /// Mebibytes of memory.
@@ -81,6 +143,12 @@ pub enum GpuNeed {
     /// The estimate is all zeros: the engine runs on the CPU, and its sandbox has no GPU access.
     Absent,
     Needed,
+}
+
+impl Locality {
+    pub fn is_on_device(&self) -> bool {
+        matches!(self, Locality::OnDevice)
+    }
 }
 
 impl VramEstimate {
@@ -194,6 +262,8 @@ pub struct ModelEntry {
     pub cold_start_estimate_s: ColdStartEstimateS,
     pub source: WeightSource,
     pub vram: VramEstimate,
+    /// Where it runs; `OnDevice` for every file.
+    pub locality: Locality,
     pub capabilities: Capabilities,
     /// Deprecated: use `Slot`.
     pub roles: BTreeSet<CatalogKind>,

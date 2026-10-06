@@ -1,0 +1,22 @@
+# GPT-6 Astra, a hosted model reached through the providers below. Facts checked on 2026-10-06:
+# - OpenAI: https://developers.openai.com/api/docs/models and .../models/gpt-6-astra, read 2026-10-06: id gpt-6-astra, 1,050,000 context, 128,000 max output, text and image in, text out, function calling and structured outputs, $10 / $50 per MTok; OpenAI calls it its most capable model.
+# - OpenRouter: https://openrouter.ai/api/v1/models listing, read 2026-10-06: id openai/gpt-6-astra, context 1050000, max completion 128000, $0.00001 / $0.00005 per token, tools and structured_outputs listed.
+# - every field below is from those pages; prices are micro-USD per million tokens.
+# - image_in: the pages give no per-request image limits, so this claims one image, no resizing and the
+#   image's own pixels as its space: a floor, not a limit. text_out: reasoning is on by default or selectable;
+#   no sampling is written (the provider's defaults apply). licence: hosted only, the provider's terms.
+id = "gpt-6-astra"
+label = "GPT-6 Astra"
+licence = { kind = "proprietary" }
+family = "gpt"
+cold_start_estimate_s = 0
+source = { kind = "hosted" }
+vram = { weights_mib = 0, kv_per_1k_ctx_mib = 0, overhead_mib = 0 }
+locality = { kind = "remote", v = { reach = [
+  { provider = "openai", model = "gpt-6-astra", price = { input_per_mtok = 10000000, output_per_mtok = 50000000 }, wire = "open_ai_compat" },
+  { provider = "openrouter", model = "openai/gpt-6-astra", price = { input_per_mtok = 10000000, output_per_mtok = 50000000 }, wire = "open_ai_compat" },
+] } }
+inputs = ["text", "image"]
+outputs = ["text"]
+text_out = { tools = "native", structured = ["json_schema"], reasoning = "present", streaming = "present", context = 1050000, max_output = 128000 }
+image_in = { per_prompt = 1, rule = { kind = "identity" }, space = { kind = "image" } }

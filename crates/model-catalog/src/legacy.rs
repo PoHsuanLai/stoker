@@ -10,7 +10,7 @@ use speech_provider::{SpeechCaps, SpeechDir};
 
 use crate::{
     Capabilities, CatalogError, CatalogId, CatalogKind, ColdStartEstimateS, EngineProfile, Family,
-    Licence, Modalities, Modality, ModelEntry, SamplingDefaults, TextOut, VramEstimate,
+    Licence, Locality, Modalities, Modality, ModelEntry, SamplingDefaults, TextOut, VramEstimate,
     WeightSource,
 };
 
@@ -59,6 +59,7 @@ impl LegacyFile {
             cold_start_estimate_s: self.cold_start_estimate_s,
             source: self.source,
             vram: self.vram,
+            locality: Locality::OnDevice,
             roles: self.roles,
             caps: self.caps,
             sampling: self.sampling,

@@ -1,0 +1,23 @@
+# Claude Haiku 4.5, a hosted model reached through the providers below. Facts checked on 2026-10-06:
+# - Anthropic (direct, Messages wire): https://platform.claude.com/docs/en/models/haiku-4-5/overview, read 2026-10-06: id claude-haiku-4-5-20251001 (alias claude-haiku-4-5), 200K context, 64K max output, $1 / $5 per MTok, text and image in.
+# - Retirement is not sooner than 2026-10-15 (same page): check the deprecations page before relying on it.
+# - OpenRouter: https://openrouter.ai/api/v1/models/anthropic/claude-haiku-4.5/endpoints, read 2026-10-06: context 200000, max completion 64000, $0.000001 / $0.000005 per token, tools listed. structured_outputs is listed there but not on Anthropic's page, so none is claimed.
+# - every field below is from those pages; prices are micro-USD per million tokens.
+# - image_in: the pages give no per-request image limits, so this claims one image, no resizing and the
+#   image's own pixels as its space: a floor, not a limit. text_out: reasoning is on by default or selectable;
+#   no sampling is written (the provider's defaults apply). licence: hosted only, the provider's terms.
+id = "claude-haiku-4.5"
+label = "Claude Haiku 4.5"
+licence = { kind = "proprietary" }
+family = "claude"
+cold_start_estimate_s = 0
+source = { kind = "hosted" }
+vram = { weights_mib = 0, kv_per_1k_ctx_mib = 0, overhead_mib = 0 }
+locality = { kind = "remote", v = { reach = [
+  { provider = "anthropic", model = "claude-haiku-4-5-20251001", price = { input_per_mtok = 1000000, output_per_mtok = 5000000 }, wire = "anthropic_messages" },
+  { provider = "openrouter", model = "anthropic/claude-haiku-4.5", price = { input_per_mtok = 1000000, output_per_mtok = 5000000 }, wire = "open_ai_compat" },
+] } }
+inputs = ["text", "image"]
+outputs = ["text"]
+text_out = { tools = "native", structured = [], reasoning = "present", streaming = "present", context = 200000, max_output = 64000 }
+image_in = { per_prompt = 1, rule = { kind = "identity" }, space = { kind = "image" } }

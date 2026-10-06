@@ -1,0 +1,23 @@
+# Claude Opus 5.5, a hosted model reached through the providers below. Facts checked on 2026-10-06:
+# - Anthropic (direct, Messages wire): https://platform.claude.com/docs/en/models/overview and .../models/opus-5-5/overview, read 2026-10-06: id claude-opus-5-5, 1M context, 128K max output, $4 / $20 per MTok, text and image in, tool use.
+# - OpenRouter: https://openrouter.ai/api/v1/models/anthropic/claude-opus-5.5/endpoints, read 2026-10-06: context 1000000, max completion 128000, $0.000004 / $0.00002 per token, tools listed; structured_outputs is not listed, so none is claimed.
+# - Anthropic describes this as its default model for most workloads; Claude Fable 5.1 is the tier above it ($10 / $50).
+# - every field below is from those pages; prices are micro-USD per million tokens.
+# - image_in: the pages give no per-request image limits, so this claims one image, no resizing and the
+#   image's own pixels as its space: a floor, not a limit. text_out: reasoning is on by default or selectable;
+#   no sampling is written (the provider's defaults apply). licence: hosted only, the provider's terms.
+id = "claude-opus-5.5"
+label = "Claude Opus 5.5"
+licence = { kind = "proprietary" }
+family = "claude"
+cold_start_estimate_s = 0
+source = { kind = "hosted" }
+vram = { weights_mib = 0, kv_per_1k_ctx_mib = 0, overhead_mib = 0 }
+locality = { kind = "remote", v = { reach = [
+  { provider = "anthropic", model = "claude-opus-5-5", price = { input_per_mtok = 4000000, output_per_mtok = 20000000 }, wire = "anthropic_messages" },
+  { provider = "openrouter", model = "anthropic/claude-opus-5.5", price = { input_per_mtok = 4000000, output_per_mtok = 20000000 }, wire = "open_ai_compat" },
+] } }
+inputs = ["text", "image"]
+outputs = ["text"]
+text_out = { tools = "native", structured = [], reasoning = "present", streaming = "present", context = 1000000, max_output = 128000 }
+image_in = { per_prompt = 1, rule = { kind = "identity" }, space = { kind = "image" } }

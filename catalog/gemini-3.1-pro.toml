@@ -1,0 +1,23 @@
+# Gemini 3.1 Pro, a hosted model reached through the providers below. Facts checked on 2026-10-06:
+# - Google: https://ai.google.dev/gemini-api/docs/models/gemini-3.1-pro-preview , .../models and .../pricing, read 2026-10-06: id gemini-3.1-pro-preview (status Preview), input limit 1,048,576, output limit 65,536, function calling and structured outputs supported, $2 / $12 per MTok for prompts up to 200k tokens ($4 / $18 above).
+# - google-ai speaks the OpenAI-compatible wire at https://generativelanguage.googleapis.com/v1beta/openai/ (https://ai.google.dev/gemini-api/docs/openai, read 2026-10-06).
+# - OpenRouter: https://openrouter.ai/api/v1/models/google/gemini-3.1-pro-preview/endpoints, read 2026-10-06: context 1048576, max completion 65536, standard $0.000002 / $0.000012 per token, tools and structured_outputs listed.
+# - every field below is from those pages; prices are micro-USD per million tokens.
+# - image_in: the pages give no per-request image limits, so this claims one image, no resizing and the
+#   image's own pixels as its space: a floor, not a limit. text_out: reasoning is on by default or selectable;
+#   no sampling is written (the provider's defaults apply). licence: hosted only, the provider's terms.
+id = "gemini-3.1-pro"
+label = "Gemini 3.1 Pro"
+licence = { kind = "proprietary" }
+family = "gemini"
+cold_start_estimate_s = 0
+source = { kind = "hosted" }
+vram = { weights_mib = 0, kv_per_1k_ctx_mib = 0, overhead_mib = 0 }
+locality = { kind = "remote", v = { reach = [
+  { provider = "google-ai", model = "gemini-3.1-pro-preview", price = { input_per_mtok = 2000000, output_per_mtok = 12000000 }, wire = "open_ai_compat" },
+  { provider = "openrouter", model = "google/gemini-3.1-pro-preview", price = { input_per_mtok = 2000000, output_per_mtok = 12000000 }, wire = "open_ai_compat" },
+] } }
+inputs = ["text", "image"]
+outputs = ["text"]
+text_out = { tools = "native", structured = ["json_schema"], reasoning = "present", streaming = "present", context = 1048576, max_output = 65536 }
+image_in = { per_prompt = 1, rule = { kind = "identity" }, space = { kind = "image" } }

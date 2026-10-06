@@ -3,7 +3,7 @@
 mod support;
 
 use model_catalog::{
-    EngineKind, Modality, ModelEntry, Signature, Slot, fits, parse_entry, slot_members,
+    EngineKind, Modality, ModelEntry, Signature, Slot, ToolNeed, fits, parse_entry, slot_members,
 };
 use support::*;
 
@@ -54,7 +54,15 @@ fn catalogue() -> Vec<ModelEntry> {
 
 #[test]
 fn each_slot_names_its_signature() {
-    let sig = |takes, gives| Signature { takes, gives };
+    let sig = |takes, gives| Signature {
+        takes,
+        gives,
+        tools: if (takes, gives) == (Modality::Text, Modality::Text) {
+            ToolNeed::Required
+        } else {
+            ToolNeed::Any
+        },
+    };
     assert_eq!(Slot::Text.signature(), sig(Modality::Text, Modality::Text));
     assert_eq!(
         Slot::VoiceIn.signature(),
@@ -142,4 +150,26 @@ fn a_narrowed_engine_offers_only_what_it_passes() {
     // Only the narrowed engine is on this computer: audio is not offered even though the model
     // declares it.
     assert!(fits(Slot::VoiceIn, &catalogue[0].capabilities));
+}
+
+#[test]
+fn the_text_slot_needs_tools_and_the_others_do_not() {
+    let model = |tools: &str| {
+        entry(&text_only("t").replace(r#"tools = "native""#, &format!("tools = \"{tools}\"")))
+    };
+    let catalogue = vec![model("native"), model("server_parsed"), model("absent")];
+    let llama = [EngineKind::LlamaServer];
+    assert_eq!(slot_members(Slot::Text, &catalogue, &llama).len(), 2);
+    // Without tools it still reads images, if it takes them: that slot asks for no tools.
+    assert!(fits(
+        Slot::Embeddings,
+        &entry(&file(
+            "e",
+            r#"["text"]"#,
+            r#"["vector"]"#,
+            &[VECTOR_OUT.into()],
+            ENGINE
+        ))
+        .capabilities
+    ));
 }

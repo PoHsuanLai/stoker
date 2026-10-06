@@ -7,8 +7,8 @@ use speech_provider::SpeechCaps;
 
 use crate::view::derive;
 use crate::{
-    Capabilities, CatalogId, ColdStartEstimateS, EngineProfile, Family, Licence, Modalities,
-    ModelEntry, TextOut, VramEstimate, WeightSource,
+    Capabilities, CatalogId, ColdStartEstimateS, EngineProfile, Family, Licence, Locality,
+    Modalities, ModelEntry, TextOut, VramEstimate, WeightSource,
 };
 
 /// One `catalog/<id>.toml`: the header, what goes in and out, the detail table of each declared
@@ -23,6 +23,8 @@ pub struct EntryFile {
     pub cold_start_estimate_s: ColdStartEstimateS,
     pub source: WeightSource,
     pub vram: VramEstimate,
+    #[serde(default, skip_serializing_if = "Locality::is_on_device")]
+    pub locality: Locality,
     pub inputs: Modalities,
     pub outputs: Modalities,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -37,7 +39,8 @@ pub struct EntryFile {
     pub vector_out: Option<EmbedCaps>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actions_out: Option<CuaSupport>,
-    #[serde(rename = "engine")]
+    /// Written for an on-device entry; a remote one has none.
+    #[serde(rename = "engine", default, skip_serializing_if = "Vec::is_empty")]
     pub engines: Vec<EngineProfile>,
 }
 
@@ -67,6 +70,7 @@ impl EntryFile {
             cold_start_estimate_s: self.cold_start_estimate_s,
             source: self.source,
             vram: self.vram,
+            locality: self.locality,
             capabilities,
             roles: view.roles,
             caps: view.caps,
@@ -89,6 +93,7 @@ impl From<&ModelEntry> for EntryFile {
             cold_start_estimate_s: entry.cold_start_estimate_s,
             source: entry.source.clone(),
             vram: entry.vram,
+            locality: entry.locality.clone(),
             inputs: c.inputs.clone(),
             outputs: c.outputs.clone(),
             text_out: c.text_out.clone(),

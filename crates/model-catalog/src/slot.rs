@@ -7,7 +7,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Capabilities, EngineKind, Modality, ModelEntry};
+use model_provider::ToolSupport;
+
+use crate::{Capabilities, EngineKind, Locality, Modality, ModelEntry};
 
 /// A job with a required capability signature. The slug is the settings key's segment:
 /// `ai.model.<slot>.<tier>`.
@@ -28,38 +30,65 @@ pub enum Slot {
     Embeddings,
 }
 
-/// What a slot needs: one modality taken in and one given out. A model may take and give more.
+/// Whether a slot needs the model to call tools.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ToolNeed {
+    Any,
+    /// The text side must support tool calls (native or parsed by the engine).
+    Required,
+}
+
+/// What a slot needs: one modality taken in and one given out (a model may take and give more),
+/// and whether it must call tools.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Signature {
     pub takes: Modality,
     pub gives: Modality,
+    pub tools: ToolNeed,
 }
 
 impl Slot {
-    /// The slot's capability signature. Tool support is not part of it: a text model without
-    /// tools still serves the slot, and a caller that needs tools reads `text_out`.
+    /// The slot's capability signature. Only `Text` needs tools: capabilities.md section 2 writes it
+    /// "text in -> text out (+ tools)", because the agent loop is built on tool calls; a text model
+    /// without them is not offered there. The other slots are one conversion each.
     pub fn signature(self) -> Signature {
-        let (takes, gives) = match self {
-            Slot::Text => (Modality::Text, Modality::Text),
-            Slot::VoiceIn => (Modality::Audio, Modality::Text),
-            Slot::VoiceOut => (Modality::Text, Modality::Audio),
-            Slot::ImageIn => (Modality::Image, Modality::Text),
-            Slot::ComputerUse => (Modality::Image, Modality::Actions),
-            Slot::Embeddings => (Modality::Text, Modality::Vector),
+        let (takes, gives, tools) = match self {
+            Slot::Text => (Modality::Text, Modality::Text, ToolNeed::Required),
+            Slot::VoiceIn => (Modality::Audio, Modality::Text, ToolNeed::Any),
+            Slot::VoiceOut => (Modality::Text, Modality::Audio, ToolNeed::Any),
+            Slot::ImageIn => (Modality::Image, Modality::Text, ToolNeed::Any),
+            Slot::ComputerUse => (Modality::Image, Modality::Actions, ToolNeed::Any),
+            Slot::Embeddings => (Modality::Text, Modality::Vector, ToolNeed::Any),
         };
-        Signature { takes, gives }
+        Signature {
+            takes,
+            gives,
+            tools,
+        }
     }
 }
 
 /// Whether capabilities (usually engine-narrowed) satisfy a slot's signature.
 pub fn fits(slot: Slot, caps: &Capabilities) -> bool {
-    let Signature { takes, gives } = slot.signature();
-    caps.inputs.contains(takes) && caps.outputs.contains(gives)
+    let Signature {
+        takes,
+        gives,
+        tools,
+    } = slot.signature();
+    let tooled = match tools {
+        ToolNeed::Any => true,
+        ToolNeed::Required => caps
+            .text_out
+            .as_ref()
+            .is_some_and(|text| text.tools != ToolSupport::Absent),
+    };
+    caps.inputs.contains(takes) && caps.outputs.contains(gives) && tooled
 }
 
-/// The entries that can serve a slot on this computer, in catalogue order: an entry is a member
-/// when one of its engine profiles runs on an engine kind in `engines` and the capabilities it
-/// passes through (`Capabilities::on_engine`) fit the slot.
+/// The entries that can serve a slot, in catalogue order. An on-device entry is a member when one
+/// of its engine profiles runs on an engine kind in `engines` and the capabilities it passes
+/// through (`Capabilities::on_engine`) fit the slot; a remote entry has no engine here and is a
+/// member when its capabilities fit.
 pub fn slot_members<'a>(
     slot: Slot,
     catalogue: &'a [ModelEntry],
@@ -67,12 +96,13 @@ pub fn slot_members<'a>(
 ) -> Vec<&'a ModelEntry> {
     catalogue
         .iter()
-        .filter(|entry| {
-            entry
+        .filter(|entry| match entry.locality {
+            Locality::Remote { .. } => fits(slot, &entry.capabilities),
+            Locality::OnDevice => entry
                 .engines
                 .iter()
                 .filter(|profile| engines.contains(&profile.kind))
-                .any(|profile| fits(slot, &entry.capabilities.on_engine(profile)))
+                .any(|profile| fits(slot, &entry.capabilities.on_engine(profile))),
         })
         .collect()
 }

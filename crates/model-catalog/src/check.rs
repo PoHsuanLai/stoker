@@ -2,7 +2,7 @@
 
 use speech_provider::SpeechDir;
 
-use crate::{Capabilities, CatalogError, DetailTable, EngineProfile, Modality};
+use crate::{Capabilities, CatalogError, DetailTable, EngineProfile, Locality, Modality};
 
 /// Every table, in the order the checks run.
 const TABLES: [DetailTable; 6] = [
@@ -18,7 +18,7 @@ const TABLES: [DetailTable; 6] = [
 /// written exactly when its modality is declared; the speech tables run in their own direction;
 /// computer-use output comes with the text and image sides it is driven through; sampling is
 /// written exactly when text is also an input; the context holds the output.
-pub fn capabilities(c: &Capabilities) -> Result<(), CatalogError> {
+pub fn capabilities(c: &Capabilities, locality: &Locality) -> Result<(), CatalogError> {
     if c.inputs.is_empty() {
         return Err(CatalogError::NoInputs);
     }
@@ -36,7 +36,7 @@ pub fn capabilities(c: &Capabilities) -> Result<(), CatalogError> {
         }
     }
     speech_directions(c)?;
-    chat(c)
+    chat(c, locality)
 }
 
 fn speech_directions(c: &Capabilities) -> Result<(), CatalogError> {
@@ -52,7 +52,7 @@ fn speech_directions(c: &Capabilities) -> Result<(), CatalogError> {
     }
 }
 
-fn chat(c: &Capabilities) -> Result<(), CatalogError> {
+fn chat(c: &Capabilities, locality: &Locality) -> Result<(), CatalogError> {
     let text_in = c.inputs.contains(Modality::Text);
     if c.actions_out.is_some()
         && !(text_in && c.inputs.contains(Modality::Image) && c.text_out.is_some())
@@ -66,6 +66,8 @@ fn chat(c: &Capabilities) -> Result<(), CatalogError> {
         return Err(CatalogError::OutputExceedsContext);
     }
     match (text_in, &text.sampling) {
+        // A hosted model takes the provider's defaults: nothing to write.
+        (true, None) if !locality.is_on_device() => Ok(()),
         (true, None) => Err(CatalogError::ChatRoleWithoutSampling),
         (false, Some(_)) => Err(CatalogError::SamplingWithoutChatRole),
         _ => Ok(()),
