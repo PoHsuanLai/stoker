@@ -1,0 +1,56 @@
+# Qwen3 4B Instruct 2507 (Qwen), the FP8 checkpoint, a small text model with native tool calling.
+#
+# Read from the repository's config.json, README.md and LICENSE, and measured by hand on the
+# RTX 5070 Ti (16303 MiB) with vLLM 0.30.0 (FINDINGS.md, "Local model"):
+# - source: Qwen's own FP8 repository (block-wise fp8, 128 x 128); the snapshot is in the Hugging Face cache.
+# - licence: Apache-2.0 (the card's licence field and LICENSE file).
+# - tools: the chat template renders tools as JSON and expects Hermes-style <tool_call> JSON, which
+#   vLLM's `hermes` parser turns into tool calls (measured: one get_weather request returned a
+#   parsed call, finish_reason tool_calls).
+# - reasoning: absent. The 2507 Instruct model is non-thinking (the card says it never emits
+#   <think> blocks), so both sampling sets are the card's.
+# - sampling: the card's sampling line: temperature 0.7, top_p 0.8, top_k 20, min_p 0.
+# - context: the model takes 262144; 8192 is what the budget allows here (below).
+# - kv: 36 layers, 8 KV heads of 128, bf16: 144 MiB per 1k tokens (vLLM reported 13632 tokens in
+#   1.87 GiB, 140 MiB per 1k).
+# - vram (measured, nvidia-smi compute-apps while serving): weights 4.29 GiB (4393 MiB, vLLM's
+#   "Model loading took"). vLLM takes a fixed share of the card, not what the model needs:
+#   --gpu-memory-utilization 0.42 of 16303 MiB took 6766 MiB. The overhead below is what is left
+#   of that after the weights and the KV for the 8192 window (6766 - 4393 - 1180 = 1193; written
+#   1200), so `need(8192)` is the real reservation. 0.40 failed to start (negative KV after the
+#   profiling run) and 0.42 left 1.87 GiB of KV; the desktop was using about 2.4 GB at the time,
+#   and vLLM counts other processes' use when it profiles, so a busier desktop needs a re-check.
+# - cold start: 90 s with vLLM's compile cache warm, about 5 minutes the first time (torch.compile,
+#   CUDA graph capture); the estimate is the warm figure.
+# - engine args: --max-num-seqs 8 and --max-num-batched-tokens 2048 shrink the profiling peak
+#   and the CUDA graph set; they make the 0.42 share fit.
+id = "qwen3-4b-instruct-2507-fp8"
+label = "Qwen3 4B Instruct 2507 FP8"
+licence = { kind = "open", v = "Apache-2.0" }
+family = "qwen"
+cold_start_estimate_s = 90
+source = { kind = "hugging_face", v = { repo = "Qwen/Qwen3-4B-Instruct-2507-FP8", revision = "8591804019c8b22094c3b5b4454e0edc05dffc98" } }
+vram = { weights_mib = 4393, kv_per_1k_ctx_mib = 144, overhead_mib = 1200 }
+inputs = ["text"]
+outputs = ["text"]
+
+[text_out]
+tools = "server_parsed"
+structured = ["json_schema"]
+reasoning = "absent"
+streaming = "present"
+context = 8192
+max_output = 2048
+sampling = { reasoning_on = { temperature = 700, top_p = { kind = "set", v = 800 }, top_k = { kind = "set", v = 20 }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_off = { temperature = 700, top_p = { kind = "set", v = 800 }, top_k = { kind = "set", v = 20 }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_default = "off" }
+
+[[engine]]
+kind = "vllm"
+args = [
+  "--max-model-len", "8192",
+  "--max-num-seqs", "8",
+  "--max-num-batched-tokens", "2048",
+  "--enable-auto-tool-choice",
+  "--tool-call-parser", "hermes",
+  "--gpu-memory-utilization", "0.42",
+]
+weights = { kind = "hf_snapshot" }

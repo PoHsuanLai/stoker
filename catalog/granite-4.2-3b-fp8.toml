@@ -1,0 +1,56 @@
+# Granite 4.2 3B (IBM), the FP8 checkpoint, a small dense text model with native tool calling.
+#
+# Read from the repository's config.json, chat_template.jinja, generation_config.json and
+# granite_thinking_parser.py, and measured by hand on the RTX 5070 Ti (16303 MiB) with
+# vLLM 0.30.0 (FINDINGS.md, "Local model"):
+# - source: IBM's own FP8 repository (compressed-tensors, dynamic per-token fp8 activations).
+# - licence: Apache-2.0 (the card's licence field).
+# - tools: the chat template renders tools as JSON and expects Qwen3-coder style XML calls
+#   (<tool_call><function=name><parameter=k>v</parameter></function></tool_call>) after the
+#   thinking block, so vLLM's `qwen3_coder` parser is the one that parses them; `granite4` does not
+#   (measured: the call stayed in the content). With `--reasoning-parser qwen3` the thinking is
+#   split off and one get_weather request returned a parsed call.
+# - reasoning: present. The template thinks unless enable_thinking is false, so reasoning_default
+#   is "on" and Reasoning::EngineDefault takes reasoning_on. Even a trivial tool request thinks for
+#   about 280 tokens.
+# - sampling: reasoning_on is generation_config.json (temperature 1.0, top_p 0.95); the card gives
+#   no other. reasoning_off is greedy, a proposal, so a tool call is repeatable.
+# - context: the model takes 131072; 8192 is what the budget allows here.
+# - kv: 40 layers, 8 KV heads of 64 (2560 / 40 heads), bf16: 80 MiB per 1k tokens (vLLM reported
+#   12976 tokens in 0.99 GiB, 78 MiB per 1k).
+# - vram (measured): weights 3.92 GiB (4014 MiB). --gpu-memory-utilization 0.40 of 16303 MiB took
+#   6502 MiB; overhead is what is left after the weights and the 8192 window of KV
+#   (6502 - 4014 - 656 = 1832).
+# - cold start: 52 s with the compile cache warm, 165 s the first time.
+# - family: granite, the second family beside Qwen for a reviewer of another lineage.
+id = "granite-4.2-3b-fp8"
+label = "Granite 4.2 3B FP8"
+licence = { kind = "open", v = "Apache-2.0" }
+family = "granite"
+cold_start_estimate_s = 60
+source = { kind = "hugging_face", v = { repo = "ibm-granite/granite-4.2-3b-fp8", revision = "579eab44700093cf415d70534060b653dc4d6b45" } }
+vram = { weights_mib = 4014, kv_per_1k_ctx_mib = 80, overhead_mib = 1830 }
+inputs = ["text"]
+outputs = ["text"]
+
+[text_out]
+tools = "server_parsed"
+structured = ["json_schema"]
+reasoning = "present"
+streaming = "present"
+context = 8192
+max_output = 4096
+sampling = { reasoning_on = { temperature = 1000, top_p = { kind = "set", v = 950 }, top_k = { kind = "off" }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_off = { temperature = 0, top_p = { kind = "off" }, top_k = { kind = "off" }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_default = "on" }
+
+[[engine]]
+kind = "vllm"
+args = [
+  "--max-model-len", "8192",
+  "--max-num-seqs", "8",
+  "--max-num-batched-tokens", "2048",
+  "--enable-auto-tool-choice",
+  "--tool-call-parser", "qwen3_coder",
+  "--reasoning-parser", "qwen3",
+  "--gpu-memory-utilization", "0.40",
+]
+weights = { kind = "hf_snapshot" }

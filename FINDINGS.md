@@ -904,3 +904,92 @@ by-hand reference test still passes (max abs diff 0.000496).
   libonnxruntime where the platform lookup finds it). If a config field is preferred over the
   environment variable, add `onnxruntime: Option<PathBuf>` to `SileroConfig` and call
   `ort::init_from` in `load`.
+
+## Local model: small text models on vLLM (2026-10-07, lane `local-model`)
+
+Two catalogue entries for the first live run of the agent stack on this machine (RTX 5070 Ti,
+16303 MiB; the desktop uses about 2.4 GB; the model plus KV must stay under about 7 GB with 6 GB
+left free). Engine: the owner's vLLM, `~/vllm/.venv` (vllm 0.30.0, torch 2.13.0+cu130), not
+modified. An earlier llama.cpp build was started and dropped (a half-built tree is left in
+`~/rs-wt/local-model/cache/llama.cpp`; no script).
+
+| Entry | Repository (own org) | Revision | model.safetensors sha256 | Licence | Family |
+| --- | --- | --- | --- | --- | --- |
+| `qwen3-4b-instruct-2507-fp8` | `Qwen/Qwen3-4B-Instruct-2507-FP8` (4.8 GiB) | `8591804019c8b22094c3b5b4454e0edc05dffc98` | `b6154d74332140fd6dfbfbe70bbb3650dd6955861132bd59dda6789e6322b485` | Apache-2.0 | qwen |
+| `granite-4.2-3b-fp8` | `ibm-granite/granite-4.2-3b-fp8` (3.9 GiB) | `579eab44700093cf415d70534060b653dc4d6b45` | `c9ac12e28a8e48eb53442040f35e52be9978c4e2499766b1f5502e5c1f117eef` | Apache-2.0 | granite |
+
+Both were downloaded with `uvx --from huggingface_hub hf download <repo> --revision <sha>` into
+`~/.cache/huggingface/hub`.
+
+### Choice
+
+- Primary Qwen3-4B-Instruct-2507-FP8: a non-thinking model (short, repeatable tool turns), official
+  FP8 from Qwen, Hermes tool format that vLLM's `hermes` parser handles, loads on sm_120.
+  Rejected: Qwen3.5-4B/9B (only third-party AWQ/FP8 repositories for vLLM; 9B does not fit the
+  budget; the same lineage as Holo anyway), gemma-4-E4B qat w4a16 (10.7 GiB of safetensors: the
+  per-layer embeddings are not 4-bit), granite-4.2-8b-fp8 (9 GiB), Ministral-3-3B (8.7 GiB bf16,
+  no vLLM-ready 4-bit from Mistral), Phi-4-mini (no well-known 4-bit/FP8 checkpoint), gpt-oss-20b
+  (13 GB, excluded).
+- Second family: Granite 4.2 3B FP8 (IBM, Apache-2.0). It thinks by default (about 280 tokens for a
+  trivial call), so it suits a deliberate reviewer more than a quick one; `Reasoning::Off`
+  needs the codec to send `chat_template_kwargs {"enable_thinking": false}` (the template's switch).
+- Second family is optional, not required: SPEC §6.3 / QUESTIONS M2 say one resident model plus a
+  second small model of another family loaded on demand for SecondOpinion, and without it a
+  high-impact AllowJudged cell falls back to Ask. Porter's reviewer family filter is still open
+  (porter FINDINGS: "porter-infer `pick`: no reviewer family filter"). The two do not fit side by
+  side (6766 + 6502 MiB); the supervisor's budget evicts one to load the other (cold start 52 to 90 s).
+
+### Measurements (by hand, `--uds`, offline, desktop at 2.4 GB)
+
+| | qwen3-4b-instruct-2507-fp8 | granite-4.2-3b-fp8 |
+| --- | --- | --- |
+| `--gpu-memory-utilization` | 0.42 | 0.40 |
+| process VRAM (nvidia-smi compute-apps) | 6766 MiB | 6502 MiB |
+| weights (vLLM "Model loading took") | 4.29 GiB | 3.92 GiB |
+| KV cache | 1.87 GiB = 13632 tokens | 0.99 GiB = 12976 tokens |
+| ready, compile cache warm / first run | 90 s / about 5 min | 52 s / 165 s |
+| decode, one stream | 146 to 149 tokens/s | 167 to 168 tokens/s |
+| tool call parsed | yes, `get_weather {"city": "Taipei"}`, finish_reason tool_calls | yes, with `--tool-call-parser qwen3_coder --reasoning-parser qwen3` |
+
+- Free VRAM with Qwen loaded: 16303 - 9055 = 7248 MiB (above the 6 GB floor).
+- vLLM takes a fixed share of the card; the catalogue's `need(context)` equals that reservation
+  (a test pins it to within 2 percent of the share times 16303). The overhead field therefore holds
+  the unused KV preallocation, activations and graphs.
+- Fragile fits: Qwen at 0.40 and 0.44 failed to start (negative or too little KV, 8192 needs
+  1.12 GiB) while another engine had just exited; vLLM counts other processes' memory when it
+  profiles, so wait for the previous engine to be gone and re-check if the desktop grows.
+  `--max-num-seqs 8 --max-num-batched-tokens 2048` are in the args to make these shares fit.
+- Granite's template emits Qwen3-coder style XML tool calls, so `granite4` (vLLM's other parser) is
+  wrong for it: with it the call stayed in `content`.
+
+### What inferd needs
+
+```toml
+[engines]
+vllm_python = "/home/pohsuanlai/vllm/.venv/bin/python"
+# hf_cache defaults to ~/.cache/huggingface/hub, where both snapshots are.
+```
+
+inferd starts `python -m vllm.entrypoints.openai.api_server --model <snapshot> --served-model-name
+<id> --uds <socket> <the entry's args>` offline (`HF_HUB_OFFLINE=1`); the model is served under the
+catalogue id. Map the slots (`dist/inferd.toml` syntax):
+
+```toml
+[ai.model.text]
+fast = "local/qwen3-4b-instruct-2507-fp8"
+balanced = "local/qwen3-4b-instruct-2507-fp8"
+# reviewer / second opinion, loaded on demand (another family):
+best = "local/granite-4.2-3b-fp8"
+```
+
+(The tier names are the settings' own, not a ranking in the catalogue.) Both are in the `text`
+slot only (no image input). The docket live-eval runner's `--engine local` can use
+`local/qwen3-4b-instruct-2507-fp8` for planner, reader and policy-writer roles and
+`local/granite-4.2-3b-fp8` for the reviewer. Holo-3.1-4B (10400 MiB estimate) does not fit the budget
+and stays the computer-use model for another run.
+
+| Item | Closes when |
+| --- | --- |
+| `max_output`, and Granite's `reasoning_off` sampling, are proposals | the first eval run records them |
+| Qwen 0.42 / Granite 0.40 shares assume the desktop at about 2.4 GB | `GpuProbe` and the budget agree with a measured start while the desktop is busy |
+| `Reasoning::Off` for Granite needs `enable_thinking: false` in the request | the codec's per-model switch (`model-openai-compat`) |

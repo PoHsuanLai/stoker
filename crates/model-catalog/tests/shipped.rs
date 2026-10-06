@@ -6,14 +6,19 @@ use model_catalog::{
     CatalogKind, EngineKind, Family, Modality, ModelEntry, Slot, parse_entry, slot_members,
 };
 
-const IDS: [&str; 6] = [
+const IDS: [&str; 8] = [
     "holo-3.1-4b",
+    "qwen3-4b-instruct-2507-fp8",
+    "granite-4.2-3b-fp8",
     "nemotron-3.5-asr-streaming",
     "kokoro-82m",
     "whisper-large-v3",
     "whisper-large-v3-turbo",
     "breeze-asr-25",
 ];
+
+/// The small local text models served by vLLM (measured by hand, FINDINGS.md "Local model").
+const LOCAL_TEXT: [&str; 2] = ["qwen3-4b-instruct-2507-fp8", "granite-4.2-3b-fp8"];
 
 /// The curated hosted entries, in catalogue order.
 const REMOTE: [&str; 8] = [
@@ -68,7 +73,8 @@ fn every_shipped_file_is_listed_here_and_has_its_id_as_stem() {
 
 #[test]
 fn migrated_entries_keep_every_older_field() {
-    for id in IDS {
+    // The local text entries were written in the one-catalogue shape; they have no older file.
+    for id in IDS.iter().filter(|id| !LOCAL_TEXT.contains(id)) {
         let (new, old) = (shipped(id), before(id));
         assert_eq!(new.roles, old.roles, "{id}: the derived kinds");
         assert_eq!(new.caps, old.caps, "{id}");
@@ -142,9 +148,21 @@ fn the_shipped_slots() {
     let hosted = REMOTE.map(String::from);
     assert_eq!(
         members(Slot::Text),
+        [
+            vec![
+                "holo-3.1-4b".to_owned(),
+                "qwen3-4b-instruct-2507-fp8".to_owned(),
+                "granite-4.2-3b-fp8".to_owned()
+            ],
+            hosted.to_vec()
+        ]
+        .concat()
+    );
+    // The two text-only local entries take no images.
+    assert_eq!(
+        members(Slot::ImageIn),
         [vec!["holo-3.1-4b".to_owned()], hosted.to_vec()].concat()
     );
-    assert_eq!(members(Slot::ImageIn), members(Slot::Text));
     assert_eq!(members(Slot::ComputerUse), ["holo-3.1-4b"]);
     assert_eq!(members(Slot::VoiceOut), ["kokoro-82m"]);
     assert_eq!(members(Slot::Embeddings), Vec::<String>::new());
@@ -193,6 +211,8 @@ fn the_catalog_ranks_nothing() {
 fn every_entry_names_its_family() {
     for (id, family) in [
         ("holo-3.1-4b", "qwen"),
+        ("qwen3-4b-instruct-2507-fp8", "qwen"),
+        ("granite-4.2-3b-fp8", "granite"),
         ("kokoro-82m", "kokoro"),
         ("whisper-large-v3", "whisper"),
         ("whisper-large-v3-turbo", "whisper"),
@@ -285,5 +305,65 @@ fn the_local_entries_stay_on_device() {
     use model_catalog::Locality;
     for id in IDS {
         assert_eq!(shipped(id).locality, Locality::OnDevice, "{id}");
+    }
+}
+
+fn arg_after(entry: &ModelEntry, flag: &str) -> String {
+    let args = &entry.engines[0].args;
+    let at = args
+        .iter()
+        .position(|a| a.0 == flag)
+        .unwrap_or_else(|| panic!("no {flag}"));
+    args[at + 1].0.clone()
+}
+
+#[test]
+fn the_local_text_entries_are_vllm_models_with_server_parsed_tools() {
+    use model_provider::{Support, ToolSupport};
+    for (id, parser, reasoning) in [
+        ("qwen3-4b-instruct-2507-fp8", "hermes", Support::Absent),
+        ("granite-4.2-3b-fp8", "qwen3_coder", Support::Present),
+    ] {
+        let entry = shipped(id);
+        let text = entry.capabilities.text_out.as_ref().unwrap();
+        assert_eq!(text.tools, ToolSupport::ServerParsed, "{id}");
+        assert_eq!(text.reasoning, reasoning, "{id}");
+        assert_eq!(entry.engines.len(), 1, "{id}");
+        assert_eq!(entry.engines[0].kind, EngineKind::Vllm, "{id}");
+        assert_eq!(arg_after(&entry, "--tool-call-parser"), parser, "{id}");
+        assert!(
+            entry.engines[0]
+                .args
+                .iter()
+                .any(|a| a.0 == "--enable-auto-tool-choice"),
+            "{id}"
+        );
+        // The served window is the entry's context.
+        assert_eq!(
+            arg_after(&entry, "--max-model-len"),
+            text.context.0.to_string(),
+            "{id}"
+        );
+    }
+}
+
+#[test]
+fn the_local_text_entries_fit_the_budget_the_engine_reserves() {
+    // vLLM takes `--gpu-memory-utilization` of the 16303 MiB card; the estimate is the measured
+    // reservation, within 2 percent, and under the 7 GB the owner's desktop leaves.
+    const CARD_MIB: f64 = 16303.0;
+    for id in LOCAL_TEXT {
+        let entry = shipped(id);
+        let context = entry.capabilities.text_out.as_ref().unwrap().context;
+        let need = f64::from(entry.vram.need(context).0);
+        let share: f64 = arg_after(&entry, "--gpu-memory-utilization")
+            .parse()
+            .unwrap();
+        let reserved = share * CARD_MIB;
+        assert!(
+            (need - reserved).abs() / reserved < 0.02,
+            "{id}: need {need}, reserved {reserved}"
+        );
+        assert!(need < 7168.0, "{id}: {need} MiB");
     }
 }
