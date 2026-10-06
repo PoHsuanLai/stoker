@@ -25,6 +25,9 @@ pub use control::{
     EngineExtras, KeepAlive, LlamaExtras, OllamaExtras, PromptCache, Sampling, ThoughtSeal,
     ToolParallelism, VllmExtras,
 };
+/// Re-exported so a crate that builds `ImageLimits` need not depend on `cua-action` and
+/// `vision-prep` itself (a dependency edge changes every consumer's lock file).
+pub use cua_action::ModelSpace;
 pub use embed::{
     EmbedCaps, EmbedEnd, EmbedFault, EmbedPrompts, EmbedRole, EmbedTurn, EmbedVector, Embedder,
     PrefixText, plan_batches,
@@ -52,3 +55,4 @@ pub use units::{
     Attempt, BatchMax, CallIndex, CharCount, Count, Dims, ImageCount, Knob, Milli, Permille,
     RetrySeconds, Seconds, Seed, ServerStatus, SlotId, Tokens, WaitMs,
 };
+pub use vision_prep::ResizeRule;

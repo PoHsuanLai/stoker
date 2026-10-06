@@ -50,7 +50,7 @@ Allowed direct edges (checked by `scripts/check-boundary.sh`; dev-dependencies a
 | `cua-vendors` | `cua-action`, `cua-parse`, `model-provider` |
 | `cua-session` | `cua-action`, `cua-parse`, `cua-vendors`, `model-provider`, `vision-prep` |
 | `model-replay` | `model-http`, `model-provider`, `speech-provider`, `vision-prep` |
-| `model-catalog` | `model-provider`, `speech-provider`, `cua-action`, `vision-prep` |
+| `model-catalog` | `model-provider`, `speech-provider` |
 | `engine-supervisor` | `model-catalog` |
 | `model-openai-compat` | `model-http`, `model-provider`, `model-wire`, `speech-provider` |
 | `speech-provider` | `model-provider` |

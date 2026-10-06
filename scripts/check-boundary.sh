@@ -79,7 +79,7 @@ EDGES=(
   "cua-vendors: cua-action cua-parse model-provider"
   "cua-session: cua-action cua-parse cua-vendors model-provider vision-prep"
   "model-replay: model-http model-provider speech-provider vision-prep"
-  "model-catalog: cua-action model-provider speech-provider vision-prep"
+  "model-catalog: model-provider speech-provider"
   "engine-supervisor: model-catalog"
   "model-http:"
   "model-wire: model-http model-provider"

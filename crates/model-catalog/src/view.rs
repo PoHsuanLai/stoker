@@ -4,10 +4,10 @@
 
 use std::collections::BTreeSet;
 
-use cua_action::ModelSpace;
-use model_provider::{Caps, CuaSupport, EmbedCaps, ImageCount, ImageLimits, InputKind};
+use model_provider::{
+    Caps, CuaSupport, EmbedCaps, ImageCount, ImageLimits, InputKind, ModelSpace, ResizeRule,
+};
 use speech_provider::SpeechCaps;
-use vision_prep::ResizeRule;
 
 use crate::{Capabilities, CatalogKind, Modality, SamplingDefaults};
 
