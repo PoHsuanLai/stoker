@@ -76,7 +76,7 @@ Decisions taken from it:
 
 ## Stubs behind frozen interfaces
 
-Every `todo!()` in the repo (the rig amendment added 27, see `The rig amendment` below; the fill wave F1 lanes remove theirs, `stoker-shape` removed 19 (see `Fill F1: stoker-shape` below) and the F2 lane `stoker-driver` removed 13 more, see `Fill F2: stoker-driver` below; 29 remained; the fill wave W4 lane `w4-stoker` removed 18 more, see `Fill W4: stoker` below; 11 remained; the fill wave W5 lane `w5-stoker` removed the 4 of `OpenAiSpeech`, see `Fill W5: stoker` below; 7 remained; the voice wave lane `v-host-client` removed the 2 of `speech-host-client`, see its section below, and the V-H lane the 2 of `speech-host`; 3 remain, all in the excluded `speech-vad-silero`). Each is a signature other repos build on; the body arrives with
+Every `todo!()` in the repo (the rig amendment added 27, see `The rig amendment` below; the fill wave F1 lanes remove theirs, `stoker-shape` removed 19 (see `Fill F1: stoker-shape` below) and the F2 lane `stoker-driver` removed 13 more, see `Fill F2: stoker-driver` below; 29 remained; the fill wave W4 lane `w4-stoker` removed 18 more, see `Fill W4: stoker` below; 11 remained; the fill wave W5 lane `w5-stoker` removed the 4 of `OpenAiSpeech`, see `Fill W5: stoker` below; 7 remained; the voice wave lane `v-host-client` removed the 2 of `speech-host-client`, see its section below, the V-H lane the 2 of `speech-host` and the lane `v-silero` the 3 of `speech-vad-silero`; none remain). Each is a signature other repos build on; the body arrives with
 the work in the "Closes when" line of its crate.
 
 ### `cua-parse` (0, filled in wave F1)
@@ -137,13 +137,9 @@ The fakes `ScriptedStt`, `ScriptedTts` and `ScriptedVad` play their scripts (tes
 
 `level_of` (integer fixed-point logarithm, -40 dBFS is 333), `EnergyGate`, `Framer` and `endpoint`; see `Fill W4: stoker`.
 
-### `speech-vad-silero` (3, excluded crate)
+### `speech-vad-silero` (0, filled in wave V; excluded crate)
 
-- `src/lib.rs`: SileroVad::load: ort session over the ONNX file, zeroed [2,1,128] state
-- `src/lib.rs`: SileroVad::push: run the model on the frame, carry the state, threshold the probability
-- `src/lib.rs`: SileroVad::reset: zero the recurrent state
-
-Closes when `ort` (2.0.0-rc.13, the line fastembed resolves) joins the pinned block and the Silero v6.2.1 file, supplied by the daemon's path, gives the reference probabilities on a synthetic fixture under `fixtures/audio/`.
+`SileroVad::load`, `push` and `reset`; see `Fill V: speech-vad-silero` below.
 
 ### `vision-prep` (0, filled in wave F1)
 
@@ -844,3 +840,56 @@ Lane `v-host`. Closes the two `speech-host` stubs (7 to 5 `todo!()` in the repo;
 | `--chunk-ms` does not select a model export (the catalog entry is the 560 ms one) | a second Nemotron entry (80 to 1120 ms) picks the export directory from the flag |
 | `serve(&HostArgs)` is engine-less by design; the catalog's `speech_host` engine kind needs the binary from `speech-host-sherpa` (path `target/release/speech-host`) | the engine unit's command points at that binary and `LD_LIBRARY_PATH` or an rpath names the sherpa libs |
 | the `ThreadCount` default of 6 in the catalog args holds; 4 is as good by these numbers | V-L re-measures with the LLM resident |
+
+## Fill V: speech-vad-silero (2026-10-06)
+
+Lane `v-silero`. 3 `todo!()` removed (7 to 4 stubs in the repo). The crate stays excluded from the
+workspace and the gate (it needs libonnxruntime at run time); no signature changed.
+
+### Runtime decision: `ort` (load-dynamic), not tract
+
+- tract-onnx 0.23.8 was tried first and cannot load silero_vad.onnx v6.2.1. The graph is
+  `If (sr == 16000) then <16 kHz graph> else <8 kHz graph>`; tract analyses both arms and the 8 kHz
+  arm rejects a 576-sample input ("attempt to squeeze an axis which dimension is not one"). Passing
+  `sr` as a constant fact did not help. Inlining the `then` arm in the proto got past that, but the
+  16 kHz arm holds three more data-dependent `If`s (squeeze-if-dim-is-1 around the decoder, and the
+  LSTM initial-state handling) whose arms differ in rank, and tract refuses to translate them
+  ("IfThenElse: Condition failed: then/else output facts differ, (1,128) vs (1,128,1)"). Resolving
+  those by hand means rewriting the model graph, so tract was dropped.
+- `ort` 2.0.0-rc.13 with `default-features = false, features = ["load-dynamic", "std"]`: nothing is
+  linked or downloaded at build time. libonnxruntime is opened at the first `load`, from
+  `ORT_DYLIB_PATH` (the daemon sets it) or the platform default lookup. No `SileroConfig` field was
+  added.
+
+### Measurements (by hand, debug build, onnxruntime 1.30.0 from the Python wheel as the library)
+
+| Item | Value |
+| --- | --- |
+| Fixture | `fixtures/audio/silero_synth.wav`, 118 frames, reference `silero_synth_ref.csv` (onnxruntime in Python, 6 decimals) |
+| Max abs diff over all frames | 0.000496 (at most the half-thousandth that `SpeechProb` rounding allows; every frame within 1e-3) |
+| Load time | 47 ms |
+| Per frame | 74 us (1 intra-op thread, debug build) |
+
+### Model, reference and tests
+
+- Model: https://github.com/snakers4/silero-vad/raw/v6.2.1/src/silero_vad/data/silero_vad.onnx, tag
+  v6.2.1, 2327524 bytes, sha256 `1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3`
+  (cached in `~/rs-wt/v-silero/cache/`, not in the repository).
+- Input handling follows `OnnxWrapper` in snakers4/silero-vad `utils_vad.py`: samples / 32768, the
+  last 64 samples of the previous frame prepended (576 inputs), state [2,1,128] carried, `sr` 16000;
+  `reset` zeroes state and context.
+- `dev/silero-fixture.py` makes the WAV (seeded, synthetic) and the CSV from the model.
+- Tests (14, in the crate, run by hand with `cargo test --manifest-path crates/speech-vad-silero/Cargo.toml`):
+  13 model-free through the `Infer` seam (state carrying, reset zeroing, context tail, scaling, failure
+  keeps state and says silence, threshold and thousandths tables, proptests, missing file, not-a-model
+  file) and one `#[ignore]`d reference test (`STOKER_SILERO_ONNX` and `ORT_DYLIB_PATH`, every frame
+  within a thousandth of the CSV).
+- Failure semantics: `push` cannot return an error (frozen signature), so a failed model run returns
+  `(Silence, SpeechProb(0))` and keeps the state.
+
+### Interface asks
+
+- None needed. The daemon must export `ORT_DYLIB_PATH` before the first `SileroVad::load` (or ship
+  libonnxruntime where the platform lookup finds it). If a config field is preferred over the
+  environment variable, add `onnxruntime: Option<PathBuf>` to `SileroConfig` and call
+  `ort::init_from` in `load`.

@@ -1,14 +1,14 @@
 # Excluded from the workspace (and so from the gate's clippy and test, and from deny's graph),
-# the way almanac excludes recall-fastembed: it runs an ONNX model through `ort`, which is not
-# in the pinned block yet. Build it by hand:
+# the way almanac excludes recall-fastembed: it runs an ONNX model through `ort` (2.0.0-rc.13, the
+# line fastembed resolves) with `load-dynamic`, so libonnxruntime is opened at run time from
+# ORT_DYLIB_PATH and nothing is downloaded at build time. Build and test it by hand:
 #
-#   cargo build --manifest-path crates/speech-vad-silero/Cargo.toml
-#
-# `ort` (2.0.0-rc.13, the line fastembed resolves) joins the dependencies below with the fill,
-# after it joins quire's `docs/workspace-deps.toml`.
+#   cargo test --manifest-path crates/speech-vad-silero/Cargo.toml
+#   STOKER_SILERO_ONNX=<silero_vad.onnx> ORT_DYLIB_PATH=<libonnxruntime.so> \
+#     cargo test --manifest-path crates/speech-vad-silero/Cargo.toml -- --ignored
 [package]
 name = "speech-vad-silero"
-description = "Silero VAD v6.2.1 (ONNX) as a speech-provider VoiceActivity, through ort."
+description = "Silero VAD v6.2.1 (ONNX) as a speech-provider VoiceActivity, through ort (load-dynamic)."
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
@@ -21,6 +21,10 @@ speech-provider = { path = "../speech-provider" }
 speech-vad = { path = "../speech-vad" }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["load-dynamic", "std"] }
+
+[dev-dependencies]
+proptest = "1"
 
 [lints.rust]
 unsafe_code = "deny"
