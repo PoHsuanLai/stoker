@@ -1,12 +1,19 @@
 //! The client of `speech-host`, the STT engine process, over `$XDG_RUNTIME_DIR/inferd/<engine>.sock`.
 //!
 //! It speaks `speech_provider::host_wire` (a 4-byte length, then JSON). `SpeechHostClient` is
-//! one of the `SttBackend` arms in porter's inferd. The socket I/O joins with `tokio` (pinned
-//! block, `net` and `io-util`) when the body is filled.
+//! one of the `SttBackend` arms in porter's inferd.
+//!
+//! Errors: a host that cannot be reached, closes early or breaks the stream is `Unreachable`; a
+//! frame that is over the cap, is not JSON of the vocabulary, or a host of another vocabulary
+//! version is `Unreadable`; a `Failed` frame is passed through as the error it carries.
+
+mod framed;
+mod session;
 
 use std::path::PathBuf;
 
 use model_provider::ProviderError;
+use tokio::net::UnixStream;
 use serde::{Deserialize, Serialize};
 use speech_provider::{
     AudioSource, SpeechModelInfo, SpeechToText, SttEnd, SttRequest, TranscriptSink,
@@ -35,8 +42,15 @@ impl SpeechHostClient {
 
 impl SpeechToText for SpeechHostClient {
     fn describe(&self) -> impl Future<Output = Result<Vec<SpeechModelInfo>, ProviderError>> + Send {
-        let _ = &self.socket;
-        async { todo!("SpeechHostClient::describe: Hello, read the models") }
+        let socket = self.socket.clone();
+        async move {
+            let stream = connect(&socket).await?;
+            let mut guard = session::Wire::new(&stream);
+            let mut reader = framed::FrameReader::default();
+            let models = session::hello(&mut guard, &mut reader).await?;
+            guard.finish();
+            Ok(models)
+        }
     }
 
     fn transcribe<A: AudioSource, K: TranscriptSink>(
@@ -45,11 +59,18 @@ impl SpeechToText for SpeechHostClient {
         audio: &mut A,
         sink: &mut K,
     ) -> impl Future<Output = Result<SttEnd, ProviderError>> + Send {
-        let _ = (&self.socket, request, &mut *audio, &mut *sink);
-        async {
-            todo!(
-                "SpeechHostClient::transcribe: Begin, pump audio and events, End or Cancel on drop"
-            )
+        let socket = self.socket.clone();
+        let request = request.clone();
+        async move {
+            let stream = connect(&socket).await?;
+            session::utterance(&stream, request, audio, sink).await
         }
     }
 }
+
+async fn connect(socket: &HostSocket) -> Result<UnixStream, ProviderError> {
+    UnixStream::connect(&socket.0)
+        .await
+        .map_err(|_| ProviderError::Unreachable)
+}
+

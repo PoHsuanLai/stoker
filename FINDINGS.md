@@ -76,7 +76,7 @@ Decisions taken from it:
 
 ## Stubs behind frozen interfaces
 
-Every `todo!()` in the repo (the rig amendment added 27, see `The rig amendment` below; the fill wave F1 lanes remove theirs, `stoker-shape` removed 19 (see `Fill F1: stoker-shape` below) and the F2 lane `stoker-driver` removed 13 more, see `Fill F2: stoker-driver` below; 29 remained; the fill wave W4 lane `w4-stoker` removed 18 more, see `Fill W4: stoker` below; 11 remained; the fill wave W5 lane `w5-stoker` removed the 4 of `OpenAiSpeech`, see `Fill W5: stoker` below; 7 remain, all in the excluded and `speech-host-client` crates). Each is a signature other repos build on; the body arrives with
+Every `todo!()` in the repo (the rig amendment added 27, see `The rig amendment` below; the fill wave F1 lanes remove theirs, `stoker-shape` removed 19 (see `Fill F1: stoker-shape` below) and the F2 lane `stoker-driver` removed 13 more, see `Fill F2: stoker-driver` below; 29 remained; the fill wave W4 lane `w4-stoker` removed 18 more, see `Fill W4: stoker` below; 11 remained; the fill wave W5 lane `w5-stoker` removed the 4 of `OpenAiSpeech`, see `Fill W5: stoker` below; 7 remained; the voice wave lane `v-host-client` removed the 2 of `speech-host-client`, see its section below; 5 remain, all in the excluded speech crates). Each is a signature other repos build on; the body arrives with
 the work in the "Closes when" line of its crate.
 
 ### `cua-parse` (0, filled in wave F1)
@@ -124,12 +124,13 @@ Prints, sequences, the providers, the speech replay and the wire transports are 
 
 Closes when spike V-H shows an offline source build of sherpa-onnx with `-DSHERPA_ONNX_ENABLE_TTS=OFF` (no build-time download) and the Nemotron model id, `sherpa-onnx` joins the pinned block, and a loopback test drives `Hello`, `Begin`, `Audio`, `End` and `Cancel` with a scripted recognizer.
 
-### `speech-host-client` (2)
+### `speech-host-client` (0, filled in the voice wave)
 
-- `src/lib.rs`: SpeechHostClient::describe: Hello, read the models
-- `src/lib.rs`: SpeechHostClient::transcribe: Begin, pump audio and events, End or Cancel on drop
+Both bodies are built on `tokio` (`net`, `io-util`; the workspace line already carried both, so only the crate's own dependency lines changed). `describe` connects, says `Hello`, checks the vocabulary and returns the models. `transcribe` makes one connection per utterance: `Hello`, `Begin`, then one `select!` loop pumps `Audio` frames from the source and host events into the sink, `End` when the source ends. A sink that returns `Flow::Stop` gets `End` sent and the rest of the events dropped until `Done`. Dropping the future sends `Cancel` with a non-blocking `try_write` (skipped if a frame was half written) and closes the socket. Reads buffer partial frames so a cancelled `select!` branch loses no bytes.
 
-Closes when `tokio` (pinned block: `net`, `io-util`) joins the workspace lines, then both bodies pass a loopback Unix-socket test against a fake host that speaks `host_wire`.
+Error mapping: connect, read, write or early close is `Unreachable`; a frame over `MAX_FRAME_BYTES`, bad JSON or a host of another vocabulary is `Unreadable`; `Failed(e)` is `e`; a write that fails after the host sent `Failed` returns the `Failed`.
+
+Tests: `tests/loopback.rs` (11, a fake host on a Unix socket under TMPDIR): describe, vocabulary mismatch, no host, a full utterance with partial and final, `Failed` mid-utterance, early close (idle and while audio is sent), oversize frame, non-vocabulary frame, sink stop, client dropped (host sees `Cancel` then close). No sleeps.
 
 ### `speech-provider` (0, feature `testing`, filled in wave W4)
 

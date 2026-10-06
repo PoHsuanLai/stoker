@@ -12,9 +12,12 @@ publish.workspace = true
 speech-provider = { workspace = true }
 model-provider = { workspace = true }
 serde = { workspace = true }
+tokio = { workspace = true, features = ["net", "io-util"] }
 
 [dev-dependencies]
 serde_json = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros", "sync", "net", "io-util"] }
+speech-provider = { workspace = true, features = ["testing"] }
 
 [lints]
 workspace = true
