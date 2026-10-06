@@ -13,6 +13,9 @@ publish.workspace = true
 # depend on this crate for the seam types) reach no HTTP stack and no runtime; a daemon turns it
 # on.
 hyper = ["dep:hyper", "dep:hyper-util", "dep:http-body-util", "dep:tokio"]
+# TLS for `HttpTarget::Tls`: tokio-rustls on the ring provider, the platform's roots. Off by
+# default (a consumer opts in); without it a `Tls` target answers `HttpError::Tls`.
+tls = ["hyper", "dep:tokio-rustls", "dep:rustls-native-certs", "dep:rustls-pki-types"]
 
 [dependencies]
 serde = { workspace = true }
@@ -21,8 +24,14 @@ hyper = { workspace = true, optional = true, features = ["client", "http1"] }
 hyper-util = { workspace = true, optional = true, features = ["tokio"] }
 http-body-util = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true, features = ["net", "time", "io-util", "rt", "macros"] }
+tokio-rustls = { workspace = true, optional = true }
+rustls-native-certs = { workspace = true, optional = true }
+rustls-pki-types = { workspace = true, optional = true }
 
 [dev-dependencies]
+rcgen = { workspace = true }
+tokio-rustls = { workspace = true }
+rustls-pki-types = { workspace = true }
 proptest = { workspace = true }
 tokio = { workspace = true, features = ["rt", "net", "io-util", "time", "macros"] }
 serde_json = { workspace = true }

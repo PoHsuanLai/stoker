@@ -624,31 +624,49 @@ async fn nothing_listening_is_connect() {
     assert_eq!(result, Err(HttpError::Connect));
 }
 
+// Without the `tls` feature a Tls target is refused before anything is connected (the name does
+// not resolve here, so a connect attempt would be the network). With it, tests/tls.rs covers it.
+#[cfg(not(feature = "tls"))]
 #[tokio::test(flavor = "current_thread")]
-async fn tls_and_a_proxy_are_not_built_and_send_nothing() {
+async fn tls_without_the_feature_sends_nothing() {
     let tls = HttpTarget::Tls {
         host: HostName("api.example.com".into()),
         port: Port(443),
     };
     let result = run(
-        endpoint(tls.clone()),
+        endpoint(tls),
         &post("/chat/completions", Framing::Sse),
         &mut Seen::default(),
     )
     .await;
     assert_eq!(result, Err(HttpError::Tls));
-    let mut proxied = endpoint(tls.clone());
-    proxied.proxy = Proxy::Via(Box::new(HttpTarget::Tcp {
-        host: HostName("127.0.0.1".into()),
-        port: Port(3128),
-    }));
-    let result = run(
-        proxied,
-        &post("/chat/completions", Framing::Sse),
-        &mut Seen::default(),
-    )
-    .await;
-    assert_eq!(result, Err(HttpError::Connect));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_proxy_is_not_built_and_sends_nothing() {
+    for target in [
+        HttpTarget::Tls {
+            host: HostName("api.example.com".into()),
+            port: Port(443),
+        },
+        HttpTarget::Tcp {
+            host: HostName("api.example.com".into()),
+            port: Port(80),
+        },
+    ] {
+        let mut proxied = endpoint(target);
+        proxied.proxy = Proxy::Via(Box::new(HttpTarget::Tcp {
+            host: HostName("127.0.0.1".into()),
+            port: Port(3128),
+        }));
+        let result = run(
+            proxied,
+            &post("/chat/completions", Framing::Sse),
+            &mut Seen::default(),
+        )
+        .await;
+        assert_eq!(result, Err(HttpError::Connect));
+    }
 }
 
 #[tokio::test(flavor = "current_thread")]

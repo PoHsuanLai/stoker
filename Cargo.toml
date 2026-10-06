@@ -74,6 +74,12 @@ tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"
 hyper = "1"
 hyper-util = "0.1.21"
 http-body-util = "0.1"
+# model-http's `tls` feature: rustls with the ring provider only (no aws-lc, no OpenSSL), the
+# platform roots through rustls-native-certs (never webpki-roots, which is MPL).
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "logging", "tls12"] }
+rustls-native-certs = "0.8"
+rustls-pki-types = "1"
+rcgen = { version = "0.13", default-features = false, features = ["ring", "pem"] }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

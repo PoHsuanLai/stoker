@@ -78,15 +78,46 @@ pub enum HttpError {
     ReplayMiss,
 }
 
+/// One DER-encoded X.509 certificate.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct DerCertificate(pub Vec<u8>);
+
+impl core::fmt::Debug for DerCertificate {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "DerCertificate(<{} bytes>)", self.0.len())
+    }
+}
+
+/// Which certificates may vouch for a `Tls` target's server. Verification of the chain, the
+/// validity dates and the host name is always on; this only says which roots it ends in.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub enum TlsRoots {
+    /// The platform's trust store (`rustls-native-certs`).
+    #[default]
+    Platform,
+    /// Only these roots, and nothing else: the seam for a test's scratch CA.
+    Only(Vec<DerCertificate>),
+}
+
 /// One endpoint's HTTP client; it is a [`crate::Transport`].
 #[derive(Debug, Clone)]
 pub struct HttpClient {
     endpoint: HttpEndpoint,
+    roots: TlsRoots,
 }
 
 impl HttpClient {
+    /// A client trusting the platform's roots for a `Tls` target.
     pub fn new(endpoint: HttpEndpoint) -> Self {
-        Self { endpoint }
+        Self::with_roots(endpoint, TlsRoots::Platform)
+    }
+
+    pub fn with_roots(endpoint: HttpEndpoint, roots: TlsRoots) -> Self {
+        Self { endpoint, roots }
+    }
+
+    pub fn roots(&self) -> &TlsRoots {
+        &self.roots
     }
 
     pub fn endpoint(&self) -> &HttpEndpoint {

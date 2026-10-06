@@ -393,9 +393,12 @@ drops the socket. Timeouts are the endpoint's (`WaitMs(0)` is a literal zero: th
 its settings); the request is the endpoint's base plus the path (or the path alone for
 `RouteRoot::Server`), `Accept` by framing, the auth header and the extra headers marked sensitive.
 The `hyper` feature is off by default so the codecs reach no HTTP stack; the workspace carries
-`tokio`, `hyper`, `hyper-util` and `http-body-util` from quire's pinned block. **Not built:** TLS (a
-`Tls` target answers `HttpError::Tls`) and the egress proxy (`Via` answers `Connect`); both arrive
-with the first cloud backend and `hyper-rustls`/`rustls`. `OpenAiSpeech` still holds the client
+`tokio`, `hyper`, `hyper-util` and `http-body-util` from quire's pinned block. TLS is the `tls`
+feature (F4 stoker-tls): `tokio-rustls` on the `ring` provider, SNI from the host, ALPN `http/1.1`,
+the platform's roots through `rustls-native-certs` (never `webpki-roots`, MPL), chain, dates and name
+always checked; `HttpClient::with_roots(endpoint, TlsRoots::Only(certs))` is the test seam. Without
+the feature a `Tls` target answers `HttpError::Tls` before connecting. **Not built:** the egress
+proxy (`Via` answers `Connect` for every target, `Tls` included). `OpenAiSpeech` still holds the client
 directly and waits for a multipart or raw-bytes POST (`Verb` has `Get` and `PostJson` only).
 
 ### `command`

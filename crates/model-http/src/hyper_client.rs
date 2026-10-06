@@ -1,9 +1,9 @@
 //! `Transport for HttpClient` over hyper: HTTP/1.1 on a TCP or Unix socket, one connection per
 //! exchange (dropping the future drops the connection, which aborts generation in the engine).
 //!
-//! Not yet built: TLS and the egress proxy, which arrive with the first cloud backend (the local
-//! engines are plain sockets). A `Tls` target answers `HttpError::Tls` and a `Via` proxy
-//! `HttpError::Connect` without sending anything.
+//! A `Tls` target is TLS over TCP behind the `tls` feature (see `tls.rs`); without the feature it
+//! answers `HttpError::Tls` without sending anything. The egress proxy is not built yet: a `Via`
+//! proxy answers `HttpError::Connect` for every target, `Tls` included, without sending anything.
 
 use std::future::Future;
 use std::time::Duration;
@@ -23,7 +23,7 @@ use tokio::time::timeout;
 use crate::{
     AuthHeader, BodyKind, BodySink, ChunkFlow, Exchange, Framing, HttpClient, HttpEndpoint,
     HttpError, HttpStatus, HttpTarget, Proxy, RequestId, ResponseHead, RouteRoot, Timeouts,
-    Transport, Upload, UploadTransport, Verb, WaitMs, WaitSeconds,
+    TlsRoots, Transport, Upload, UploadTransport, Verb, WaitMs, WaitSeconds,
 };
 
 impl Transport for HttpClient {
@@ -47,7 +47,7 @@ impl Transport for HttpClient {
                 .as_ref()
                 .map_or_else(Bytes::new, |b| Bytes::from(b.0.clone())),
         };
-        send(endpoint, parts, sink)
+        send(endpoint, self.roots(), parts, sink)
     }
 }
 
@@ -65,7 +65,7 @@ impl UploadTransport for HttpClient {
             content_type: Some(up.body.content_type.0.as_str()),
             body: Bytes::from(up.body.bytes.clone()),
         };
-        send(self.endpoint(), parts, sink)
+        send(self.endpoint(), self.roots(), parts, sink)
     }
 }
 
@@ -82,6 +82,7 @@ struct Parts<'a> {
 /// Connects to the endpoint and runs one request on the connection.
 async fn send<K: BodySink>(
     endpoint: &HttpEndpoint,
+    roots: &TlsRoots,
     parts: Parts<'_>,
     sink: &mut K,
 ) -> Result<HttpStatus, HttpError> {
@@ -89,7 +90,9 @@ async fn send<K: BodySink>(
     let timeouts = &endpoint.timeouts;
     match (&endpoint.proxy, &endpoint.target) {
         (Proxy::Via(_), _) => Err(HttpError::Connect),
-        (Proxy::Direct, HttpTarget::Tls { .. }) => Err(HttpError::Tls),
+        (Proxy::Direct, HttpTarget::Tls { host, port }) => {
+            secure(roots, (host, *port), request, timeouts, sink).await
+        }
         (Proxy::Direct, HttpTarget::Tcp { host, port }) => {
             let stream = within(
                 timeouts.connect,
@@ -106,6 +109,36 @@ async fn send<K: BodySink>(
             talk(stream, request, timeouts, sink).await
         }
     }
+}
+
+#[cfg(feature = "tls")]
+async fn secure<K: BodySink>(
+    roots: &TlsRoots,
+    (host, port): (&crate::HostName, crate::Port),
+    request: Request<Full<Bytes>>,
+    timeouts: &Timeouts,
+    sink: &mut K,
+) -> Result<HttpStatus, HttpError> {
+    let name = crate::tls::server_name(host)?;
+    let stream = within(
+        timeouts.connect,
+        TcpStream::connect((host.0.as_str(), port.0)),
+    )
+    .await?
+    .map_err(|_| HttpError::Connect)?;
+    let tls = within(timeouts.connect, crate::tls::handshake(roots, name, stream)).await??;
+    talk(tls, request, timeouts, sink).await
+}
+
+#[cfg(not(feature = "tls"))]
+async fn secure<K: BodySink>(
+    _roots: &TlsRoots,
+    _target: (&crate::HostName, crate::Port),
+    _request: Request<Full<Bytes>>,
+    _timeouts: &Timeouts,
+    _sink: &mut K,
+) -> Result<HttpStatus, HttpError> {
+    Err(HttpError::Tls)
 }
 
 /// Runs `future` for at most `wait`; an overrun is `HttpError::Timeout`.
