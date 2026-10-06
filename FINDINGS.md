@@ -887,6 +887,17 @@ workspace and the gate (it needs libonnxruntime at run time); no signature chang
 - Failure semantics: `push` cannot return an error (frozen signature), so a failed model run returns
   `(Silence, SpeechProb(0))` and keeps the state.
 
+### Missing library
+
+`SileroVad::load` never panics when libonnxruntime is absent or unloadable: it resolves the path
+itself (`ORT_DYLIB_PATH`, else the platform default name), checks an explicit path exists, and opens
+the library through the fallible `ort::init_from`, so the failure is `SileroError::Runtime`. `ort`
+2.0.0-rc.13 cannot retry a failed open (its once-cell is marked complete with no library, so a second
+`init_from` reads uninitialised memory), so the crate opens the library once per process and caches
+the outcome; the first path wins. Tests: a missing library, a file that is not a library, and the
+path-resolution function (a pure function, no environment mutation). With the real library the
+by-hand reference test still passes (max abs diff 0.000496).
+
 ### Interface asks
 
 - None needed. The daemon must export `ORT_DYLIB_PATH` before the first `SileroVad::load` (or ship

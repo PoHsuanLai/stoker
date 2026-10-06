@@ -6,6 +6,7 @@ use speech_provider::{Frame512, SpeechProb, VoiceActivity, Voiced};
 
 use crate::core::{CONTEXT_SAMPLES, Detector, INPUT_SAMPLES, Infer, Input, State};
 use crate::core::{thousandths, verdict};
+use crate::ort_run::{OrtInfer, dylib_path};
 use crate::{SileroConfig, SileroError, SileroModelPath, SileroVad};
 
 #[derive(Debug, Default)]
@@ -197,10 +198,14 @@ fn fixture(name: &str) -> PathBuf {
 fn wav_frames() -> Vec<Frame512> {
     let bytes = std::fs::read(fixture("silero_synth.wav")).unwrap();
     let pcm: Vec<i16> = bytes[44..]
-        .chunks_exact(2)
-        .map(|b| i16::from_le_bytes([b[0], b[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|b| i16::from_le_bytes(*b))
         .collect();
-    pcm.chunks_exact(512)
+    pcm.as_chunks::<512>()
+        .0
+        .iter()
         .map(|c| Frame512::new(c).unwrap())
         .collect()
 }
@@ -250,4 +255,28 @@ fn matches_the_onnxruntime_reference_within_a_thousandth() {
         first.1,
         SpeechProb((reference()[0] * 1000.0).round() as u16)
     );
+}
+
+#[test]
+fn a_missing_onnxruntime_library_is_an_error_not_a_panic() {
+    let dylib = PathBuf::from("/nonexistent/libonnxruntime.so");
+    let model = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+    assert!(OrtInfer::load_with(&dylib, &model).is_err());
+}
+
+#[test]
+fn an_unloadable_onnxruntime_library_is_an_error_not_a_panic() {
+    // A file that exists but is not a shared library.
+    let dylib = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+    assert!(OrtInfer::load_with(&dylib, &dylib).is_err());
+}
+
+#[test]
+fn the_library_path_is_the_env_value_else_the_platform_default() {
+    assert_eq!(
+        dylib_path(Some("/opt/ort/libonnxruntime.so")),
+        PathBuf::from("/opt/ort/libonnxruntime.so")
+    );
+    assert_eq!(dylib_path(Some("")), dylib_path(None));
+    assert!(dylib_path(None).components().count() == 1);
 }
