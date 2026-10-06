@@ -76,7 +76,7 @@ Decisions taken from it:
 
 ## Stubs behind frozen interfaces
 
-Every `todo!()` in the repo (the rig amendment added 27, see `The rig amendment` below; the fill wave F1 lanes remove theirs, `stoker-shape` removed 19 (see `Fill F1: stoker-shape` below) and the F2 lane `stoker-driver` removed 13 more, see `Fill F2: stoker-driver` below; 29 remained; the fill wave W4 lane `w4-stoker` removed 18 more, see `Fill W4: stoker` below; 11 remained; the fill wave W5 lane `w5-stoker` removed the 4 of `OpenAiSpeech`, see `Fill W5: stoker` below; 7 remained; the voice wave lane `v-host-client` removed the 2 of `speech-host-client`, see its section below; 5 remain, all in the excluded speech crates). Each is a signature other repos build on; the body arrives with
+Every `todo!()` in the repo (the rig amendment added 27, see `The rig amendment` below; the fill wave F1 lanes remove theirs, `stoker-shape` removed 19 (see `Fill F1: stoker-shape` below) and the F2 lane `stoker-driver` removed 13 more, see `Fill F2: stoker-driver` below; 29 remained; the fill wave W4 lane `w4-stoker` removed 18 more, see `Fill W4: stoker` below; 11 remained; the fill wave W5 lane `w5-stoker` removed the 4 of `OpenAiSpeech`, see `Fill W5: stoker` below; 7 remained; the voice wave lane `v-host-client` removed the 2 of `speech-host-client`, see its section below, and the V-H lane the 2 of `speech-host`; 3 remain, all in the excluded `speech-vad-silero`). Each is a signature other repos build on; the body arrives with
 the work in the "Closes when" line of its crate.
 
 ### `cua-parse` (0, filled in wave F1)
@@ -117,12 +117,9 @@ Prints, sequences, the providers, the speech replay and the wire transports are 
 
 `choose`, `request` and `ExtractSession::absorb` (the F1 `absorb_for`, renamed by ask 49 in F2); `named_tool_refused_on_llama_server` passes in `model-openai-compat`'s `encode_request` tests.
 
-### `speech-host` (2, excluded crate)
+### `speech-host` (0, filled in V-H; see `Fill V-H: speech-host`)
 
-- `src/lib.rs`: parse_args: the four flags, each once, nothing else
-- `src/lib.rs`: serve: sherpa-onnx online recognizer, one utterance at a time over host_wire
-
-Closes when spike V-H shows an offline source build of sherpa-onnx with `-DSHERPA_ONNX_ENABLE_TTS=OFF` (no build-time download) and the Nemotron model id, `sherpa-onnx` joins the pinned block, and a loopback test drives `Hello`, `Begin`, `Audio`, `End` and `Cancel` with a scripted recognizer.
+`parse_args` and the host_wire loop are built and in the gate; `serve` is frozen and, with no engine linked in this crate, answers `HostError::Model`. The engine is the excluded sibling crate `speech-host-sherpa` (the `speech-host` binary, `serve_with` over a `Recognizer`).
 
 ### `speech-host-client` (0, filled in the voice wave)
 
@@ -805,3 +802,44 @@ Lane `f4-routing`. `ModelEntry` gains two written-in-full fields for the router:
 | `cold_start_estimate_s` is an estimate written by hand from the engine kind (vLLM 60 to 180, CPU engines 5 to 10), not a measurement | an engine-fill run records each model's real start time and the entries are corrected |
 | `family` for `breeze-asr-25` is `whisper` (a Whisper-large-v2 fine-tune by its card) | the first reviewer rule that compares families reads it; correct the entry if the rule needs a finer lineage |
 | `engine-supervisor::budget` already answers the speculative question (who would be unloaded to load X now, and never an engine within `probe_every` of `now`), so no new query was added; inferd calls it from `swap::swap_cost` | standing |
+
+## Fill V-H: speech-host and spike V-H (2026-10-06)
+
+Lane `v-host`. Closes the two `speech-host` stubs (7 to 5 `todo!()` in the repo; the rest wait in `speech-host-client` and `speech-vad-silero`, other lanes).
+
+### Shape
+
+- `speech-host` joins the workspace and the gate: std only (blocking Unix sockets, no tokio, no native code). `parse_args` (four flags, each once, a value each, positive numbers, nothing else; table tests), `Recognizer` (the seam: `models`, `begin`, `accept`, `finish`, `reset`), `Session` (the host_wire state machine as a pure `step(HostIn) -> Vec<HostOut>`), `serve_connection`/`serve_listener`/`serve_with` (framing over a socket) and `bind` (0600, replaces only a stale socket, never another kind of file). 18 tests over `UnixStream::pair` and one real listener with a scripted recognizer, no sleeps.
+- Protocol rules the tests pin: `Hello` first (anything else is `Failed(BadRequest)`; a wrong vocab too); a second `Begin` while one runs is `Failed(BadRequest)` and the running utterance goes on; `Cancel` is silent and drops the utterance; `Audio` or `End` with no utterance is refused; a recognizer error is `Failed` and drops the utterance; a connection closing mid-utterance drops it; a frame over 1 MiB closes the connection before its body is read; a frame that is not a host message gets `Failed` and the connection goes on. Connections are served one after another, so one utterance at a time across the process.
+- `speech-host-sherpa` (excluded from the workspace and from deny's graph, like `speech-vad-silero`): `SherpaRecognizer` over sherpa-onnx's online recognizer (greedy search, endpointing on: an endpoint with text is a `Final` for that segment, a changed hypothesis is a `Partial` from the segment start; `finish` pads 0.3 s of silence, flushes and sends the last `Final`; `Done.text` joins the finals). It carries the `speech-host` binary. `serve` in `speech-host` stays frozen and engine-less; the binary calls `serve_with`.
+- `--chunk-ms` is accepted and validated but the 560 ms export fixes the model's own chunk, so it changes nothing in the engine (it is the size clients send). The language is the primary subtag of the first preferred tag, or `auto`, set as the stream option `language`.
+
+### Spike V-H: results
+
+- **Crate**: `sherpa-onnx` 1.13.8 (Apache-2.0, k2-fsa; crate sha256 `efaa98d5f08380f3d47026e00f60fed182f6edaf4c0af290d88ac0e08d6e3b90`) with `sherpa-onnx-sys` 1.13.8 (`14bbeabb73f73f1c1f4a278af0ee9ae90a19f9727482027047fb9422fa14f8fe`), feature `shared`, default features off. The default is `static`, which downloads a prebuilt archive in `build.rs`.
+- **No build-time download**: the sys crate's `build.rs` downloads only when `SHERPA_ONNX_LIB_DIR` is unset; with it set the cargo build fetches nothing (checked: build log and an offline-safe rebuild). Its build dependencies (`ureq`, `zip`, `tar`, `bzip2`, and through ureq rustls and `webpki-roots`) are compiled but never linked into the binary or called. They are outside the gate and deny's graph; if the crate joins the graph, `webpki-roots` (CDLA-Permissive-2.0 or MPL-2.0 data) needs a deny line or an upstream change. This is an open item for the owner.
+- **C API built by hand once**: `dev/build-sherpa.sh` clones tag `v1.13.8` (commit `11afbd009a7f8c08f4bcf2fc1b265d0df4670fbf`) into `~/rs-wt/v-host/cache/src`, fetches the one onnxruntime zip cmake would fetch (`onnxruntime-linux-x64-glibc2_17-Release-1.28.2.zip` from csukuangfj/onnxruntime-libs, sha256 `c4f8994d56191d9d2c92a961b39fe790459f2c5d155f912b239506ea31359534`, checked, MIT) and hands it to cmake as a local file, with `-DSHERPA_ONNX_ENABLE_TTS=OFF -DBUILD_SHARED_LIBS=ON` and diarization, portaudio, websocket, binaries and examples off. Result: `libsherpa-onnx-c-api.so`, `libsherpa-onnx-cxx-api.so`, `libonnxruntime.so` in `cache/install/lib`; no espeak-ng anywhere in the build log. The cargo build then links with `SHERPA_ONNX_LIB_DIR=cache/install/lib`; the binary finds the libs through `LD_LIBRARY_PATH` (the sys crate copies them next to the binary but sets no rpath that `ldd` accepts), which `dev/speech-host-try.sh` sets.
+- **Model**: `csukuangfj2/sherpa-onnx-nemotron-3.5-asr-streaming-0.6b-560ms-int8-2026-06-11` at `ab43d895f5985b1bbab8b6eac8607fcdc05343f3` (hf CLI, into `cache/model`, 654 MB; licence OpenMDW-1.1). sha256: `encoder.int8.onnx` 012e9321373af99021415e0b0eb3ec827b4be3153be6f30d9b448fe65e896e68, `decoder.int8.onnx` 19f9c98fc6d0a2c33a65a43b36fdb2e914c26c0aa9764be3aebc502a1e982fb0, `joiner.int8.onnx` 4101c7c679a0bc30483794b27a059e34e79232aa2068d78d51231a22c8b0d7ce, `tokens.txt` 729cc103155bafa785f9cd45746cd41cabe97eab7182fc04d594129587958f8a. The test wavs are in the same directory (en, zh, uk and ar are 16 kHz; de, es, fr, ja, ko, vi vary; the try client resamples linearly).
+- **Measured** (`dev/speech-host-try.sh --threads 4,6,8`, AMD Ryzen 9 9950X, CPU only, audio paced at real time in 80 ms frames; each wav run once warm and once paced; RTF from an unpaced run; the machine was heavily loaded by other lanes, load average 60 falling to 27, so treat as upper bounds):
+
+| wav (audio) | threads | first partial | release to final | RTF |
+| --- | --- | --- | --- | --- |
+| en (7.15 s) | 4 | 1.82 s | 0.111 s | 0.190 |
+| en | 6 | 1.87 s | 0.107 s | 0.098 |
+| en | 8 | 1.81 s | 0.049 s | 0.087 |
+| zh (4.76 s) | 4 / 6 / 8 | 0.74 / 0.69 / 0.69 s | 0.001 s | 0.108 / 0.099 / 0.115 |
+| uk (6.00 s) | 4 / 6 / 8 | 1.28 / 1.26 / 1.25 s | 0.083 / 0.052 / 0.054 s | 0.120 / 0.105 / 0.108 |
+| ja (8.16 s) | 4 / 6 / 8 | 0.70 / 0.69 / 0.69 s | 0.001 s | 0.100 / 0.092 / 0.101 |
+
+  Socket up 1.0 to 1.7 s after spawn (model load). Reading it: RTF is about 0.1 at any of 4, 6 or 8 threads (about 10x real time, well under the 3.8x community figure), so threads past 4 buy little; first partial is bound by the 560 ms chunk plus when speech starts in the clip (en.wav opens with silence); release to final is about 50 to 110 ms when the last chunk still has to be decoded and about 0 when the endpoint already flushed it (the clips end right after speech; a held microphone adds trailing silence). Both are far under the 700 ms target for the 560 ms chunk in V-L. Recognition worked for en, zh and uk; with `auto`, `ja.wav` came out as Korean-then-Japanese text (`근위が...`), so zh-TW and ja need the forced `language` (V-Z) rather than auto.
+- **Owner runs**: `dev/build-sherpa.sh` once, then `dev/speech-host-try.sh` (see the report for the exact lines).
+
+### Open and interface asks
+
+| Item | Closes when |
+| --- | --- |
+| `sherpa-onnx` 1.13.x (`shared`) is not yet in quire's `docs/workspace-deps.toml`; the excluded crate pins `=1.13.8` | the beta pin lands with the speech-host-client release |
+| `webpki-roots` and `ureq` arrive as build-dependencies of `sherpa-onnx-sys`, never linked | the crate joins deny's graph (add a deny line or switch the sys crate to `SHERPA_ONNX_LIB_DIR`-only upstream) |
+| `--chunk-ms` does not select a model export (the catalog entry is the 560 ms one) | a second Nemotron entry (80 to 1120 ms) picks the export directory from the flag |
+| `serve(&HostArgs)` is engine-less by design; the catalog's `speech_host` engine kind needs the binary from `speech-host-sherpa` (path `target/release/speech-host`) | the engine unit's command points at that binary and `LD_LIBRARY_PATH` or an rpath names the sherpa libs |
+| the `ThreadCount` default of 6 in the catalog args holds; 4 is as good by these numbers | V-L re-measures with the LLM resident |

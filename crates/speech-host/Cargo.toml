@@ -1,27 +1,22 @@
-# Excluded from the workspace (and so from the gate's clippy and test, and from deny's graph).
-# It links sherpa-onnx (`shared`, built from source with -DSHERPA_ONNX_ENABLE_TTS=OFF so that no
-# TTS stack, and no GPL espeak-ng, is linked into this MIT OR Apache-2.0 process) and runs only
-# as a confined engine unit. Build it by hand:
-#
-#   cargo build --manifest-path crates/speech-host/Cargo.toml
-#
-# The `sherpa-onnx` dependency (1.13.x, feature `shared`) joins with the fill, after spike V-H
-# shows an offline source build and quire's `docs/workspace-deps.toml` carries the line.
+# The protocol half of the speech-to-text engine process: argument parsing, the `Recognizer`
+# seam and the host_wire serve loop. Pure std (blocking Unix sockets), so it is in the gate. The
+# native engine is the sibling crate `speech-host-sherpa` (excluded; it links sherpa-onnx and
+# carries the `speech-host` binary).
 [package]
 name = "speech-host"
-description = "The speech-to-text engine process: sherpa-onnx streaming recognition behind a Unix socket, speaking speech-provider's host wire."
-version = "0.1.0"
-edition = "2024"
-license = "MIT OR Apache-2.0"
-rust-version = "1.92"
-repository = "https://github.com/PoHsuanLai/stoker"
-publish = false
+description = "The speech-to-text engine process, protocol half: arguments, the Recognizer seam and the host_wire serve loop over a Unix socket."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
 
 [dependencies]
-speech-provider = { path = "../speech-provider" }
-serde = { version = "1", features = ["derive"] }
-thiserror = "2"
+speech-provider = { workspace = true }
+model-provider = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
 
-[lints.rust]
-unsafe_code = "deny"
-missing_debug_implementations = "warn"
+[lints]
+workspace = true

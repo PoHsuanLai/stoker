@@ -18,13 +18,14 @@ members = [
   "crates/speech-provider",
   "crates/speech-vad",
   "crates/speech-host-client",
+  "crates/speech-host",
 ]
 # Skeletons that need an inference runtime outside the pinned block. They are built on their own
 # (`cargo build --manifest-path crates/<name>/Cargo.toml`), the way almanac excludes
 # recall-fastembed; `deny.toml` leaves them out of its graph too.
 exclude = [
   "crates/speech-vad-silero",
-  "crates/speech-host",
+  "crates/speech-host-sherpa",
 ]
 
 [workspace.package]
@@ -54,6 +55,7 @@ model-openai-compat = { path = "crates/model-openai-compat" }
 speech-provider     = { path = "crates/speech-provider" }
 speech-vad          = { path = "crates/speech-vad" }
 speech-host-client  = { path = "crates/speech-host-client" }
+speech-host         = { path = "crates/speech-host" }
 
 # From quire's pinned block (`docs/workspace-deps.toml`) and the adopted lines of SPEC.md 1.4,
 # copied verbatim: only the lines stoker names itself.

@@ -1031,6 +1031,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "speech-host"
+version = "0.1.0"
+dependencies = [
+ "model-provider",
+ "serde",
+ "speech-provider",
+ "thiserror",
+]
+
+[[package]]
 name = "speech-host-client"
 version = "0.1.0"
 dependencies = [

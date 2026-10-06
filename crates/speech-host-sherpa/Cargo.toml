@@ -1,0 +1,33 @@
+# Excluded from the workspace (and so from the gate's clippy and test, and from deny's graph).
+# It links sherpa-onnx (`shared`, built once by hand from source with TTS off by
+# `dev/build-sherpa.sh`, so no TTS stack and no GPL espeak-ng is linked into this
+# MIT OR Apache-2.0 process, and the cargo build never downloads) and carries the `speech-host`
+# binary: it runs only as a confined engine unit. Build it by hand:
+#
+#   export SHERPA_ONNX_LIB_DIR=$(dev/build-sherpa.sh | tail -n1 | sed 's/^export SHERPA_ONNX_LIB_DIR=//')
+#   cargo build --release --manifest-path crates/speech-host-sherpa/Cargo.toml
+#
+# The `sherpa-onnx` line joins quire's `docs/workspace-deps.toml` with the beta pin (ask in FINDINGS).
+[package]
+name = "speech-host-sherpa"
+description = "The speech-host engine: a Recognizer over sherpa-onnx's streaming recognizer, and the speech-host binary."
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.92"
+repository = "https://github.com/PoHsuanLai/stoker"
+publish = false
+
+[[bin]]
+name = "speech-host"
+path = "src/main.rs"
+
+[dependencies]
+speech-host = { path = "../speech-host" }
+speech-provider = { path = "../speech-provider" }
+model-provider = { path = "../model-provider" }
+sherpa-onnx = { version = "=1.13.8", default-features = false, features = ["shared"] }
+
+[lints.rust]
+unsafe_code = "deny"
+missing_debug_implementations = "warn"
