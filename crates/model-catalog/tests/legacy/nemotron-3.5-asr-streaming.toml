@@ -10,8 +10,6 @@
 # - max_audio_ms: the proposal's 120 s; `speech-host` measures it in engine fill.
 # - args: `{socket}` is replaced by `command`; the weights directory is added by `command`
 #   from the snapshot.
-# - text_out: the model transcribes, so it has no chat window: context and max_output are 0 and the
-#   audio limits are in audio_in.
 id = "nemotron-3.5-asr-streaming"
 label = "Nemotron Speech 3.5"
 licence = { kind = "open", v = "OpenMDW-1.1" }
@@ -19,10 +17,8 @@ family = "nemotron"
 cold_start_estimate_s = 5
 source = { kind = "hugging_face", v = { repo = "csukuangfj2/sherpa-onnx-nemotron-3.5-asr-streaming-0.6b-560ms-int8-2026-06-11", revision = "ab43d895f5985b1bbab8b6eac8607fcdc05343f3" } }
 vram = { weights_mib = 0, kv_per_1k_ctx_mib = 0, overhead_mib = 0 }
-inputs = ["audio"]
-outputs = ["text"]
-text_out = { tools = "absent", structured = [], reasoning = "absent", streaming = "present", context = 0, max_output = 0 }
-audio_in = { dir = "in", streaming = "present", partials = "present", punctuation = "present", timestamps = "present", langs = { kind = "listed", v = [
+roles = ["speech_in"]
+speech = { dir = "in", streaming = "present", partials = "present", punctuation = "present", timestamps = "present", langs = { kind = "listed", v = [
   "ar-AR", "bg-BG", "cs-CZ", "da-DK", "de-DE", "el-GR", "en-GB", "en-US", "es-ES", "es-US",
   "et-EE", "fi-FI", "fr-CA", "fr-FR", "he-IL", "hi-IN", "hr-HR", "hu-HU", "it-IT", "ja-JP",
   "ko-KR", "lt-LT", "lv-LV", "mt-MT", "nb-NO", "nl-NL", "nn-NO", "pl-PL", "pt-BR", "pt-PT",

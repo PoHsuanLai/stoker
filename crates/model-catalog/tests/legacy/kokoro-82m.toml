@@ -14,9 +14,8 @@ family = "kokoro"
 cold_start_estimate_s = 10
 source = { kind = "hugging_face", v = { repo = "hexgrad/Kokoro-82M", revision = "f3ff3571791e39611d31c381e3a41a3af07b4987" } }
 vram = { weights_mib = 0, kv_per_1k_ctx_mib = 0, overhead_mib = 0 }
-inputs = ["text"]
-outputs = ["audio"]
-audio_out = { dir = "out", streaming = "present", partials = "absent", punctuation = "absent", timestamps = "absent", langs = { kind = "listed", v = ["en-GB", "en-US", "ja", "zh-CN"] }, max_audio_ms = 60000, output = { rate = 24000, pcm = "s16_le" }, voices = ["af_heart", "bf_emma", "zf_xiaoxiao"] }
+roles = ["speech_out"]
+speech = { dir = "out", streaming = "present", partials = "absent", punctuation = "absent", timestamps = "absent", langs = { kind = "listed", v = ["en-GB", "en-US", "ja", "zh-CN"] }, max_audio_ms = 60000, output = { rate = 24000, pcm = "s16_le" }, voices = ["af_heart", "bf_emma", "zf_xiaoxiao"] }
 
 [[engine]]
 kind = "kokoro_fast_api"

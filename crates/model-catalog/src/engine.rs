@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::Modalities;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EngineKind {
@@ -47,4 +49,12 @@ pub struct EngineProfile {
     pub kind: EngineKind,
     pub args: Vec<EngineArg>,
     pub weights: WeightFiles,
+    /// The inputs of the model this engine passes through, when it passes fewer than the model
+    /// takes (an engine build with no audio path). `None` passes all of them. Never wider than
+    /// the model's own inputs; `parse_entry` checks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inputs: Option<Modalities>,
+    /// The same for outputs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outputs: Option<Modalities>,
 }

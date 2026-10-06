@@ -24,7 +24,7 @@ trait), section 6 (copy the recipe).
 | `cua-vendors` | the `WireCodec` trait and one codec per `WireDialect` (formerly `cua-wire`): tool declarations, decoders and result encoders for the Anthropic, OpenAI and Gemini computer-use tools | none |
 | `cua-session` | `CuaSession`: history window, prompt assembly (`prompts/`), parse with one repair, mapping to window space; `TurnSettings`, `TranscriptSink` | none |
 | `model-replay` | cassette format, `ReplayProvider`, `RecordingProvider` over a `CassetteSink`; `wire`: wire cassettes recorded and replayed at the `Transport` seam (`RecordingTransport`, `ReplayTransport`, `ChunkPlan`); `check_sequence`; `speech`: speech cassettes (audio as digests), `SpeechReplay`, `RecordingSpeech` | an injected sink |
-| `model-catalog` | `ModelEntry` (`family`, `cold_start_estimate_s`, chat caps and `SamplingDefaults`, or the `speech` table, or the `embed` table), `EngineProfile`, `parse_entry`, `merge_catalogs`; the shipped `catalog/*.toml` | none |
+| `model-catalog` | `ModelEntry` (`family`, `cold_start_estimate_s`, `Capabilities`: `Modality` inputs and outputs with the detail tables `text_out`, `image_in`, `audio_in`, `audio_out`, `vector_out`, `actions_out`), `EngineProfile` (may narrow inputs and outputs), `Slot`, `fits`, `slot_members`, `parse_entry`, `merge_catalogs`; the shipped `catalog/*.toml`. The older view (`roles`, `caps`, `sampling`, `speech`, `embed`) is derived and deprecated: use `Slot` | none |
 | `engine-supervisor` | the pure `step` and `budget`; `command` (catalog entry to `UnitSpec`); the seams `EngineHost`, `ReadyProbe`, `GpuProbe`; feature `testing`: fakes | none; the daemon fills the seams |
 | `model-http` | `HttpEndpoint` (with `Timeouts` and `ExtraHeader`s), `HttpTarget` (Tcp, Unix, Tls), `AuthHeader`, the pure `SseDecoder` and `NdjsonDecoder`, `ResponseHead`, `BodySink` (head, then chunks), `Exchange`, the `Transport` seam, `Upload` and `UploadTransport` (a POST of bytes), and `HttpClient: Transport + UploadTransport` (hyper over TCP and Unix sockets, behind the `hyper` feature) | yes (the transport) |
 | `model-wire` | the wire half of an endpoint: `ChatCodec`, `ChatDecoder`, `EmbedCodec`, `ErrorWire`, `CodecError`, and `Driver<C, T>`, the `Provider` (and `Embedder`) made of a codec and a transport | none (pure over the `Transport` trait) |
@@ -50,7 +50,7 @@ Allowed direct edges (checked by `scripts/check-boundary.sh`; dev-dependencies a
 | `cua-vendors` | `cua-action`, `cua-parse`, `model-provider` |
 | `cua-session` | `cua-action`, `cua-parse`, `cua-vendors`, `model-provider`, `vision-prep` |
 | `model-replay` | `model-http`, `model-provider`, `speech-provider`, `vision-prep` |
-| `model-catalog` | `model-provider`, `speech-provider` |
+| `model-catalog` | `model-provider`, `speech-provider`, `cua-action`, `vision-prep` |
 | `engine-supervisor` | `model-catalog` |
 | `model-openai-compat` | `model-http`, `model-provider`, `model-wire`, `speech-provider` |
 | `speech-provider` | `model-provider` |
@@ -92,7 +92,7 @@ stoker.
 | `cua-vendors` | `step_result`, `args`, `safety`, `results` < `anthropic`, `openai`, `gemini` < `codec` |
 | `cua-session` | `model`, `history`, `prompt`, `reply`, `window`, `transcript` < `session` |
 | `model-replay` | `print` < `cassette` < `sequence` < `provider`, `speech`, `wire` |
-| `model-catalog` | `engine`, `entry` < `parse` |
+| `model-catalog` | `modality`, `engine` < `capabilities` < `slot`, `view` < `entry` < `file`, `check`, `legacy` < `parse` |
 | `engine-supervisor` | `state` < `unit`, `budget` < `step` < `host` < `fakes` (feature `testing`) |
 | `model-http` | `target`, `auth`, `head` < `sse`, `ndjson` < `client` < `exchange` < `hyper_client` (feature `hyper`) |
 | `model-wire` | `codec` < `driver` |
@@ -152,7 +152,9 @@ stoker.
 
 Names SPEC.md 2 settled for this repo: `CoordSpace` (was `Space`), `ToolCallId` (was `CallId`),
 `TurnUsage` (was `Usage`), `Role` stays `model-provider`'s, `Repeat` stays `cua-action`'s, and the
-catalog's `roles` are `CatalogKind`s (stoker's copy of porter's `AiKind`, same slugs).
+catalog's `roles` are `CatalogKind`s (stoker's copy of porter's `AiKind`, same slugs); since C1
+(agent-spec/capabilities.md) they are derived from the declared capabilities, and `Slot` is the
+name a person picks by.
 
 ## 4. Traits (the seams) and closed enums
 
@@ -271,7 +273,7 @@ on; a change is an edit of SPEC.md first. Every `todo!()` is listed in `FINDINGS
 | `cua-vendors`: trait, enum, `StepResult`, the four codecs | built, tested (doc examples, stop-at-first-failure, safety only adds, a total-decoding proptest); no cloud backend calls them yet |
 | `cua-session`: types, `begin`, `request`, `absorb`, `absorb_for` (both `&mut self`, in place) | built, tested (history window, one repair, mapping, vendor wire history, wire-cassette runs of Holo, Qwen and UI-TARS); the Holo and Qwen schemas are ours until a recorded step |
 | `model-replay`: cassette format (engine stamp, context sizes, speech caps, interaction id and hash, `Strict` mode), round trip; wire cassette format, `RecordingTransport` and `ReplayTransport` | built, tested (SSE and NDJSON recordings under every chunking); the providers, `RequestPrint::{of, hash}`, `check_sequence`, `Cassette::check_sequences` per their F1 state |
-| `model-catalog`: types, `parse_entry`, `merge_catalogs`, `VramEstimate::need`, `gpu_need`, `SamplingDefaults`, `holo-3.1-4b`, the five speech entries | built, tested |
+| `model-catalog`: types, `parse_entry`, `merge_catalogs`, `VramEstimate::need`, `gpu_need`, `SamplingDefaults`, `holo-3.1-4b`, the five speech entries, `Modality`, `Capabilities::on_engine`, `Slot`, `fits`, `slot_members`, older-shape files | built, tested |
 | `engine-supervisor`: types, `Supervisor::new`, config defaults, fakes, `step`, `budget`, `command` | built, tested (the lifecycle table, the budget table with the in-turn window, `command` for vLLM, llama-server, the speech host and Kokoro) |
 | `model-http`: types, `ResponseHead`, `BodySink::head`, `Exchange`, `Transport`, `Timeouts`, `ExtraHeader`, `HttpError`, the SSE and NDJSON decoders, `Transport for HttpClient` (feature `hyper`) | built; round-trip, pinned-JSON, proptest and loopback-socket tested (TLS and the egress proxy answer `HttpError::Tls` and `Connect` until the first cloud backend) |
 | `model-wire`: `ChatCodec`, `ChatDecoder`, `EmbedCodec`, `ErrorWire`, `CodecError`, `Driver` | built, tested with a scripted transport and a line codec (head decides, framer, decoder fault, Retry-After, stop, every transport failure, embed checks) |
@@ -300,17 +302,25 @@ recorded by `dev/record-engine.sh`; its prompt in `cua-session/prompts/`; a row 
 dialect slug test of `cua-action/tests/shapes.rs`.
 
 **Add a catalog entry**: a file `catalog/<id>.toml` with every field written (copy
-`holo-3.1-4b.toml`), the `id` equal to the file stem; `tests/shipped.rs` in model-catalog parses
-it. No code unless it needs a new engine kind, weight layout or dialect.
+`holo-3.1-4b.toml`), the `id` equal to the file stem. It declares `inputs` and `outputs`
+(`text`, `image`, `audio` in; `text`, `image`, `audio`, `vector`, `actions` out) and exactly the
+detail tables those need: `text_out` for text out, `image_in`, `audio_in`, `audio_out`,
+`vector_out`, `actions_out`; the parser refuses a table without its modality and a modality
+without its table. An engine block may narrow with `inputs`/`outputs` (a subset of the model's)
+when that engine has no path for a modality. Slots follow from the capabilities, nothing is
+declared for them. Check each claim against the model card; add the id to `IDS` in
+`tests/shipped.rs`. No code unless it needs a new engine kind, weight layout or dialect.
+Files in the older shape (`roles`, `speech`, `embed`) still load.
 
 **Add an engine kind**: its `EngineKind` variant; the arm in `engine-supervisor::command`
 (program, flags, socket flag, sandbox) with a row in the `command_is_pure` table; its
 `EnginePaths` field and the settings key that fills it (`SpeechHost`: `ai.engine.speech_host.path`;
 `KokoroFastApi`: `ai.engine.kokoro.python`).
 
-**Add a speech model**: a `catalog/<id>.toml` as above, with `roles = ["speech_in"]` (or
-`"speech_out"`) and the `speech` table in the matching direction (copy
-`nemotron-3.5-asr-streaming.toml` or `kokoro-82m.toml`); no chat fields. The label is the
+**Add a speech model**: a `catalog/<id>.toml` as above: `inputs = ["audio"]`, `outputs = ["text"]`
+with `audio_in` (and a `text_out` with zero `context` and `max_output`, since it has no chat
+window), or `inputs = ["text"]`, `outputs = ["audio"]` with `audio_out` (copy
+`nemotron-3.5-asr-streaming.toml` or `kokoro-82m.toml`). The label is the
 model's name and nothing else: the picker is a plain list, and `the_catalog_ranks_nothing` fails a
 file that says best, recommended or the like. A model that runs on the CPU writes zero for all
 three `vram` fields and the sandbox gets no GPU; a vLLM entry may not.
@@ -363,7 +373,7 @@ run by hand against the user's own engine.
 - **Licence** `MIT OR Apache-2.0`. Prompt files and fixtures taken from model cards carry their
   source and licence in the file header.
 - **The wire is serde.** Every stored or wire type has a round-trip test; enums with data are
-  adjacently tagged (`kind`/`v`); the catalog file is `ModelEntry`'s serde form and the
+  adjacently tagged (`kind`/`v`); the catalog file is `EntryFile` (`ModelEntry` serialises to it) and the
   cassette file is `Cassette::to_jsonl`.
 - **Floats** appear nowhere: coordinates are `Coord(u32)`, scale is `Scale120`, temperature and
   every other sampling knob is `Milli` (inside a `Knob` when it may be left to the engine). The one

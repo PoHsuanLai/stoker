@@ -11,15 +11,14 @@ publish.workspace = true
 [dependencies]
 model-provider = { workspace = true }
 speech-provider = { workspace = true }
+cua-action = { workspace = true }
+vision-prep = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
-cua-action = { workspace = true }
-vision-prep = { workspace = true }
-
 
 [lints]
 workspace = true

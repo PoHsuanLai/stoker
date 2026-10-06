@@ -6,8 +6,6 @@
 #   budget decides whether it fits and may evict it first.
 # - langs: any (the model detects the language); max_audio_ms is its 30 s window.
 # - the request is batch: no partial results.
-# - text_out: the model transcribes, so it has no chat window: context and max_output are 0 and the
-#   audio limits are in audio_in.
 id = "whisper-large-v3-turbo"
 label = "Whisper large-v3 turbo"
 licence = { kind = "open", v = "MIT" }
@@ -15,10 +13,8 @@ family = "whisper"
 cold_start_estimate_s = 60
 source = { kind = "hugging_face", v = { repo = "openai/whisper-large-v3-turbo", revision = "41f01f3fe87f28c78e2fbf8b568835947dd65ed9" } }
 vram = { weights_mib = 1550, kv_per_1k_ctx_mib = 0, overhead_mib = 1500 }
-inputs = ["audio"]
-outputs = ["text"]
-text_out = { tools = "absent", structured = [], reasoning = "absent", streaming = "absent", context = 0, max_output = 0 }
-audio_in = { dir = "in", streaming = "absent", partials = "absent", punctuation = "present", timestamps = "absent", langs = { kind = "any" }, max_audio_ms = 30000, input = { rate = 16000, pcm = "s16_le" } }
+roles = ["speech_in"]
+speech = { dir = "in", streaming = "absent", partials = "absent", punctuation = "present", timestamps = "absent", langs = { kind = "any" }, max_audio_ms = 30000, input = { rate = 16000, pcm = "s16_le" } }
 
 [[engine]]
 kind = "vllm"

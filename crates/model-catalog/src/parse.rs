@@ -1,9 +1,8 @@
 //! Reading catalog files.
 
-use model_provider::Caps;
-use speech_provider::SpeechDir;
-
-use crate::{CatalogKind, EngineKind, GpuNeed, ModelEntry, WeightFiles};
+use crate::CatalogKind;
+use crate::file::EntryFile;
+use crate::{DetailTable, EngineKind, GpuNeed, Modality, ModelEntry, WeightFiles, check, legacy};
 
 /// Why a catalog file was refused.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -38,25 +37,38 @@ pub enum CatalogError {
     LlamaServerWithoutGguf,
     #[error("the `embed` table needs the embeddings role")]
     EmbedTableWithoutEmbeddingsRole,
+    #[error("the entry takes no input")]
+    NoInputs,
+    #[error("the entry gives no output")]
+    NoOutputs,
+    #[error("{modality:?} is an output only; no model takes it as input")]
+    OutputOnlyModalityAsInput { modality: Modality },
+    #[error("the `{table:?}` table is written but its modality is not declared")]
+    TableWithoutModality { table: DetailTable },
+    #[error("the modality of the `{table:?}` table is declared but the table is missing")]
+    ModalityWithoutTable { table: DetailTable },
+    #[error("the `{table:?}` table has the wrong speech direction")]
+    AudioTableDirection { table: DetailTable },
+    #[error("computer-use output needs text and image input and the `text_out` table")]
+    ActionsNeedTextAndImage,
+    #[error("engine {engine} passes more inputs or outputs than its model has")]
+    EngineWidensModel { engine: usize },
 }
 
 /// Parses one `catalog/<id>.toml`.
 ///
-/// Beyond the file format: the chat fields are required when a chat role is listed (and refused
-/// when none is), the `speech` table when a speech role is, in the direction the role says; one
-/// entry has one speech direction; a vLLM engine needs a GPU estimate; a llama-server profile
-/// names GGUF weights (`command` has no `--model` for anything else); the `embed` table goes with
-/// the `embeddings` role, and an entry that has it needs no chat fields for that role.
+/// Beyond the file format: the declared inputs and outputs and the detail tables agree (see
+/// `check::capabilities`), an engine's subset stays inside its model's sets, a vLLM engine needs
+/// a GPU estimate, and a llama-server profile names GGUF weights (`command` has no `--model` for
+/// anything else). A file with a `roles` key is in the older shape and is read by `legacy`.
 pub fn parse_entry(text: &str) -> Result<ModelEntry, CatalogError> {
-    let entry: ModelEntry = toml::from_str(text).map_err(|e| CatalogError::Toml(e.to_string()))?;
-    if entry.engines.is_empty() {
-        return Err(CatalogError::NoEngine);
-    }
-    if entry.roles.is_empty() {
-        return Err(CatalogError::NoRoles);
-    }
-    check_speech(&entry)?;
-    check_chat(&entry, text)?;
+    let table: toml::Table = text
+        .parse()
+        .map_err(|e: toml::de::Error| CatalogError::Toml(e.to_string()))?;
+    let entry = match table.contains_key("roles") {
+        true => legacy::parse(text)?,
+        false => parse_new(text)?,
+    };
     if entry.vram.gpu_need() == GpuNeed::Absent
         && entry.engines.iter().any(|e| e.kind == EngineKind::Vllm)
     {
@@ -64,6 +76,17 @@ pub fn parse_entry(text: &str) -> Result<ModelEntry, CatalogError> {
     }
     check_weights(&entry)?;
     Ok(entry)
+}
+
+fn parse_new(text: &str) -> Result<ModelEntry, CatalogError> {
+    let file: EntryFile = toml::from_str(text).map_err(|e| CatalogError::Toml(e.to_string()))?;
+    if file.engines.is_empty() {
+        return Err(CatalogError::NoEngine);
+    }
+    let capabilities = file.capabilities();
+    check::capabilities(&capabilities)?;
+    check::narrowing(&capabilities, &file.engines)?;
+    Ok(file.into_entry())
 }
 
 fn check_weights(entry: &ModelEntry) -> Result<(), CatalogError> {
@@ -74,58 +97,6 @@ fn check_weights(entry: &ModelEntry) -> Result<(), CatalogError> {
         Err(CatalogError::LlamaServerWithoutGguf)
     } else {
         Ok(())
-    }
-}
-
-fn check_speech(entry: &ModelEntry) -> Result<(), CatalogError> {
-    let wanted = match (
-        entry.roles.contains(&CatalogKind::SpeechIn),
-        entry.roles.contains(&CatalogKind::SpeechOut),
-    ) {
-        (true, true) => return Err(CatalogError::BothSpeechDirections),
-        (true, false) => Some((CatalogKind::SpeechIn, SpeechDir::In)),
-        (false, true) => Some((CatalogKind::SpeechOut, SpeechDir::Out)),
-        (false, false) => None,
-    };
-    match (wanted, &entry.speech) {
-        (Some(_), None) => Err(CatalogError::SpeechRoleWithoutSpeechTable),
-        (None, Some(_)) => Err(CatalogError::SpeechTableWithoutSpeechRole),
-        (Some((role, dir)), Some(caps)) if caps.dir() != dir => {
-            Err(CatalogError::SpeechDirectionMismatch { role })
-        }
-        _ => Ok(()),
-    }
-}
-
-/// Chat fields are needed by every non-speech role, except `embeddings` when the entry has its
-/// `embed` table (the table is what that role needs); they are refused when no such role is listed.
-fn check_chat(entry: &ModelEntry, text: &str) -> Result<(), CatalogError> {
-    let embeddings = entry.roles.contains(&CatalogKind::Embeddings);
-    if entry.embed.is_some() && !embeddings {
-        return Err(CatalogError::EmbedTableWithoutEmbeddingsRole);
-    }
-    let chat_role = entry.roles.iter().any(|r| r.speech_dir().is_none());
-    let chat_needed = entry.roles.iter().any(|r| {
-        r.speech_dir().is_none() && !(*r == CatalogKind::Embeddings && entry.embed.is_some())
-    });
-    match (chat_role, &entry.caps) {
-        (false, _) if entry.sampling.is_some() => Err(CatalogError::SamplingWithoutChatRole),
-        (false, Some(_)) => Err(CatalogError::ChatFieldsWithoutChatRole),
-        (false, None) => Ok(()),
-        (true, None) if !chat_needed => Ok(()),
-        (true, caps) => {
-            // The flattened field swallows an error, so read the fields again to name the
-            // one that is missing.
-            let read: Caps = toml::from_str(text).map_err(|e| CatalogError::Toml(e.to_string()))?;
-            let caps = caps.as_ref().unwrap_or(&read);
-            if caps.max_output > caps.context {
-                return Err(CatalogError::OutputExceedsContext);
-            }
-            if entry.sampling.is_none() && chat_needed {
-                return Err(CatalogError::ChatRoleWithoutSampling);
-            }
-            Ok(())
-        }
     }
 }
 

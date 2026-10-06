@@ -149,3 +149,15 @@ fn a_llama_server_profile_must_name_gguf_weights() {
     );
     assert!(parse_entry(&vllm).is_ok());
 }
+
+#[test]
+fn an_older_embeddings_file_converts_to_text_in_and_vector_out() {
+    use model_catalog::{Modality, Slot, fits};
+    let entry = parse_entry(EMBED_ONLY).unwrap();
+    let c = &entry.capabilities;
+    assert_eq!(c.inputs, [Modality::Text].into());
+    assert_eq!(c.outputs, [Modality::Vector].into());
+    assert_eq!(c.vector_out, Some(caps()));
+    assert_eq!(c.text_out, None);
+    assert!(fits(Slot::Embeddings, c) && !fits(Slot::Text, c));
+}

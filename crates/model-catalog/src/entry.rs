@@ -6,7 +6,7 @@ use model_provider::{Caps, EmbedCaps, Reasoning, Sampling, Tokens};
 use serde::{Deserialize, Serialize};
 use speech_provider::{SpeechCaps, SpeechDir};
 
-use crate::EngineProfile;
+use crate::{Capabilities, EngineProfile};
 
 /// The id of a catalog entry, and the file's stem: `holo-3.1-4b`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -100,7 +100,8 @@ impl VramEstimate {
     }
 }
 
-/// The kinds of AI work a model is offered for. The catalog's own copy of porter's `AiKind`
+/// The kinds of AI work a model is offered for. Deprecated: use `Slot` (the slots are derived from
+/// capabilities; this set is derived the same way). The catalog's own copy of porter's `AiKind`
 /// (stoker does not depend on porter); inferd's bridge maps one to the other, and the two
 /// slugs are the same.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -169,16 +170,21 @@ impl SamplingDefaults {
     }
 }
 
-/// The file's serde form: the chat capability fields sit at the top level beside the rest, the
-/// speech capabilities are the `speech` table and the embedding ones the `embed` table.
+/// One entry of the catalogue.
 ///
-/// `caps` and `sampling` are present exactly when a chat role needs them (`llm`, `computer_use`,
-/// `embeddings`, ...) and `speech` exactly when a speech role does; `parse_entry` checks all
-/// three. A speech-only
-/// entry writes no chat fields, and a chat-only entry writes no `speech` table. The `embed` table
-/// (dimensions, batch and input limits, query and document prefixes) belongs to the `embeddings`
-/// role and is the only capability an embeddings-only entry needs: it writes no chat fields.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// `capabilities` is the truth: what the model takes in and gives out, with a detail table for
+/// each declared modality. The slots a person picks from are derived from it (`slot_members`).
+///
+/// `roles`, `caps`, `sampling`, `speech` and `embed` are the older view that porter's inferd still
+/// reads; they are derived from `capabilities` when the file is read (`parse_entry`), never
+/// declared beside it. Deprecated: use `Slot`. They go once porter reads slots. `caps` exists when
+/// a chat role does (`llm`, `computer_use`), `speech` is the audio table (in preferred), `embed`
+/// the vector table.
+///
+/// An entry in the older file shape (`roles`, `speech`, `embed`, chat fields at the top) is read
+/// into the same struct: its `roles` and chat fields are kept as written and its capabilities are
+/// converted from them. `Serialize` always writes the new shape.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelEntry {
     pub id: CatalogId,
     pub label: String,
@@ -188,15 +194,16 @@ pub struct ModelEntry {
     pub cold_start_estimate_s: ColdStartEstimateS,
     pub source: WeightSource,
     pub vram: VramEstimate,
+    pub capabilities: Capabilities,
+    /// Deprecated: use `Slot`.
     pub roles: BTreeSet<CatalogKind>,
-    #[serde(flatten)]
+    /// Deprecated: use `capabilities`.
     pub caps: Option<Caps>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Deprecated: use `capabilities.text_out`.
     pub sampling: Option<SamplingDefaults>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Deprecated: use `capabilities.audio_in` and `audio_out`.
     pub speech: Option<SpeechCaps>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Deprecated: use `capabilities.vector_out`.
     pub embed: Option<EmbedCaps>,
-    #[serde(rename = "engine")]
     pub engines: Vec<EngineProfile>,
 }

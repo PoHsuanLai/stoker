@@ -23,26 +23,17 @@ family = "qwen"
 cold_start_estimate_s = 180
 source = { kind = "hugging_face", v = { repo = "Hcompany/Holo-3.1-4B", revision = "8c88265a5a159bfd1492db9243733dd2e6e04a6e" } }
 vram = { weights_mib = 10400, kv_per_1k_ctx_mib = 32, overhead_mib = 1500 }
+roles = ["llm", "computer_use"]
 inputs = ["text", "image"]
-outputs = ["text", "actions"]
-
-[text_out]
 tools = "server_parsed"
-structured = ["json_schema"]
+output = ["json_schema"]
 reasoning = "present"
 streaming = "present"
 context = 32768
 max_output = 4096
 sampling = { reasoning_on = { temperature = 600, top_p = { kind = "set", v = 950 }, top_k = { kind = "set", v = 20 }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_off = { temperature = 0, top_p = { kind = "off" }, top_k = { kind = "off" }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_default = "on" }
-
-[image_in]
-per_prompt = 3
-rule = { kind = "smart_resize", v = { factor = 32, min_pixels = 65536, max_pixels = 16777216 } }
-space = { kind = "grid", v = 1000 }
-
-[actions_out]
-kind = "dialect"
-v = { dialect = { kind = "tool", v = "holo31" }, batching = "one", zoom = "absent" }
+images = { per_prompt = 3, rule = { kind = "smart_resize", v = { factor = 32, min_pixels = 65536, max_pixels = 16777216 } }, space = { kind = "grid", v = 1000 } }
+computer_use = { kind = "dialect", v = { dialect = { kind = "tool", v = "holo31" }, batching = "one", zoom = "absent" } }
 
 [[engine]]
 kind = "vllm"

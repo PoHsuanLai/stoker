@@ -89,6 +89,8 @@ fn llama_server_gets_the_gguf_files_and_the_socket_as_its_host() {
     let holo = entry(HOLO);
     let profile = EngineProfile {
         kind: EngineKind::LlamaServer,
+        inputs: None,
+        outputs: None,
         args: vec![
             EngineArg("--jinja".into()),
             EngineArg("--ctx-size".into()),
@@ -189,6 +191,8 @@ fn the_socket_placeholder_is_replaced_wherever_it_appears() {
     let holo = entry(HOLO);
     let profile = EngineProfile {
         kind: EngineKind::SpeechHost,
+        inputs: None,
+        outputs: None,
         args: vec![
             EngineArg("--bind=unix:{socket}".into()),
             EngineArg("{socket}:{socket}".into()),
@@ -256,6 +260,8 @@ fn a_text_only_gguf_gets_no_projector() {
     let holo = entry(HOLO);
     let weights = |mmproj: Option<&str>| EngineProfile {
         kind: EngineKind::LlamaServer,
+        inputs: None,
+        outputs: None,
         args: vec![],
         weights: WeightFiles::Gguf {
             model: FileName("nomic.gguf".into()),
@@ -279,6 +285,8 @@ fn a_gguf_file_name_with_a_directory_part_stays_in_the_snapshot() {
     let holo = entry(HOLO);
     let profile = EngineProfile {
         kind: EngineKind::LlamaServer,
+        inputs: None,
+        outputs: None,
         args: vec![],
         weights: WeightFiles::Gguf {
             model: FileName("../../outside/model.gguf".into()),
@@ -295,6 +303,8 @@ fn llama_server_with_weights_that_are_not_gguf_gets_no_model_and_no_panic() {
     let holo = entry(HOLO);
     let profile = EngineProfile {
         kind: EngineKind::LlamaServer,
+        inputs: None,
+        outputs: None,
         args: vec![],
         weights: WeightFiles::HfSnapshot,
     };
@@ -320,6 +330,8 @@ fn command_is_pure_and_total_over_arbitrary_text() {
                 v.0 = revision;
                 let profile = EngineProfile {
                     kind: EngineKind::LlamaServer,
+                    inputs: None,
+                    outputs: None,
                     args: vec![EngineArg(arg)],
                     weights: WeightFiles::Gguf {
                         model: FileName(file.clone()),
