@@ -994,6 +994,84 @@ and stays the computer-use model for another run.
 | Qwen 0.42 / Granite 0.40 shares assume the desktop at about 2.4 GB | `GpuProbe` and the budget agree with a measured start while the desktop is busy |
 | `Reasoning::Off` for Granite needs `enable_thinking: false` in the request | the codec's per-model switch (`model-openai-compat`) |
 
+## Local model: an 8B planner (2026-10-07, lane `local-8b`)
+
+The companion's planner needs more than Qwen3-4B-Instruct-2507 gives: the 4B reviews safety well but
+invents handles and searches for the wrong thing in multi-step tool use. The owner accepts a share
+of up to 0.62 of the card (about 10.1 GB, at least 3.5 GB free) for one ~8B model.
+
+| Entry | Repository (own org) | Revision | Licence | Family |
+| --- | --- | --- | --- | --- |
+| `qwen3-8b-awq` | `Qwen/Qwen3-8B-AWQ` (5.68 GiB, autoawq 4-bit, group 128) | `4da05a8edb55c6046cce958586c33b61da07bb79` | Apache-2.0 | qwen |
+
+| File | sha256 |
+| --- | --- |
+| `model-00001-of-00002.safetensors` (4853922024 bytes) | `6e112429856bc65e3837a9f38d6f6b71ffdda832cb46299a12f4fa8f6352516e` |
+| `model-00002-of-00002.safetensors` (1244659840 bytes) | `20c2d6366ab85c90786ccdd829cd2b9e7d30ef3b2ebbb998280e7e4014b542ff` |
+
+Downloaded with `uvx --from huggingface_hub hf download Qwen/Qwen3-8B-AWQ --revision <sha>` into
+`~/.cache/huggingface/hub`; the hashes were computed locally and equal the Hub's LFS oids.
+
+### Choice
+
+- Qwen3-8B (the dense 8B of the Qwen3 line): the card names agent tool use in both thinking and
+  non-thinking modes, Hermes tool format (the `hermes` parser the 4B already uses), a hard
+  `enable_thinking` switch in the template, Apache-2.0, and the AWQ checkpoint is Qwen's own.
+  The AWQ weights (5.71 GiB loaded) leave room for a 12288 window inside the 0.62 cap.
+- Rejected: `Qwen/Qwen3-8B-FP8` (the same model in Qwen's own FP8, 8.79 GiB of weights: with the
+  1.8 GiB of KV for 12288 and the profiling overhead the share is about 0.72, over the cap);
+  `ibm-granite/granite-4.2-8b-fp8` (8.96 GiB of weights, over the cap for the same reason);
+  Qwen3.5-9B (18 GiB bf16, and no official FP8 or 4-bit repository found).
+
+### Reasoning
+
+The template thinks unless `chat_template_kwargs {"enable_thinking": false}` is sent; with
+`--reasoning-parser qwen3` the thinking comes back in `reasoning_content`, so the content and
+tool calls stay clean. `Reasoning::EngineDefault` therefore thinks (the entry's
+`reasoning_default` is `on`): about 700 reasoning tokens before the first tool call and about
+160 before the second, 5 to 6 s a step at eager decode speed. `Reasoning::Off` needs the same
+codec switch as Granite's (`model-openai-compat`, already listed below) and answers in 22 to 33
+tokens. A planner that wants speed can send Off once handles are known; the entry does not decide.
+
+### Measurements (by hand, `--uds`, offline, `--enforce-eager`, desktop at about 2.1 GB, nothing else on the GPU)
+
+| | qwen3-8b-awq |
+| --- | --- |
+| `--gpu-memory-utilization` | 0.51 (0.50 failed: 1.68 GiB KV available, 1.69 GiB needed for 12288) |
+| process VRAM (nvidia-smi compute-apps) | 8404 MiB (share 8315 MiB); total used 10398 MiB, 5.9 GB free |
+| weights (vLLM "Model loading took") | 5.71 GiB (5847 MiB) |
+| KV cache | 1.84 GiB = 13408 tokens (1.09x concurrency at 12288) |
+| ready (engine init 56.6 s) | 72 s |
+| decode, one stream, eager | about 130 tokens/s non-thinking; the first request after start was slower (warm-up) |
+| two-tool request (`search_mail`, `forward_message`) | planned correctly in thinking and non-thinking mode |
+
+The two-tool test: user asks to forward "the email about the Taipei invoice" to a person; the
+system prompt says never invent handles. Step 1 called `search_mail {"query": "Taipei invoice"}`
+(both modes). Given a result with handles `msg_7f3a` (Taipei invoice Oct) and `msg_1c92` (Lunch),
+step 2 called `forward_message {"handle": "msg_7f3a", "to": "alice@example.com"}` (both modes).
+One scenario, not an eval: the docket live-eval is what decides whether it plans well enough.
+
+The two local models cannot be resident together: 8315 + 7336 MiB is 15651 MiB of 16303 with the
+desktop at 2 GB or more. inferd evicts one to load the other (cold starts 75 s and 90 s).
+
+### Slots for inferd.toml
+
+```toml
+[ai.model.text]
+fast = "local/qwen3-4b-instruct-2507-fp8"   # quick judge, writer
+balanced = "local/qwen3-8b-awq"             # the companion's planner
+best = "local/granite-4.2-3b-fp8"           # reviewer / second opinion, on demand
+```
+
+(Tier names are the settings' own, not a ranking.) Alternating fast and balanced costs an
+eviction and a 75 to 90 s cold start each time; if that hurts, map `fast` to the 8B too and
+send `Reasoning::Off` for the quick calls.
+
+| Item | Closes when |
+| --- | --- |
+| 0.51 share assumes the desktop at about 2.1 GB; vLLM counts other processes when it profiles | `GpuProbe` and the budget agree with a measured start while the desktop is busy |
+| `reasoning_default = on` and `max_output = 4096` are proposals | the first planner eval run records them |
+
 ## fuzz-decode: model and engine output is hostile input (2026-10-07, lane `fuzz-decode`)
 
 Every parser of bytes that a model, an engine or a socket sent is driven in the gate by

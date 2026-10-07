@@ -6,10 +6,11 @@ use model_catalog::{
     CatalogKind, EngineKind, Family, Modality, ModelEntry, Slot, parse_entry, slot_members,
 };
 
-const IDS: [&str; 8] = [
+const IDS: [&str; 9] = [
     "holo-3.1-4b",
     "qwen3-4b-instruct-2507-fp8",
     "granite-4.2-3b-fp8",
+    "qwen3-8b-awq",
     "nemotron-3.5-asr-streaming",
     "kokoro-82m",
     "whisper-large-v3",
@@ -18,7 +19,11 @@ const IDS: [&str; 8] = [
 ];
 
 /// The small local text models served by vLLM (measured by hand, FINDINGS.md "Local model").
-const LOCAL_TEXT: [&str; 2] = ["qwen3-4b-instruct-2507-fp8", "granite-4.2-3b-fp8"];
+const LOCAL_TEXT: [&str; 3] = [
+    "qwen3-4b-instruct-2507-fp8",
+    "granite-4.2-3b-fp8",
+    "qwen3-8b-awq",
+];
 
 /// The curated hosted entries, in catalogue order.
 const REMOTE: [&str; 8] = [
@@ -152,7 +157,8 @@ fn the_shipped_slots() {
             vec![
                 "holo-3.1-4b".to_owned(),
                 "qwen3-4b-instruct-2507-fp8".to_owned(),
-                "granite-4.2-3b-fp8".to_owned()
+                "granite-4.2-3b-fp8".to_owned(),
+                "qwen3-8b-awq".to_owned()
             ],
             hosted.to_vec()
         ]
@@ -213,6 +219,7 @@ fn every_entry_names_its_family() {
         ("holo-3.1-4b", "qwen"),
         ("qwen3-4b-instruct-2507-fp8", "qwen"),
         ("granite-4.2-3b-fp8", "granite"),
+        ("qwen3-8b-awq", "qwen"),
         ("kokoro-82m", "kokoro"),
         ("whisper-large-v3", "whisper"),
         ("whisper-large-v3-turbo", "whisper"),
@@ -323,6 +330,7 @@ fn the_local_text_entries_are_vllm_models_with_server_parsed_tools() {
     for (id, parser, reasoning) in [
         ("qwen3-4b-instruct-2507-fp8", "hermes", Support::Absent),
         ("granite-4.2-3b-fp8", "qwen3_coder", Support::Present),
+        ("qwen3-8b-awq", "hermes", Support::Present),
     ] {
         let entry = shipped(id);
         let text = entry.capabilities.text_out.as_ref().unwrap();
@@ -350,10 +358,15 @@ fn the_local_text_entries_are_vllm_models_with_server_parsed_tools() {
 #[test]
 fn the_local_text_entries_fit_the_budget_the_engine_reserves() {
     // vLLM takes `--gpu-memory-utilization` of the 16303 MiB card; the estimate is the measured
-    // reservation, within 2 percent, and at most 0.45 of the card (7336 MiB), which leaves about
-    // 6.4 GB free beside the owner's desktop.
+    // reservation, within 2 percent, and at most the entry's cap: 0.45 of the card (7336 MiB) for
+    // the two small entries, which leaves about 6.4 GB free beside the owner's desktop, and 0.62
+    // (10108 MiB) for the 8B planner, which the owner accepts to leave 3.5 GB free.
     const CARD_MIB: f64 = 16303.0;
-    for id in LOCAL_TEXT {
+    for (id, cap_share) in [
+        ("qwen3-4b-instruct-2507-fp8", 0.45),
+        ("granite-4.2-3b-fp8", 0.45),
+        ("qwen3-8b-awq", 0.62),
+    ] {
         let entry = shipped(id);
         let context = entry.capabilities.text_out.as_ref().unwrap().context;
         let need = f64::from(entry.vram.need(context).0);
@@ -365,6 +378,6 @@ fn the_local_text_entries_fit_the_budget_the_engine_reserves() {
             (need - reserved).abs() / reserved < 0.02,
             "{id}: need {need}, reserved {reserved}"
         );
-        assert!(need <= 7340.0, "{id}: {need} MiB");
+        assert!(need <= cap_share * CARD_MIB + 4.0, "{id}: {need} MiB");
     }
 }

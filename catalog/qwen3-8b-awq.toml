@@ -1,0 +1,61 @@
+# Qwen3 8B (Qwen), the AWQ 4-bit checkpoint, a text model with native tool calling and a thinking switch.
+#
+# Read from the repository's config.json, README.md and LICENSE, and measured by hand on the
+# RTX 5070 Ti (16303 MiB) with vLLM 0.30.0 (FINDINGS.md, "Local model: an 8B planner"):
+# - source: Qwen's own AWQ repository (autoawq, 4 bits, group 128, GEMM); two safetensors shards,
+#   5.68 GiB; the snapshot is in the Hugging Face cache. vLLM loads it on sm_120.
+# - licence: Apache-2.0 (the card's licence field and LICENSE file).
+# - tools: Hermes-style <tool_call> JSON in the chat template, which vLLM's `hermes` parser turns
+#   into tool calls (measured: search_mail then forward_message, both parsed, the second with the
+#   handle the tool result returned).
+# - reasoning: present, on by default. The template thinks unless `enable_thinking` is false;
+#   `--reasoning-parser qwen3` moves the thinking into `reasoning_content`. A planner turn thought
+#   for about 700 tokens (first step) and 160 (second step); `enable_thinking: false` answered in
+#   22 and 33 tokens. `Reasoning::Off` needs the codec to send
+#   `chat_template_kwargs {"enable_thinking": false}`; EngineDefault therefore thinks.
+# - sampling: the card's: thinking temperature 0.6, top_p 0.95, top_k 20, min_p 0 (never greedy);
+#   non-thinking temperature 0.7, top_p 0.8, top_k 20, min_p 0.
+# - context: the model takes 40960 (32768 native); 12288 is the companion's planner window.
+# - kv: 36 layers, 8 KV heads of 128, bf16: 144 MiB per 1k tokens (vLLM reported 13408 tokens in
+#   1.84 GiB).
+# - vram (measured, nvidia-smi compute-apps while serving): weights 5.71 GiB (5847 MiB, vLLM's
+#   "Model loading took"). vLLM takes a fixed share of the card: --gpu-memory-utilization 0.51 of
+#   16303 MiB is 8315 MiB (the process showed 8404 MiB with its CUDA context). 0.50 failed to start
+#   (1.68 GiB of KV available, 1.69 GiB needed for 12288). The overhead is what is left after the
+#   weights and the KV for the window: 8315 - 5847 - 144 x 12.288 = 699, so `need(12288)` is the
+#   0.51 share. The desktop at about 2.1 to 2.5 GB leaves about 5.5 GB free beside it.
+# - cold start: 72 s to ready with --enforce-eager (no CUDA graphs, no torch.compile).
+# - decode: about 130 tokens/s one stream, eager.
+# - engine args: --max-num-seqs 8 and --max-num-batched-tokens 2048 shrink the profiling peak.
+id = "qwen3-8b-awq"
+label = "Qwen3 8B AWQ"
+licence = { kind = "open", v = "Apache-2.0" }
+family = "qwen"
+cold_start_estimate_s = 75
+source = { kind = "hugging_face", v = { repo = "Qwen/Qwen3-8B-AWQ", revision = "4da05a8edb55c6046cce958586c33b61da07bb79" } }
+vram = { weights_mib = 5847, kv_per_1k_ctx_mib = 144, overhead_mib = 699 }
+inputs = ["text"]
+outputs = ["text"]
+
+[text_out]
+tools = "server_parsed"
+structured = ["json_schema"]
+reasoning = "present"
+streaming = "present"
+context = 12288
+max_output = 4096
+sampling = { reasoning_on = { temperature = 600, top_p = { kind = "set", v = 950 }, top_k = { kind = "set", v = 20 }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_off = { temperature = 700, top_p = { kind = "set", v = 800 }, top_k = { kind = "set", v = 20 }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_default = "on" }
+
+[[engine]]
+kind = "vllm"
+args = [
+  "--max-model-len", "12288",
+  "--max-num-seqs", "8",
+  "--max-num-batched-tokens", "2048",
+  "--enable-auto-tool-choice",
+  "--tool-call-parser", "hermes",
+  "--reasoning-parser", "qwen3",
+  "--gpu-memory-utilization", "0.51",
+  "--enforce-eager",
+]
+weights = { kind = "hf_snapshot" }
