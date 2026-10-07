@@ -6,7 +6,7 @@ use model_provider::{Caps, EmbedCaps, Reasoning, Sampling, Tokens};
 use serde::{Deserialize, Serialize};
 use speech_provider::{SpeechCaps, SpeechDir};
 
-use crate::{Capabilities, EngineProfile};
+use crate::{Capabilities, EngineProfile, Serving};
 
 /// The id of a catalog entry, and the file's stem: `holo-3.1-4b`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -264,6 +264,8 @@ pub struct ModelEntry {
     pub vram: VramEstimate,
     /// Where it runs; `OnDevice` for every file.
     pub locality: Locality,
+    /// Who starts the engine; `Launched` unless the file says `serving`.
+    pub serving: Serving,
     pub capabilities: Capabilities,
     /// Deprecated: use `Slot`.
     pub roles: BTreeSet<CatalogKind>,

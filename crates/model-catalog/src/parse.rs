@@ -3,7 +3,8 @@
 use crate::CatalogKind;
 use crate::file::EntryFile;
 use crate::{
-    DetailTable, EngineKind, GpuNeed, Locality, Modality, ModelEntry, WeightFiles, check, legacy,
+    DetailTable, EngineKind, GpuNeed, Locality, Modality, ModelEntry, Serving, WeightFiles, check,
+    legacy,
 };
 
 /// Why a catalog file was refused.
@@ -43,6 +44,10 @@ pub enum CatalogError {
     RemoteWithEngines,
     #[error("a remote entry lists no way to reach it")]
     RemoteWithoutReach,
+    #[error("an attached entry is served elsewhere and lists no engine")]
+    AttachedWithEngines,
+    #[error("an attached entry is on-device: it has no reach")]
+    AttachedRemote,
     #[error("the entry takes no input")]
     NoInputs,
     #[error("the entry gives no output")]
@@ -86,10 +91,19 @@ pub fn parse_entry(text: &str) -> Result<ModelEntry, CatalogError> {
 
 fn parse_new(text: &str) -> Result<ModelEntry, CatalogError> {
     let file: EntryFile = toml::from_str(text).map_err(|e| CatalogError::Toml(e.to_string()))?;
-    match (&file.locality, file.engines.is_empty()) {
-        (Locality::OnDevice, true) => return Err(CatalogError::NoEngine),
-        (Locality::Remote { .. }, false) => return Err(CatalogError::RemoteWithEngines),
-        (Locality::Remote { reach }, true) if reach.is_empty() => {
+    match (&file.serving, &file.locality, file.engines.is_empty()) {
+        (Serving::Attached(_), Locality::Remote { .. }, _) => {
+            return Err(CatalogError::AttachedRemote);
+        }
+        (Serving::Attached(_), Locality::OnDevice, false) => {
+            return Err(CatalogError::AttachedWithEngines);
+        }
+        (Serving::Attached(_), Locality::OnDevice, true) => {}
+        (Serving::Launched, Locality::OnDevice, true) => return Err(CatalogError::NoEngine),
+        (Serving::Launched, Locality::Remote { .. }, false) => {
+            return Err(CatalogError::RemoteWithEngines);
+        }
+        (Serving::Launched, Locality::Remote { reach }, true) if reach.is_empty() => {
             return Err(CatalogError::RemoteWithoutReach);
         }
         _ => {}

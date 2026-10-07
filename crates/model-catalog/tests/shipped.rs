@@ -6,11 +6,12 @@ use model_catalog::{
     CatalogKind, EngineKind, Family, Modality, ModelEntry, Slot, parse_entry, slot_members,
 };
 
-const IDS: [&str; 9] = [
+const IDS: [&str; 10] = [
     "holo-3.1-4b",
     "qwen3-4b-instruct-2507-fp8",
     "granite-4.2-3b-fp8",
     "qwen3-8b-awq",
+    "qwen3.5-35b-a3b-fp8",
     "nemotron-3.5-asr-streaming",
     "kokoro-82m",
     "whisper-large-v3",
@@ -24,6 +25,9 @@ const LOCAL_TEXT: [&str; 3] = [
     "granite-4.2-3b-fp8",
     "qwen3-8b-awq",
 ];
+
+/// The text entries served by an engine somebody else started (no `[[engine]]`, no GPU share).
+const ATTACHED: [&str; 1] = ["qwen3.5-35b-a3b-fp8"];
 
 /// The curated hosted entries, in catalogue order.
 const REMOTE: [&str; 8] = [
@@ -79,7 +83,10 @@ fn every_shipped_file_is_listed_here_and_has_its_id_as_stem() {
 #[test]
 fn migrated_entries_keep_every_older_field() {
     // The local text entries were written in the one-catalogue shape; they have no older file.
-    for id in IDS.iter().filter(|id| !LOCAL_TEXT.contains(id)) {
+    for id in IDS
+        .iter()
+        .filter(|id| !LOCAL_TEXT.contains(id) && !ATTACHED.contains(id))
+    {
         let (new, old) = (shipped(id), before(id));
         assert_eq!(new.roles, old.roles, "{id}: the derived kinds");
         assert_eq!(new.caps, old.caps, "{id}");
@@ -158,7 +165,8 @@ fn the_shipped_slots() {
                 "holo-3.1-4b".to_owned(),
                 "qwen3-4b-instruct-2507-fp8".to_owned(),
                 "granite-4.2-3b-fp8".to_owned(),
-                "qwen3-8b-awq".to_owned()
+                "qwen3-8b-awq".to_owned(),
+                "qwen3.5-35b-a3b-fp8".to_owned()
             ],
             hosted.to_vec()
         ]
@@ -220,6 +228,7 @@ fn every_entry_names_its_family() {
         ("qwen3-4b-instruct-2507-fp8", "qwen"),
         ("granite-4.2-3b-fp8", "granite"),
         ("qwen3-8b-awq", "qwen"),
+        ("qwen3.5-35b-a3b-fp8", "qwen"),
         ("kokoro-82m", "kokoro"),
         ("whisper-large-v3", "whisper"),
         ("whisper-large-v3-turbo", "whisper"),
@@ -362,6 +371,7 @@ fn the_local_text_entries_fit_the_budget_the_engine_reserves() {
     // the two small entries, which leaves about 6.4 GB free beside the owner's desktop, and 0.62
     // (10108 MiB) for the 8B planner, which the owner accepts to leave 3.5 GB free.
     const CARD_MIB: f64 = 16303.0;
+    // Attached entries are served on another machine and have no share here: not checked.
     for (id, cap_share) in [
         ("qwen3-4b-instruct-2507-fp8", 0.45),
         ("granite-4.2-3b-fp8", 0.45),
@@ -380,4 +390,71 @@ fn the_local_text_entries_fit_the_budget_the_engine_reserves() {
         );
         assert!(need <= cap_share * CARD_MIB + 4.0, "{id}: {need} MiB");
     }
+}
+
+#[test]
+fn the_launched_entries_say_nothing_of_serving() {
+    use model_catalog::Serving;
+    for id in IDS.iter().filter(|id| !ATTACHED.contains(id)) {
+        let entry = shipped(id);
+        assert_eq!(entry.serving, Serving::Launched, "{id}");
+        assert!(
+            !read("../../catalog", id)
+                .lines()
+                .any(|l| l.starts_with("serving ")),
+            "{id}: a launched entry omits the key"
+        );
+    }
+}
+
+#[test]
+fn the_attached_35b_planner_is_a_qwen_moe_served_elsewhere() {
+    use model_catalog::{
+        Licence, Locality, ParserName, ServedName, Serving, Spdx, WeightSource, parse_entry,
+    };
+    use model_provider::{Reasoning, Support, Tokens, ToolSupport};
+    let entry = shipped("qwen3.5-35b-a3b-fp8");
+    assert_eq!(entry.family, Family("qwen".into()));
+    assert_eq!(entry.locality, Locality::OnDevice);
+    assert!(entry.engines.is_empty(), "nothing here starts it");
+    let Serving::Attached(attached) = &entry.serving else {
+        panic!("not attached");
+    };
+    assert_eq!(attached.engine, EngineKind::Vllm);
+    assert_eq!(
+        attached.served_name,
+        ServedName("qwen3.5-35b-a3b-fp8".into())
+    );
+    assert_eq!(attached.tool_parser, ParserName("qwen3_coder".into()));
+    assert_eq!(attached.reasoning_parser, Some(ParserName("qwen3".into())));
+    assert_eq!(entry.licence, Licence::Open(Spdx("Apache-2.0".into())));
+    let WeightSource::HuggingFace { repo, revision } = &entry.source else {
+        panic!("not from Hugging Face");
+    };
+    assert_eq!(repo.0, "Qwen/Qwen3.5-35B-A3B-FP8");
+    assert_eq!(revision.0, "9d1823d2dee688a6b25e77009dc727688c44936e");
+    let text = entry.capabilities.text_out.as_ref().unwrap();
+    assert_eq!(text.tools, ToolSupport::ServerParsed);
+    assert_eq!(text.reasoning, Support::Present);
+    assert_eq!(text.context, Tokens(65536));
+    assert_eq!(
+        text.sampling
+            .unwrap()
+            .for_reasoning(Reasoning::EngineDefault),
+        &text.sampling.unwrap().reasoning_on,
+        "proposed: the template thinks by default"
+    );
+    // The measured server command stays in the file for whoever hosts it.
+    let file = read("../../catalog", "qwen3.5-35b-a3b-fp8");
+    for flag in [
+        "--max-model-len 65536",
+        "--tool-call-parser qwen3_coder",
+        "VLLM_USE_FLASHINFER_SAMPLER=0",
+    ] {
+        assert!(file.contains(flag), "{flag}");
+    }
+    assert_eq!(
+        parse_entry(&toml::to_string(&entry).unwrap()).unwrap(),
+        entry
+    );
 }

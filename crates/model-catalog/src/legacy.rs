@@ -10,8 +10,8 @@ use speech_provider::{SpeechCaps, SpeechDir};
 
 use crate::{
     Capabilities, CatalogError, CatalogId, CatalogKind, ColdStartEstimateS, EngineProfile, Family,
-    Licence, Locality, Modalities, Modality, ModelEntry, SamplingDefaults, TextOut, VramEstimate,
-    WeightSource,
+    Licence, Locality, Modalities, Modality, ModelEntry, SamplingDefaults, Serving, TextOut,
+    VramEstimate, WeightSource,
 };
 
 /// The older file's serde form.
@@ -60,6 +60,7 @@ impl LegacyFile {
             source: self.source,
             vram: self.vram,
             locality: Locality::OnDevice,
+            serving: Serving::Launched,
             roles: self.roles,
             caps: self.caps,
             sampling: self.sampling,

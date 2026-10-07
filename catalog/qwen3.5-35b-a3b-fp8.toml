@@ -1,0 +1,56 @@
+# Qwen3.5 35B-A3B (Qwen), the FP8 checkpoint, a mixture-of-experts model (about 3B parameters
+# active per token) that is ATTACHED: it is served on another machine and never started here.
+#
+# Measured on a 96 GB RTX PRO 6000 Blackwell with vLLM 0.30.0 (FINDINGS.md, "Attached 35B planner"):
+# - source: Qwen's own FP8 repository, 34.9 GiB, Apache-2.0 (the card's licence field).
+#   It is an image-text-to-text model; only text is declared here (no image step was measured, so
+#   `image_in` is not written), which keeps it out of the ImageIn slot until one is.
+# - served by (the command whoever hosts it runs; inferd never runs it):
+#     VLLM_USE_FLASHINFER_SAMPLER=0 vllm serve Qwen/Qwen3.5-35B-A3B-FP8 \
+#       --revision 9d1823d2dee688a6b25e77009dc727688c44936e \
+#       --served-model-name qwen3.5-35b-a3b-fp8 --gpu-memory-utilization 0.6 \
+#       --max-model-len 65536 --max-num-seqs 16 --enable-auto-tool-choice \
+#       --tool-call-parser qwen3_coder --reasoning-parser qwen3
+#   VLLM_USE_FLASHINFER_SAMPLER=0 because that host's system CUDA lacks curand.h, which
+#   flashinfer's sampler JIT needs.
+# - serving: attached. No `[[engine]]` profile and no GPU share are written, so the budget test
+#   skips it and a client spawns nothing; `serving` names the wire (vllm), the served name and
+#   the two server-side parsers.
+# - tools: `qwen3_coder` (Qwen3-coder XML calls), the parser granite-4.2-3b-fp8 and holo-3.1-4b
+#   use. Measured through an SSH-tunnelled Unix socket: search then forward the returned handle,
+#   correct both steps, both ways of reasoning.
+# - reasoning: present, parsed into `reasoning_content` by `--reasoning-parser qwen3`.
+#   `Reasoning::Off` sends `chat_template_kwargs {"enable_thinking": false}`: 0.6 s and 0.5 s
+#   (27 and 46 tokens). Thinking on: 0.9 s and 0.5 s (59 reasoning tokens).
+# - reasoning_default: "on", PROPOSED until a planner eval records it (the Qwen3.5 template
+#   thinks unless enable_thinking is false, as holo-3.1-4b's entry says).
+# - max_output: 8192, PROPOSED until a planner eval records it: the measured turns thought for 59
+#   tokens, the 8B planner for up to about 700, and a 65536 window with 941248 tokens of KV leaves
+#   room for far longer thinking than the 4096 of the small planners.
+# - sampling: proposals, not read from the 3.5 card: the Qwen3 family's published settings
+#   (thinking 0.6, top_p 0.95, top_k 20; non-thinking 0.7, top_p 0.8, top_k 20), like qwen3-8b-awq.
+# - context: 65536, the served --max-model-len (the model takes more).
+# - vram (the host's, for reference only; no budget check reads it): weights 34.46 GiB (35287 MiB,
+#   "Model loading took", 66 s); KV 19.97 GiB for 941248 tokens is 21.7 MiB per 1k, written 22;
+#   overhead 2996 MiB is the share minus those, ASSUMING a 97887 MiB card (0.6 x 97887 = 58732) and
+#   NOT measured.
+# - cold start: 66 s of loading; the estimate adds start-up and warm-up.
+id = "qwen3.5-35b-a3b-fp8"
+label = "Qwen3.5 35B-A3B FP8"
+licence = { kind = "open", v = "Apache-2.0" }
+family = "qwen"
+cold_start_estimate_s = 120
+source = { kind = "hugging_face", v = { repo = "Qwen/Qwen3.5-35B-A3B-FP8", revision = "9d1823d2dee688a6b25e77009dc727688c44936e" } }
+vram = { weights_mib = 35287, kv_per_1k_ctx_mib = 22, overhead_mib = 2996 }
+serving = { kind = "attached", v = { engine = "vllm", served_name = "qwen3.5-35b-a3b-fp8", tool_parser = "qwen3_coder", reasoning_parser = "qwen3" } }
+inputs = ["text"]
+outputs = ["text"]
+
+[text_out]
+tools = "server_parsed"
+structured = ["json_schema"]
+reasoning = "present"
+streaming = "present"
+context = 65536
+max_output = 8192
+sampling = { reasoning_on = { temperature = 600, top_p = { kind = "set", v = 950 }, top_k = { kind = "set", v = 20 }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_off = { temperature = 700, top_p = { kind = "set", v = 800 }, top_k = { kind = "set", v = 20 }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_default = "on" }

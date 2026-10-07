@@ -1146,6 +1146,53 @@ exhaustive matches on `TurnEvent` gain an arm; docket refuses the turn or retrie
 sees the event with `StopReason::EndTurn`. Until then nothing reaches docket, and prose that
 looks like a call is simply text.
 
+## Attached 35B planner (2026-10-07, lane `catalog-35b`)
+
+`catalog/qwen3.5-35b-a3b-fp8.toml`: Qwen3.5-35B-A3B-FP8 (revision `9d1823d2dee688a6b25e77009dc727688c44936e`,
+Apache-2.0, 34.9 GiB, MoE with about 3B active), served by vLLM 0.30.0 on a 96 GB RTX PRO 6000
+Blackwell that is not this computer. Measured: loading 34.46 GiB in 66 s, KV 19.97 GiB (941,248
+tokens); a two-step tool test (search, then forward the returned handle) through an SSH-tunnelled
+Unix socket was correct with thinking off (0.6 s, 0.5 s; 27 and 46 tokens) and on (0.9 s, 0.5 s; 59
+reasoning tokens in `reasoning_content`). The server command is in the file's comment block.
+
+### Decision: `serving`, a typed field beside `locality`
+
+The catalogue had no way to say "not launched here" (`Locality::Remote` means a hosted provider and
+needs `reach`; `OnDevice` needs an `[[engine]]`). Added, additively:
+`serving = { kind = "attached", v = { engine, served_name, tool_parser, reasoning_parser? } }`
+(`Serving::{Launched, Attached(AttachedEngine)}`, `Launched` the default and never written; newtypes
+`ServedName` and `ParserName`). `ModelEntry.serving` is the new field. Rules: an attached entry is
+`OnDevice` with NO `[[engine]]` (`CatalogError::AttachedWithEngines`, `AttachedRemote`); it
+needs no GPU share and no engine args; `slot_members` counts it for a slot when its `engine` kind
+is among the caller's engines and its capabilities fit. The budget test only reads entries it lists
+as local, so it skips attached ones; `vram` is still written (the host's, assumed card 97887 MiB,
+overhead not measured) but nothing reads it.
+
+What porter's I3 lane sees (stoker path dep, nothing in porter needs to change to keep building;
+porter never builds a `ModelEntry` literally):
+- `parse_entry` accepts the file; `entry.locality` is `OnDevice`, so `local_claims` (the
+  `is_on_device()` filter) makes its claims like any local model.
+- `entry.engines` is EMPTY, so today's `local.rs` (`engines.iter().find(..)?`) builds no
+  `LocalModel` and never spawns it: safe on the 5070 Ti before I3 lands.
+- I3 reads `entry.serving`: `Serving::Attached(a)` gives `a.engine` (the codec flavor, vllm),
+  `a.served_name` (the request's `model`), `a.tool_parser` and `a.reasoning_parser` (informative:
+  they run on the server). Where the socket is comes from inferd's own config, not the catalogue.
+- Match `Serving` exhaustively and skip the spawn and swap budget (`engines.rs`, `swap.rs`,
+  `hosts.rs` MiB estimates) for `Attached`.
+- Capabilities: text in and out only (image-text-to-text model, but no image step was measured so
+  there is no `image_in`), `tools = server_parsed`, `reasoning = present`, context 65536.
+- Proposed until a planner eval records them: `reasoning_default = "on"`, `max_output = 8192`, and
+  the sampling (Qwen3 family settings; not read from the 3.5 card).
+
+### Codec check
+
+No codec change: `Flavor::Vllm` sends `chat_template_kwargs {"enable_thinking": false}` for
+`Reasoning::Off` for every model (the switch is the flavor's, not the family's; tested in
+`reasoning_engine_default_sends_no_switch_and_off_still_does`), `reasoning_content` is decoded
+(`reasoning_arrives_as_either_key...`), and `qwen3_coder` is a server-side parser, so the client
+only sees `tool_calls` (granite-4.2-3b-fp8 already uses it). No recorded wire fixture of this server
+was kept, so none was added (none invented).
+
 ### Running the fuzzers
 
 `dev/fuzz.sh [minutes] [target]`; targets `sse_stream`, `framers`, `whole_bodies`, `pcm`,

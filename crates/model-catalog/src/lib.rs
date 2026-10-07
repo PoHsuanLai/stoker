@@ -17,7 +17,10 @@ mod slot;
 mod view;
 
 pub use capabilities::{Capabilities, DetailTable, Side, TextOut};
-pub use engine::{EngineArg, EngineKind, EngineProfile, FileName, WeightFiles};
+pub use engine::{
+    AttachedEngine, EngineArg, EngineKind, EngineProfile, FileName, ParserName, ServedName,
+    Serving, WeightFiles,
+};
 pub use entry::{
     CatalogId, CatalogKind, ColdStartEstimateS, Family, GitRevision, GpuNeed, HfRepo, Licence,
     Locality, MiB, MicroUsd, ModelEntry, Price, ProviderId, Reach, ReasoningDefault, RemoteModelId,
