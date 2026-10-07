@@ -23,13 +23,17 @@
 #   (6502 - 4014 - 656 = 1832).
 # - cold start: 52 s with the compile cache warm, 165 s the first time.
 # - family: granite, the second family beside Qwen for a reviewer of another lineage.
+#
+# 2026-10-07: context raised to 12288 with Qwen (the planner asks for 12000) and --enforce-eager
+# added. NOT yet measured at 12288: 0.40 left 12976 tokens of KV at 8192, so 12288 should fit;
+# the overhead is recomputed so `need(12288)` stays the 0.40 share (6521 - 4014 - 80 x 12.288 = 1524).
 id = "granite-4.2-3b-fp8"
 label = "Granite 4.2 3B FP8"
 licence = { kind = "open", v = "Apache-2.0" }
 family = "granite"
 cold_start_estimate_s = 60
 source = { kind = "hugging_face", v = { repo = "ibm-granite/granite-4.2-3b-fp8", revision = "579eab44700093cf415d70534060b653dc4d6b45" } }
-vram = { weights_mib = 4014, kv_per_1k_ctx_mib = 80, overhead_mib = 1830 }
+vram = { weights_mib = 4014, kv_per_1k_ctx_mib = 80, overhead_mib = 1524 }
 inputs = ["text"]
 outputs = ["text"]
 
@@ -38,19 +42,20 @@ tools = "server_parsed"
 structured = ["json_schema"]
 reasoning = "present"
 streaming = "present"
-context = 8192
+context = 12288
 max_output = 4096
 sampling = { reasoning_on = { temperature = 1000, top_p = { kind = "set", v = 950 }, top_k = { kind = "off" }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_off = { temperature = 0, top_p = { kind = "off" }, top_k = { kind = "off" }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_default = "on" }
 
 [[engine]]
 kind = "vllm"
 args = [
-  "--max-model-len", "8192",
+  "--max-model-len", "12288",
   "--max-num-seqs", "8",
   "--max-num-batched-tokens", "2048",
   "--enable-auto-tool-choice",
   "--tool-call-parser", "qwen3_coder",
   "--reasoning-parser", "qwen3",
   "--gpu-memory-utilization", "0.40",
+  "--enforce-eager",
 ]
 weights = { kind = "hf_snapshot" }

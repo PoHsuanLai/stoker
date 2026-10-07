@@ -24,13 +24,20 @@
 #   CUDA graph capture); the estimate is the warm figure.
 # - engine args: --max-num-seqs 8 and --max-num-batched-tokens 2048 shrink the profiling peak
 #   and the CUDA graph set; they make the 0.42 share fit.
+#
+# 2026-10-07, first live runs (docket live-smoke): the companion's planner asks for a 12000-token
+# window, so 8192 was declined (NotListed). Context is 12288 now. At 0.42 with a 12288 window the
+# profiling run left 0.59 GiB of KV and vLLM refused to start; 0.45 with --enforce-eager (no CUDA
+# graphs, no torch.compile: a start of tens of seconds instead of minutes, slower decode) starts
+# and serves. The overhead is recomputed so `need(12288)` is the 0.45 share (7336 MiB):
+# 7336 - 4393 - 144 x 12.288 = 1174. The desktop at about 2.5 GB still leaves about 6.4 GB free.
 id = "qwen3-4b-instruct-2507-fp8"
 label = "Qwen3 4B Instruct 2507 FP8"
 licence = { kind = "open", v = "Apache-2.0" }
 family = "qwen"
 cold_start_estimate_s = 90
 source = { kind = "hugging_face", v = { repo = "Qwen/Qwen3-4B-Instruct-2507-FP8", revision = "8591804019c8b22094c3b5b4454e0edc05dffc98" } }
-vram = { weights_mib = 4393, kv_per_1k_ctx_mib = 144, overhead_mib = 1200 }
+vram = { weights_mib = 4393, kv_per_1k_ctx_mib = 144, overhead_mib = 1174 }
 inputs = ["text"]
 outputs = ["text"]
 
@@ -39,18 +46,19 @@ tools = "server_parsed"
 structured = ["json_schema"]
 reasoning = "absent"
 streaming = "present"
-context = 8192
+context = 12288
 max_output = 2048
 sampling = { reasoning_on = { temperature = 700, top_p = { kind = "set", v = 800 }, top_k = { kind = "set", v = 20 }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_off = { temperature = 700, top_p = { kind = "set", v = 800 }, top_k = { kind = "set", v = 20 }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_default = "off" }
 
 [[engine]]
 kind = "vllm"
 args = [
-  "--max-model-len", "8192",
+  "--max-model-len", "12288",
   "--max-num-seqs", "8",
   "--max-num-batched-tokens", "2048",
   "--enable-auto-tool-choice",
   "--tool-call-parser", "hermes",
-  "--gpu-memory-utilization", "0.42",
+  "--gpu-memory-utilization", "0.45",
+  "--enforce-eager",
 ]
 weights = { kind = "hf_snapshot" }
