@@ -378,19 +378,33 @@ fn an_index_reused_for_a_second_call_closes_the_first() {
     );
 }
 
+// fuzz-decode: rig closed a displaced call with `{}` whatever its arguments were, delivering a call
+// the model never wrote. Arguments that never began mean `{}`; half-written ones are a fault.
 #[test]
-fn a_displaced_call_with_broken_arguments_closes_as_an_empty_object() {
-    let got = run(&[
+fn a_displaced_call_with_broken_arguments_is_a_fault_and_one_with_none_is_an_empty_object() {
+    let broken = run(&[
         chunk(call_delta(0, Some("a"), Some("f"), Some("{\"x\":")), None),
         chunk(call_delta(0, Some("b"), Some("g"), Some("{}")), None),
         chunk(json!({}), Some("tool_calls")),
     ]);
+    assert_eq!(broken.outcome, Err(CodecError::BadToolArguments));
     assert!(
-        got.events.contains(&finished("a", "f", "{}")),
-        "{:?}",
-        got.events
+        !broken
+            .events
+            .iter()
+            .any(|e| matches!(e, TurnEvent::ToolCallDone(_)))
     );
-    assert!(got.events.contains(&finished("b", "g", "{}")));
+    let bare = run(&[
+        chunk(call_delta(0, Some("a"), Some("f"), None), None),
+        chunk(call_delta(0, Some("b"), Some("g"), Some("{}")), None),
+        chunk(json!({}), Some("tool_calls")),
+    ]);
+    assert!(
+        bare.events.contains(&finished("a", "f", "{}")),
+        "{:?}",
+        bare.events
+    );
+    assert!(bare.events.contains(&finished("b", "g", "{}")));
 }
 
 #[test]
@@ -533,7 +547,7 @@ fn the_four_outcomes_of_a_malformed_call() {
             .any(|e| matches!(e, TurnEvent::ToolCallDone(_)))
     );
     assert_eq!(cut.outcome, plain(StopReason::MaxTokens));
-    // EmptyObject: covered by the displaced call above. KeepOpen: a call waiting for a finish
+    // Superseded: covered by the displaced call above. KeepOpen: a call waiting for a finish
     // stays open and is not delivered early.
     let open = run(&[chunk(
         call_delta(0, Some("a"), Some("f"), Some("{\"x\":1}")),

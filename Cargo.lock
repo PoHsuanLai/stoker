@@ -1035,6 +1035,7 @@ name = "speech-host"
 version = "0.1.0"
 dependencies = [
  "model-provider",
+ "proptest",
  "serde",
  "speech-provider",
  "thiserror",
@@ -1045,6 +1046,7 @@ name = "speech-host-client"
 version = "0.1.0"
 dependencies = [
  "model-provider",
+ "proptest",
  "serde",
  "serde_json",
  "speech-provider",

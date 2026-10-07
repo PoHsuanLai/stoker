@@ -76,7 +76,13 @@ fn vector(item: &Value) -> Result<EmbedVector, CodecError> {
         .and_then(Value::as_array)
         .ok_or(CodecError::Unreadable)?
         .iter()
-        .map(|n| n.as_f64().map(|f| f as f32).ok_or(CodecError::Unreadable))
+        // A number outside f32 range would become infinity in a store: refused.
+        .map(|n| {
+            n.as_f64()
+                .map(|f| f as f32)
+                .filter(|f| f.is_finite())
+                .ok_or(CodecError::Unreadable)
+        })
         .collect::<Result<Vec<f32>, _>>()
         .map(EmbedVector)
 }

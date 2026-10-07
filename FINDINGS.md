@@ -993,3 +993,85 @@ and stays the computer-use model for another run.
 | `max_output`, and Granite's `reasoning_off` sampling, are proposals | the first eval run records them |
 | Qwen 0.42 / Granite 0.40 shares assume the desktop at about 2.4 GB | `GpuProbe` and the budget agree with a measured start while the desktop is busy |
 | `Reasoning::Off` for Granite needs `enable_thinking: false` in the request | the codec's per-model switch (`model-openai-compat`) |
+
+## fuzz-decode: model and engine output is hostile input (2026-10-07, lane `fuzz-decode`)
+
+Every parser of bytes that a model, an engine or a socket sent is driven in the gate by
+proptest suites named `hostile` (`model-http/tests/hostile.rs`,
+`model-openai-compat/tests/hostile/`, `speech-host/tests/hostile.rs`,
+`speech-host-client/tests/hostile.rs`), and by cargo-fuzz targets in `fuzz/` (excluded from the
+workspace, run by hand with `dev/fuzz.sh`).
+
+What the suites hold, for the SSE framer, the NDJSON framer, the chat stream decoder, the
+whole-body decoders (model list, embeddings, transcription, error replies), `PcmDecoder`, and the
+host_wire framing in both directions:
+
+- arbitrary bytes and arbitrary chunk splits never panic and end in a typed result;
+- the same bytes split anywhere give the same verdict, and the same events for a reply that ends
+  cleanly (which error a broken stream reports can depend on the split: a chunk is framed whole
+  before its frames are decoded);
+- structured mutations of a valid reply (cut at every byte, `[DONE]` early or missing, repeated,
+  reordered and index-reused tool-call deltas, arguments that are not JSON or the wrong type,
+  unknown finish reason, empty choices, huge usage numbers, a multi-byte character split across
+  chunks, invalid UTF-8) end in the outcome tabled in `cases.rs`;
+- a `ToolCallDone` always follows its `ToolCallStarted`, has a unique id, and carries arguments
+  that are one whole JSON object.
+
+### Bugs found (each has a regression test)
+
+| # | Input | What happened | Fix | Test |
+| --- | --- | --- | --- | --- |
+| 1 | One chunk of 4 MiB of `\n` (or 1 MiB of `\r`, or 400 000 short NDJSON lines) | `SseDecoder` and `NdjsonDecoder` dropped the consumed prefix once per line: quadratic, effectively a hang | lines are cut by offset and the prefix is dropped once per chunk | `model-http` `a_chunk_of_many_short_lines_is_linear_for_both_framers` |
+| 2 | An unterminated 300 000-byte line fed one byte per chunk | the pending line was rescanned for a terminator on every chunk: quadratic | a `scanned` offset: each byte is scanned once | `model-http` `a_long_line_fed_a_byte_at_a_time_is_scanned_once` |
+| 3 | Call `a` with arguments `{"x":` on index 0, then a chunk with a new id `b` on index 0 | the displaced call `a` was delivered as a `ToolCallDone` with `{}`: a call with arguments the model never wrote | `IfMalformed::EmptyObject` is now `Superseded`: arguments that never began mean `{}`, half-written ones are `BadToolArguments` | `an_index_reused_by_a_new_id_never_delivers_half_written_arguments`, assembler tests |
+| 4 | Arguments `[1]`, `"x"`, `5`, `true` (valid JSON, not an object), with finish reason `tool_calls` | delivered as a `ToolCallDone` | arguments must be a JSON object; anything else is malformed (`null` and empty stay `{}`) | `arguments_that_are_json_of_the_wrong_type_are_a_fault` |
+| 5 | A content or tool-call delta, or a second finish reason, after the first finish reason | accepted: a late call was started and never delivered, a late `length` replaced an earlier `stop`, and a late call plus a second finish reason was delivered after the turn had ended | after a finish reason only usage, `[DONE]` and empty deltas are accepted; more content or calls are `Unreadable`; the first finish reason stands | `content_and_calls_after_the_finish_reason_are_unreadable` |
+| 6 | An embedding component such as `1e300` | became `f32::INFINITY` in the vector handed to a store | a component outside f32 range makes the reply `Unreadable` | `an_embedding_outside_f32_range_is_unreadable_not_infinite` |
+| 7 | A reply with endless small frames, or 300 distinct tool-call indices | no bound on a whole reply or on the number of calls | the two limits below | `a_reply_over_the_stream_limit_is_unreadable`, `more_calls_than_the_limit_is_unreadable` |
+
+Not bugs, recorded: an SSE frame that is a whole non-streaming `chat.completion` (a `message`
+where a chunk has a `delta`) is not read as an answer; with no chunk the turn is `Unreadable`,
+which is the typed outcome a caller can act on. A tool call cut by `length` still emits
+`ToolCallStarted` and deltas and then never a `ToolCallDone`; only `ToolCallDone` is the call.
+
+### Limits (existing and added)
+
+| Where | Limit | Over it |
+| --- | --- | --- |
+| SSE line | 1 MiB | `SseError::LineTooLong` |
+| SSE event (its `data:` lines together) | 8 MiB | `SseError::LineTooLong` |
+| NDJSON line | 4 MiB | `LineError::LineTooLong` |
+| One tool call's arguments | 32 MiB | `BadToolArguments` (or dropped when `length` cut the turn) |
+| A body read whole (chat `Whole`, embeddings, models) | 16 MiB (speech: 4 MiB) | "the reply is too large" |
+| An error body kept for the classifier | 64 KiB | truncated |
+| host_wire frame | 1 MiB | `FrameError::TooLarge`, before the body is read |
+| **added** frame bytes in one chat reply (`STREAM_MAX`) | 64 MiB | `CodecError::Unreadable` |
+| **added** tool calls opened in one chat reply (`CALLS_MAX`) | 256 | `CodecError::Unreadable` |
+
+### A tool call left in the content
+
+Decision: when the server's tool parser fails and the call stays in the message content
+(`<tool_call>{...}</tool_call>`, Qwen3-coder XML `<function=...>`, `<function_call>`,
+`[TOOL_CALLS]`, `<|python_tag|>`), the decoder never treats it as a call: the content passes
+through as `TextDelta` exactly as sent, no `ToolCall*` event is made from it, and the turn ends
+`EndTurn`. The decoder also watches the content (a marker split across chunks is found) and
+`StreamDecoder::leaked_call()` returns the `LeakMarker` when a marker was seen and the turn
+delivered no call of its own (a model that mentions `<tool_call>` beside a real call is not a
+leak). Read it before `finish`. Tested in `a_call_left_in_the_content_is_text_never_a_call_and_is_flagged`.
+
+Interface ask (the signal reaches a caller only through a type change; the stoker side is done
+behind the existing types): `model-provider` gains
+`TurnEvent::CallInContent(LeakMarker)` (`LeakMarker` moves from `model-openai-compat::leak` to
+`model-provider`, same slugs), emitted once by the chat decoder with the finish reason (or
+`[DONE]`) of a turn that delivered no call and whose content held a marker. porter-infer's
+exhaustive matches on `TurnEvent` gain an arm; docket refuses the turn or retries it when it
+sees the event with `StopReason::EndTurn`. Until then nothing reaches docket, and prose that
+looks like a call is simply text.
+
+### Running the fuzzers
+
+`dev/fuzz.sh [minutes] [target]`; targets `sse_stream`, `framers`, `whole_bodies`, `pcm`,
+`host_frames`. It needs nightly (`rustup toolchain list` shows one on this machine) and
+`cargo-fuzz` (`cargo install cargo-fuzz`; not installed here, so the targets were compiled by
+the proptest suites' shared code only and not run under libFuzzer). Seeds are in
+`fuzz/corpus/<target>`.

@@ -20,8 +20,10 @@ pub(crate) const MAX_TOOL_INPUT_BYTES: usize = 32 << 20;
 pub(crate) enum IfMalformed {
     /// The provider said the call was complete, so bad arguments are a fault.
     Fail,
-    /// The call was superseded mid-assembly: deliver it with `{}`.
-    EmptyObject,
+    /// The call was superseded mid-assembly (a gateway reused the index). Arguments that never
+    /// began mean `{}`; arguments that began and are not valid JSON are a fault, never `{}`: a
+    /// call is not delivered with arguments the model did not write.
+    Superseded,
     /// The stream was cut: never deliver a half-formed call.
     Drop,
     /// Not decided yet: leave the call as it is. The decoder delivers calls at the finish reason,
@@ -166,7 +168,7 @@ impl Pending {
             return match how {
                 IfMalformed::Fail => Err(CodecError::BadToolArguments),
                 IfMalformed::KeepOpen => Ok(Closed::Open),
-                IfMalformed::EmptyObject | IfMalformed::Drop => Ok(Closed::Dropped),
+                IfMalformed::Superseded | IfMalformed::Drop => Ok(Closed::Dropped),
             };
         };
         let text = self.args.trim();
@@ -175,8 +177,9 @@ impl Pending {
         } else {
             text
         };
+        // Arguments are an object: valid JSON of another type (`[1]`, `"x"`, `5`) is malformed.
         let parsed = match self.overflow {
-            Overflow::Within => JsonText::new(text).ok(),
+            Overflow::Within => JsonText::new(text).ok().filter(|_| text.starts_with('{')),
             Overflow::Over => None,
         };
         let input = match (parsed, how) {
@@ -184,9 +187,7 @@ impl Pending {
             (None, IfMalformed::Fail) => return Err(CodecError::BadToolArguments),
             (None, IfMalformed::Drop) => return Ok(Closed::Dropped),
             (None, IfMalformed::KeepOpen) => return Ok(Closed::Open),
-            (None, IfMalformed::EmptyObject) => {
-                JsonText::new("{}").map_err(|_| CodecError::BadToolArguments)?
-            }
+            (None, IfMalformed::Superseded) => return Err(CodecError::BadToolArguments),
         };
         Ok(Closed::Done(ToolCall {
             id: ToolCallId(id),

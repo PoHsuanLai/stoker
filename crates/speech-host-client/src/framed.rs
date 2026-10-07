@@ -7,34 +7,22 @@ use std::io::ErrorKind;
 
 use tokio::net::UnixStream;
 
-/// The bytes read so far and not yet a whole frame.
+/// The bytes read so far and not yet a whole frame; the pure half of the reader, so any bytes in
+/// any chunking can be fed to it without a socket.
 #[derive(Debug, Default)]
-pub struct FrameReader {
+pub struct FrameBuffer {
     pending: Vec<u8>,
 }
 
-impl FrameReader {
-    /// The next host frame. Cancel-safe: bytes read stay buffered, so a dropped call loses none.
-    pub async fn next(&mut self, stream: &UnixStream) -> Result<HostOut, ProviderError> {
-        loop {
-            if let Some(frame) = self.take()? {
-                return Ok(frame);
-            }
-            stream
-                .readable()
-                .await
-                .map_err(|_| ProviderError::Unreachable)?;
-            match stream.try_read_buf(&mut self.pending) {
-                // The host closed without saying `Done` or `Failed`.
-                Ok(0) => return Err(ProviderError::Unreachable),
-                Ok(_) => {}
-                Err(e) if e.kind() == ErrorKind::WouldBlock => {}
-                Err(_) => return Err(ProviderError::Unreachable),
-            }
-        }
+impl FrameBuffer {
+    /// Adds bytes read from the host.
+    pub fn push(&mut self, bytes: &[u8]) {
+        self.pending.extend_from_slice(bytes);
     }
 
-    fn take(&mut self) -> Result<Option<HostOut>, ProviderError> {
+    /// The next whole host frame, `None` while one is incomplete. A header over the cap is
+    /// refused before the body is waited for; a body that is not a host message is unreadable.
+    pub fn take(&mut self) -> Result<Option<HostOut>, ProviderError> {
         let Some(header) = self.pending.first_chunk::<4>() else {
             return Ok(None);
         };
@@ -45,6 +33,34 @@ impl FrameReader {
         let frame = decode_frame(body).map_err(unreadable)?;
         self.pending.drain(..4 + len);
         Ok(Some(frame))
+    }
+}
+
+/// Reads host frames from a stream. Cancel-safe: what was read stays buffered.
+#[derive(Debug, Default)]
+pub struct FrameReader {
+    buffer: FrameBuffer,
+}
+
+impl FrameReader {
+    /// The next host frame. Cancel-safe: bytes read stay buffered, so a dropped call loses none.
+    pub async fn next(&mut self, stream: &UnixStream) -> Result<HostOut, ProviderError> {
+        loop {
+            if let Some(frame) = self.buffer.take()? {
+                return Ok(frame);
+            }
+            stream
+                .readable()
+                .await
+                .map_err(|_| ProviderError::Unreachable)?;
+            match stream.try_read_buf(&mut self.buffer.pending) {
+                // The host closed without saying `Done` or `Failed`.
+                Ok(0) => return Err(ProviderError::Unreachable),
+                Ok(_) => {}
+                Err(e) if e.kind() == ErrorKind::WouldBlock => {}
+                Err(_) => return Err(ProviderError::Unreachable),
+            }
+        }
     }
 }
 

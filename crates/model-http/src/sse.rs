@@ -63,6 +63,9 @@ enum Stream {
 pub struct SseDecoder {
     start: Start,
     pending: Vec<u8>,
+    /// How many leading bytes of `pending` are known to hold no line end, so a line fed one byte
+    /// at a time is scanned once and not once per byte.
+    scanned: usize,
     event: Option<EventName>,
     data: Vec<String>,
     data_len: usize,
@@ -97,12 +100,22 @@ impl SseDecoder {
             self.start = Start::Begun;
         }
         let mut events = Vec::new();
-        while let Some((end, next)) = line_end(&self.pending, stream) {
-            let line = std::str::from_utf8(&self.pending[..end]).map_err(|_| SseError::NotUtf8)?;
+        // Lines are cut by offset and the consumed prefix is dropped once, so a chunk of many
+        // short lines costs linear time.
+        let mut used = 0;
+        while let Some((end, next)) = line_end(&self.pending, used, self.scanned.max(used), stream)
+        {
+            let line =
+                std::str::from_utf8(&self.pending[used..end]).map_err(|_| SseError::NotUtf8)?;
             let event = Self::absorb(&mut self.event, &mut self.data, &mut self.data_len, line)?;
             events.extend(event);
-            self.pending.drain(..next);
+            used = next;
         }
+        self.pending.drain(..used);
+        self.scanned = match self.pending.last() {
+            Some(b'\r') => self.pending.len() - 1,
+            _ => self.pending.len(),
+        };
         if self.pending.len() > LINE_MAX {
             return Err(SseError::LineTooLong);
         }
@@ -148,10 +161,15 @@ impl SseDecoder {
     }
 }
 
-/// The end of the first line in `bytes` and where the next one starts, or `None` when no line is
-/// complete yet.
-fn line_end(bytes: &[u8], stream: Stream) -> Option<(usize, usize)> {
-    let at = bytes.iter().position(|b| matches!(b, b'\n' | b'\r'))?;
+/// The end of the line that starts at `start` in `bytes` and where the next one starts, or `None`
+/// when no line is complete yet. Bytes before `scan` are known to hold no line end.
+fn line_end(bytes: &[u8], start: usize, scan: usize, stream: Stream) -> Option<(usize, usize)> {
+    let at = scan
+        + bytes
+            .get(scan..)?
+            .iter()
+            .position(|b| matches!(b, b'\n' | b'\r'))?;
+    debug_assert!(at >= start);
     match (bytes[at], bytes.get(at + 1)) {
         (b'\n', _) => Some((at, at + 1)),
         (_, Some(b'\n')) => Some((at, at + 2)),

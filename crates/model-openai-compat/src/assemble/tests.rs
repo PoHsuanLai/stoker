@@ -27,7 +27,7 @@ fn input(closed: Result<Closed, CodecError>) -> Option<String> {
 fn closing_a_well_formed_call_ignores_the_policy() {
     for how in [
         IfMalformed::Fail,
-        IfMalformed::EmptyObject,
+        IfMalformed::Superseded,
         IfMalformed::Drop,
         IfMalformed::KeepOpen,
     ] {
@@ -45,8 +45,13 @@ fn the_four_outcomes_for_arguments_that_are_not_json() {
         open("{\"x\":").close(IfMalformed::Fail),
         Err(CodecError::BadToolArguments)
     );
+    // Superseded: half-written arguments are a fault, never `{}`.
     assert_eq!(
-        input(open("{\"x\":").close(IfMalformed::EmptyObject)).as_deref(),
+        open("{\"x\":").close(IfMalformed::Superseded),
+        Err(CodecError::BadToolArguments)
+    );
+    assert_eq!(
+        input(open("").close(IfMalformed::Superseded)).as_deref(),
         Some("{}")
     );
     assert_eq!(
@@ -77,7 +82,7 @@ fn a_call_that_never_got_a_name_is_dropped_or_a_fault() {
         Ok(Closed::Dropped)
     );
     assert_eq!(
-        pending.clone().close(IfMalformed::EmptyObject),
+        pending.clone().close(IfMalformed::Superseded),
         Ok(Closed::Dropped)
     );
     assert_eq!(

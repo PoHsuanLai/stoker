@@ -18,6 +18,8 @@ const LINE_MAX: usize = 4 << 20;
 #[derive(Debug, Clone, Default)]
 pub struct NdjsonDecoder {
     pending: Vec<u8>,
+    /// Leading bytes of `pending` known to hold no newline (a long line is scanned once).
+    scanned: usize,
 }
 
 impl NdjsonDecoder {
@@ -30,10 +32,17 @@ impl NdjsonDecoder {
     pub fn feed(&mut self, bytes: &[u8]) -> Result<Vec<String>, LineError> {
         self.pending.extend_from_slice(bytes);
         let mut lines = Vec::new();
-        while let Some(end) = self.pending.iter().position(|b| *b == b'\n') {
-            let raw: Vec<u8> = self.pending.drain(..=end).collect();
-            lines.extend(line(&raw[..end])?);
+        let mut used = 0;
+        while let Some(rel) = self.pending[self.scanned.max(used)..]
+            .iter()
+            .position(|b| *b == b'\n')
+        {
+            let end = self.scanned.max(used) + rel;
+            lines.extend(line(&self.pending[used..end])?);
+            used = end + 1;
         }
+        self.pending.drain(..used);
+        self.scanned = self.pending.len();
         if self.pending.len() > LINE_MAX {
             return Err(LineError::LineTooLong);
         }

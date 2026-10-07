@@ -10,6 +10,8 @@
 mod framed;
 mod session;
 
+pub use framed::FrameBuffer;
+
 use std::path::PathBuf;
 
 use model_provider::ProviderError;

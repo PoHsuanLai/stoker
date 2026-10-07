@@ -1,0 +1,59 @@
+# Fuzz targets for the decoders of model, engine and socket bytes. Not a workspace member and
+# nightly only: run by hand with `dev/fuzz.sh`, never by CI or the stable gate (the proptest
+# suites `hostile` in model-http, model-openai-compat, speech-host and speech-host-client are
+# what the gate runs). Its `[workspace]` table keeps cargo from reading it as part of stoker's.
+[package]
+name = "stoker-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+serde_json = "1"
+model-http = { path = "../crates/model-http" }
+model-openai-compat = { path = "../crates/model-openai-compat" }
+model-provider = { path = "../crates/model-provider" }
+model-wire = { path = "../crates/model-wire" }
+speech-provider = { path = "../crates/speech-provider" }
+speech-host-client = { path = "../crates/speech-host-client" }
+
+[workspace]
+
+[[bin]]
+name = "sse_stream"
+path = "fuzz_targets/sse_stream.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "framers"
+path = "fuzz_targets/framers.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "whole_bodies"
+path = "fuzz_targets/whole_bodies.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pcm"
+path = "fuzz_targets/pcm.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "host_frames"
+path = "fuzz_targets/host_frames.rs"
+test = false
+doc = false
+bench = false

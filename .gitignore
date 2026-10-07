@@ -6,3 +6,6 @@
 /crates/*/fuzz/target
 /crates/*/fuzz/Cargo.lock
 /crates/*/fuzz/artifacts
+/fuzz/target
+/fuzz/Cargo.lock
+/fuzz/artifacts

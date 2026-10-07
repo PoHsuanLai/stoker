@@ -11,6 +11,15 @@ use serde_json::Value;
 use crate::Flavor;
 use crate::assemble::{Closed, Fragment, IfMalformed, Pending};
 use crate::envelope::envelope_error;
+use crate::leak::{LeakMarker, LeakWatch};
+
+/// The most frame bytes one reply may carry in all; past it the reply is unreadable. A turn is
+/// kilobytes, and the longest legitimate one (a 32 MiB tool argument, the assembler's own cap)
+/// fits twice over.
+pub(crate) const STREAM_MAX: usize = 64 << 20;
+
+/// The most tool calls one reply may open; past it the reply is unreadable.
+pub(crate) const CALLS_MAX: u16 = 256;
 
 /// How far the stream has come.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,6 +52,8 @@ pub struct StreamDecoder {
     opened: u16,
     usage: Option<TurnUsage>,
     fault: Option<ProviderError>,
+    fed: usize,
+    leak: LeakWatch,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,7 +75,16 @@ impl StreamDecoder {
             opened: 0,
             usage: None,
             fault: None,
+            fed: 0,
+            leak: LeakWatch::default(),
         }
+    }
+
+    /// The marker of a tool call the server left in the content, when the turn delivered no call
+    /// of its own: the server's tool parser did not read it, so it is text and never a call.
+    /// Read it before `finish`.
+    pub fn leaked_call(&self) -> Option<LeakMarker> {
+        self.leak.found().filter(|_| self.delivered == 0)
     }
 
     fn chunk(&mut self, value: &Value) -> Result<Vec<TurnEvent>, CodecError> {
@@ -87,11 +107,19 @@ impl StreamDecoder {
             .into_iter()
             .flatten()
             .find(|c| c.get("index").and_then(Value::as_u64).unwrap_or(0) == 0);
+        let finished = matches!(self.phase, Phase::Finished(_));
         if let Some(choice) = first {
             if let Some(delta) = choice.get("delta").filter(|d| !d.is_null()) {
                 events.extend(self.delta(delta)?);
             }
-            if let Some(reason) = choice.get("finish_reason").and_then(Value::as_str) {
+            // After a finish reason only usage and `[DONE]` may follow: more content or calls
+            // are a broken stream, and a second finish reason does not replace the first.
+            if finished && !events.is_empty() {
+                return Err(CodecError::Unreadable);
+            }
+            if let Some(reason) = choice.get("finish_reason").and_then(Value::as_str)
+                && !finished
+            {
                 events.extend(self.finish_reason(reason)?);
             }
         }
@@ -112,6 +140,7 @@ impl StreamDecoder {
             .find_map(|v| v.as_str().filter(|s| !s.is_empty()));
         events.extend(thought.map(|t| TurnEvent::ThoughtDelta(t.to_owned())));
         let text = content_text(object.get("content"))?;
+        self.leak.see(&text);
         events.extend((!text.is_empty()).then_some(TurnEvent::TextDelta(text)));
         let refusal = object
             .get("refusal")
@@ -155,10 +184,13 @@ impl StreamDecoder {
             _ => None,
         };
         if let Some(displaced) = displaced {
-            events.extend(self.close_one(displaced, IfMalformed::EmptyObject)?);
+            events.extend(self.close_one(displaced, IfMalformed::Superseded)?);
         }
         let ordinal = CallIndex(self.opened);
         if !self.open.contains_key(&wire) {
+            if self.opened >= CALLS_MAX {
+                return Err(CodecError::Unreadable);
+            }
             self.opened = self.opened.saturating_add(1);
         }
         let pending = self
@@ -232,6 +264,10 @@ impl StreamDecoder {
 
 impl ChatDecoder for StreamDecoder {
     fn feed(&mut self, frame: &str) -> Result<Vec<TurnEvent>, CodecError> {
+        self.fed = self.fed.saturating_add(frame.len());
+        if self.fed > STREAM_MAX {
+            return Err(CodecError::Unreadable);
+        }
         let frame = frame.trim();
         if frame.is_empty() || self.done == Done::Marker {
             return Ok(Vec::new());
