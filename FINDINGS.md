@@ -931,8 +931,11 @@ Both were downloaded with `uvx --from huggingface_hub hf download <repo> --revis
   no vLLM-ready 4-bit from Mistral), Phi-4-mini (no well-known 4-bit/FP8 checkpoint), gpt-oss-20b
   (13 GB, excluded).
 - Second family: Granite 4.2 3B FP8 (IBM, Apache-2.0). It thinks by default (about 280 tokens for a
-  trivial call), so it suits a deliberate reviewer more than a quick one; `Reasoning::Off`
-  needs the codec to send `chat_template_kwargs {"enable_thinking": false}` (the template's switch).
+  trivial call), so it suits a deliberate reviewer more than a quick one. `Reasoning::Off` already
+  turns it off: for `Flavor::Vllm` (and llama-server) the codec sends
+  `chat_template_kwargs {"enable_thinking": false}`, the template's switch
+  (`model-openai-compat/src/request.rs`). Granite thinks only when the caller leaves reasoning at
+  the engine's default. (An earlier version of this note said the codec still needed the change.)
 - Second family is optional, not required: SPEC §6.3 / QUESTIONS M2 say one resident model plus a
   second small model of another family loaded on demand for SecondOpinion, and without it a
   high-impact AllowJudged cell falls back to Ask. Porter's reviewer family filter is still open
