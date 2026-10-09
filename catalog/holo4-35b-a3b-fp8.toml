@@ -1,0 +1,51 @@
+# Holo4 35B-A3B FP8 (H Company), Qwen3.6 MoE base (Qwen3_5MoeForConditionalGeneration), compressed-tensors
+# FP8 block weights (37.6 GB). Its chat template is the Holo 3.1 / Qwen3.5 one: tools as qwen3_coder XML
+# (`<tool_call><function=..><parameter=..>`), `enable_thinking` switch. Same image processor (patch 16,
+# merge 2). The model card names no coordinate convention; the 0-1000 grid is assumed as for Holo 3.1
+# and confirmed or corrected by reading the first replies.
+# - vram: an estimate, not a measurement. The checkpoint is 37.6 GB; the engine line below takes half of a
+#   96 GB card, so weights 36000 + 20 per 1k of the 16384 context + 11700 (activations, graphs, the
+#   engine's reserve) is about 48 GB.
+# - context: 16384, the window that line serves.
+id = "holo4-35b-a3b-fp8"
+label = "Holo4 35B-A3B FP8"
+licence = { kind = "open", v = "Apache-2.0" }
+family = "qwen"
+cold_start_estimate_s = 180
+source = { kind = "hugging_face", v = { repo = "Hcompany/Holo4-35B-A3B-FP8", revision = "dbbd4137f404b7eb2be6b61621c6cfa2ab6c26cd" } }
+vram = { weights_mib = 36000, kv_per_1k_ctx_mib = 20, overhead_mib = 11700 }
+inputs = ["text", "image"]
+outputs = ["text", "actions"]
+
+[text_out]
+tools = "server_parsed"
+structured = ["json_schema"]
+reasoning = "present"
+streaming = "present"
+context = 16384
+max_output = 4096
+sampling = { reasoning_on = { temperature = 600, top_p = { kind = "set", v = 950 }, top_k = { kind = "set", v = 20 }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_off = { temperature = 0, top_p = { kind = "off" }, top_k = { kind = "off" }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_default = "on" }
+
+[image_in]
+per_prompt = 3
+rule = { kind = "smart_resize", v = { factor = 32, min_pixels = 65536, max_pixels = 16777216 } }
+space = { kind = "grid", v = 1000 }
+
+[actions_out]
+kind = "dialect"
+v = { dialect = { kind = "tool", v = "holo31" }, batching = "one", zoom = "absent" }
+
+
+# The line used on fatcat GPU 2 (96 GB, shared); weights are the checkpoint's own FP8.
+[[engine]]
+kind = "vllm"
+args = [
+  "--max-model-len", "16384",
+  "--max-num-seqs", "4",
+  "--limit-mm-per-prompt", "{\"image\":3,\"video\":0}",
+  "--enable-auto-tool-choice",
+  "--tool-call-parser", "qwen3_coder",
+  "--reasoning-parser", "qwen3",
+  "--gpu-memory-utilization", "0.5",
+]
+weights = { kind = "hf_snapshot" }

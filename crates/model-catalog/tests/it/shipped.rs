@@ -47,6 +47,9 @@ const REMOTE: [&str; 8] = [
 /// their own asserts: DeepSeek V4 Pro (text only) and Muse Spark 1.3 contributor (one reach).
 const MORE_HOSTED: [&str; 2] = ["deepseek-v4-pro", "muse-spark-1.3-contributor"];
 
+/// The Holo ladder above 4B: local computer-use entries with estimated vram, checked on their own.
+const HOLO_LADDER: [&str; 2] = ["holo-3.1-9b", "holo4-35b-a3b-fp8"];
+
 fn read(dir: &str, id: &str) -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join(dir)
@@ -82,11 +85,17 @@ fn every_shipped_file_is_listed_here_and_has_its_id_as_stem() {
         .iter()
         .chain(&REMOTE)
         .chain(&MORE_HOSTED)
+        .chain(&HOLO_LADDER)
         .map(|s| (*s).to_owned())
         .collect();
     listed.sort();
     assert_eq!(found, listed);
-    for id in IDS.iter().chain(&REMOTE).chain(&MORE_HOSTED) {
+    for id in IDS
+        .iter()
+        .chain(&REMOTE)
+        .chain(&MORE_HOSTED)
+        .chain(&HOLO_LADDER)
+    {
         assert_eq!(&shipped(id).id.0, id);
     }
 }
@@ -241,7 +250,7 @@ fn the_catalog_ranks_nothing() {
         "premium",
         "default tier",
     ];
-    for id in IDS.iter().chain(&REMOTE) {
+    for id in IDS.iter().chain(&REMOTE).chain(&HOLO_LADDER) {
         let text = read("../../catalog", id).to_lowercase();
         for word in WORDS {
             assert!(!text.contains(word), "{id} says {word:?}");
@@ -303,6 +312,79 @@ fn the_more_hosted_entries_take_their_declared_inputs_and_have_tools() {
         );
         assert!(reach.iter().all(|r| r.wire == Wire::OpenAiCompat), "{id}");
     }
+}
+
+#[test]
+fn the_holo_ladder_copies_the_4b_shape_with_estimated_vram() {
+    use model_catalog::{Locality, MiB, Serving, WeightSource};
+    use model_provider::Tokens;
+    let four = shipped("holo-3.1-4b");
+    for (id, repo, revision, context, need_mib) in [
+        (
+            "holo-3.1-9b",
+            "Hcompany/Holo-3.1-9B",
+            "bcd6a36af9f100f57cba28e2bf6481ac3feedf33",
+            7168,
+            11930,
+        ),
+        (
+            "holo4-35b-a3b-fp8",
+            "Hcompany/Holo4-35B-A3B-FP8",
+            "dbbd4137f404b7eb2be6b61621c6cfa2ab6c26cd",
+            16384,
+            48028,
+        ),
+    ] {
+        let entry = shipped(id);
+        let (ours, theirs) = (&entry.capabilities, &four.capabilities);
+        // The 0-1000 grid, the image rule, the holo31 dialect and the sampling are the 4B's.
+        assert_eq!(ours.image_in, theirs.image_in, "{id}");
+        assert_eq!(ours.actions_out, theirs.actions_out, "{id}");
+        assert_eq!(ours.inputs, theirs.inputs, "{id}");
+        assert_eq!(ours.outputs, theirs.outputs, "{id}");
+        let text = ours.text_out.as_ref().unwrap();
+        assert_eq!(
+            text.sampling,
+            theirs.text_out.as_ref().unwrap().sampling,
+            "{id}"
+        );
+        assert_eq!(text.tools, theirs.text_out.as_ref().unwrap().tools, "{id}");
+        assert_eq!(text.context, Tokens(context), "{id}");
+        assert_eq!(
+            arg_after(&entry, "--max-model-len"),
+            context.to_string(),
+            "{id}"
+        );
+        assert_eq!(entry.roles, four.roles, "{id}");
+        assert_eq!(entry.locality, Locality::OnDevice, "{id}");
+        assert_eq!(entry.serving, Serving::Launched, "{id}");
+        assert_eq!(entry.engines[0].kind, EngineKind::Vllm, "{id}");
+        assert_eq!(
+            entry.vram.need(text.context),
+            MiB(need_mib),
+            "{id}: the estimate"
+        );
+        let WeightSource::HuggingFace {
+            repo: got,
+            revision: rev,
+        } = &entry.source
+        else {
+            panic!("{id}: not from Hugging Face");
+        };
+        assert_eq!((got.0.as_str(), rev.0.as_str()), (repo, revision), "{id}");
+        assert!(
+            read("../../catalog", id).contains("estimate"),
+            "{id}: says its vram is an estimate"
+        );
+    }
+}
+
+#[test]
+fn a_model_without_json_schema_declares_json_object() {
+    use model_provider::Constraint;
+    let text = |id| shipped(id).capabilities.text_out.unwrap().structured;
+    assert_eq!(text("deepseek-v4-pro"), [Constraint::JsonObject].into());
+    assert_eq!(text("holo-3.1-4b"), [Constraint::JsonSchema].into());
 }
 
 #[test]

@@ -1,0 +1,52 @@
+# Holo 3.1 9B (H Company), a computer-use model on the Qwen3.5 9B base (32 layers, 8 full attention, 4 KV heads of 256: 32 MiB per 1k
+# tokens). Same chat template, image processor (patch 16, merge 2), tool format (qwen3_coder XML) and
+# 0-1000 grid as Holo 3.1 4B, so the dialect, grid and sampling are the 4B entry's. Served with vLLM
+# `--quantization fp8` (on-the-fly, so about 9.5 GiB of weights instead of 18.8 GiB bf16) on a 16 GB card.
+# - vram: an estimate, not a measurement. 10200 + 32 per 1k of the 7168 context + 1500 is about 12 GB.
+# - context: 7168, the window the FP8 line below serves on a 16 GB card; the 4B entry serves 32768.
+# - structured, sampling, the image rule and the holo31 dialect are the 4B entry's (FINDINGS.md, S0).
+id = "holo-3.1-9b"
+label = "Holo 3.1 9B"
+licence = { kind = "open", v = "Apache-2.0" }
+family = "qwen"
+cold_start_estimate_s = 180
+source = { kind = "hugging_face", v = { repo = "Hcompany/Holo-3.1-9B", revision = "bcd6a36af9f100f57cba28e2bf6481ac3feedf33" } }
+vram = { weights_mib = 10200, kv_per_1k_ctx_mib = 32, overhead_mib = 1500 }
+inputs = ["text", "image"]
+outputs = ["text", "actions"]
+
+[text_out]
+tools = "server_parsed"
+structured = ["json_schema"]
+reasoning = "present"
+streaming = "present"
+context = 7168
+max_output = 4096
+sampling = { reasoning_on = { temperature = 600, top_p = { kind = "set", v = 950 }, top_k = { kind = "set", v = 20 }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_off = { temperature = 0, top_p = { kind = "off" }, top_k = { kind = "off" }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_default = "on" }
+
+[image_in]
+per_prompt = 3
+rule = { kind = "smart_resize", v = { factor = 32, min_pixels = 65536, max_pixels = 16777216 } }
+space = { kind = "grid", v = 1000 }
+
+[actions_out]
+kind = "dialect"
+v = { dialect = { kind = "tool", v = "holo31" }, batching = "one", zoom = "absent" }
+
+
+# The line actually used on the 5070 Ti (16 GB, 2 GB held by the desktop); on-the-fly FP8.
+[[engine]]
+kind = "vllm"
+args = [
+  "--quantization", "fp8",
+  "--dtype", "bfloat16",
+  "--max-model-len", "7168",
+  "--max-num-seqs", "1",
+  "--max-num-batched-tokens", "2048",
+  "--limit-mm-per-prompt", "{\"image\":3,\"video\":0}",
+  "--enable-auto-tool-choice",
+  "--tool-call-parser", "qwen3_coder",
+  "--reasoning-parser", "qwen3",
+  "--gpu-memory-utilization", "0.86",
+]
+weights = { kind = "hf_snapshot" }
