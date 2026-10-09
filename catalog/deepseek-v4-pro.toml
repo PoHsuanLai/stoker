@@ -1,0 +1,22 @@
+# DeepSeek V4 Pro, a hosted model reached through the providers below. Facts checked on 2026-10-09:
+# - DeepSeek (direct, OpenAI-format wire): https://api-docs.deepseek.com/quick_start/pricing/ and https://api-docs.deepseek.com/api/create-chat-completion/, read 2026-10-09: id deepseek-v4-pro (DeepSeek-V4-Pro-0813), 1M context, 384K max output, $0.66 / $1.98 per MTok off-peak (cache miss input / output); peak hours (01:00-04:00 and 06:00-10:00 UTC, weekdays) cost double, $1.32 / $3.96. Base URL https://api.deepseek.com. Tool calls, JSON output (json_object only, no json_schema), thinking mode and streaming listed. No image input ("Not supported" on the same page).
+# - The prices here are the off-peak rates; the peak rates are twice as high, so the cost in peak hours is the double of what this file records.
+# - OpenRouter: https://openrouter.ai/api/v1/models and https://openrouter.ai/api/v1/models/deepseek/deepseek-v4-pro/endpoints, read 2026-10-09: id deepseek/deepseek-v4-pro resolves to the 0423 snapshot (canonical deepseek/deepseek-v4-pro-20260423), not the 0813 GA release. Model context 1048576, top provider 1024000 context and 384000 max completion; endpoints range from 1000000 to 1048576 context. $0.00000095526 / $0.00000191052 per token (model-level listing, not DeepSeek's own price). tools, response_format, structured_outputs and reasoning listed; reasoning is optional, default high.
+# - context is 1000000 and max_output 384000: the smallest context figure across the pages and the shared 384K output figure.
+# - image_in: none. The DeepSeek page says image input is not supported for this model, and the OpenRouter listing is text to text.
+# - every field below is from those pages; prices are micro-USD per million tokens.
+# - text_out: streaming is listed on DeepSeek's chat completion page ("stream"). structured is empty: DeepSeek lists json_object, not json_schema. Sampling is not written (the provider's defaults apply). licence: hosted only, the provider's terms.
+id = "deepseek-v4-pro"
+label = "DeepSeek V4 Pro"
+licence = { kind = "proprietary" }
+family = "deepseek"
+cold_start_estimate_s = 0
+source = { kind = "hosted" }
+vram = { weights_mib = 0, kv_per_1k_ctx_mib = 0, overhead_mib = 0 }
+locality = { kind = "remote", v = { reach = [
+  { provider = "deepseek", model = "deepseek-v4-pro", price = { input_per_mtok = 660000, output_per_mtok = 1980000 }, wire = "open_ai_compat" },
+  { provider = "openrouter", model = "deepseek/deepseek-v4-pro", price = { input_per_mtok = 955260, output_per_mtok = 1910520 }, wire = "open_ai_compat" },
+] } }
+inputs = ["text"]
+outputs = ["text"]
+text_out = { tools = "native", structured = [], reasoning = "present", streaming = "present", context = 1000000, max_output = 384000 }

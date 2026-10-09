@@ -41,6 +41,10 @@ const REMOTE: [&str; 8] = [
     "gpt-6-luna",
 ];
 
+/// The hosted entries reached through OpenRouter and the provider's own API, checked below with
+/// their own asserts: DeepSeek V4 Pro (text only) and Muse Spark 1.3 contributor (one reach).
+const MORE_HOSTED: [&str; 2] = ["deepseek-v4-pro", "muse-spark-1.3-contributor"];
+
 fn read(dir: &str, id: &str) -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join(dir)
@@ -72,10 +76,15 @@ fn every_shipped_file_is_listed_here_and_has_its_id_as_stem() {
             })
             .collect();
     found.sort();
-    let mut listed: Vec<String> = IDS.iter().chain(&REMOTE).map(|s| (*s).to_owned()).collect();
+    let mut listed: Vec<String> = IDS
+        .iter()
+        .chain(&REMOTE)
+        .chain(&MORE_HOSTED)
+        .map(|s| (*s).to_owned())
+        .collect();
     listed.sort();
     assert_eq!(found, listed);
-    for id in IDS.iter().chain(&REMOTE) {
+    for id in IDS.iter().chain(&REMOTE).chain(&MORE_HOSTED) {
         assert_eq!(&shipped(id).id.0, id);
     }
 }
@@ -236,6 +245,44 @@ fn every_entry_names_its_family() {
         ("nemotron-3.5-asr-streaming", "nemotron"),
     ] {
         assert_eq!(shipped(id).family, Family(family.into()), "{id}");
+    }
+}
+
+#[test]
+fn the_more_hosted_entries_take_their_declared_inputs_and_have_tools() {
+    use model_catalog::{Locality, Modalities, Modality, ProviderId, Wire};
+    use model_provider::{Support, ToolSupport};
+    for (id, inputs) in [
+        ("deepseek-v4-pro", vec![Modality::Text]),
+        (
+            "muse-spark-1.3-contributor",
+            vec![Modality::Text, Modality::Image],
+        ),
+    ] {
+        let entry = shipped(id);
+        assert_eq!(
+            entry.capabilities.inputs,
+            Modalities(inputs.into_iter().collect()),
+            "{id}"
+        );
+        let text = entry.capabilities.text_out.as_ref().unwrap();
+        assert_eq!(
+            text.tools,
+            ToolSupport::Native,
+            "{id}: tool calling is required"
+        );
+        assert_eq!(text.reasoning, Support::Present, "{id}");
+        assert_eq!(text.streaming, Support::Present, "{id}");
+        let Locality::Remote { reach } = &entry.locality else {
+            panic!("{id} is not remote");
+        };
+        assert!(
+            reach
+                .iter()
+                .any(|r| r.provider == ProviderId("openrouter".into())),
+            "{id}"
+        );
+        assert!(reach.iter().all(|r| r.wire == Wire::OpenAiCompat), "{id}");
     }
 }
 
