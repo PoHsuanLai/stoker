@@ -446,6 +446,19 @@ fn a_json_schema_is_a_strict_response_format_everywhere() {
 }
 
 #[test]
+fn a_json_object_is_a_bare_response_format_everywhere() {
+    let mut r = base();
+    r.output = OutputShape::JsonObject;
+    for flavor in ALL {
+        assert_eq!(
+            body(&r, flavor)["response_format"],
+            json!({"type": "json_object"}),
+            "{flavor:?}"
+        );
+    }
+}
+
+#[test]
 fn the_other_constraints_are_spelled_per_engine() {
     let mut r = base();
     r.output = OutputShape::Gbnf("root ::= \"a\"".into());
@@ -482,6 +495,7 @@ fn what_a_flavor_cannot_enforce_is_refused_not_dropped() {
         (Constraint::Lark, OutputShape::Lark("start: \"a\"".into())),
         (Constraint::Gbnf, OutputShape::Gbnf("root ::= \"a\"".into())),
         (Constraint::Choice, OutputShape::Choice(vec!["a".into()])),
+        (Constraint::JsonObject, OutputShape::JsonObject),
     ];
     for flavor in ALL {
         for (kind, output) in &shapes {

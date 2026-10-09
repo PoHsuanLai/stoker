@@ -136,6 +136,25 @@ fn a_prompted_request_puts_the_schema_in_the_system_turn() {
 }
 
 #[test]
+fn a_json_object_request_carries_the_schema_in_the_prompt_and_checks_the_reply() {
+    let mut s = session::<Review>(ExtractMode::Native(OutputShape::JsonObject), 1);
+    let got = s.request(&base());
+    assert_eq!(got.output, OutputShape::JsonObject);
+    assert_eq!(got.messages[0].role, Role::System);
+    assert!(user_texts(&got)[0].contains("\"score\""));
+    // The engine guarantees only an object: our side holds the reply to the schema.
+    let wrong = r#"{"score":11}"#;
+    let Extracted::Repair(repair) = s.absorb(&base(), &end(StopReason::EndTurn), wrong, &[]) else {
+        panic!("a repair")
+    };
+    assert_eq!(repair.output, OutputShape::JsonObject);
+    assert_eq!(
+        s.absorb(&base(), &end(StopReason::EndTurn), r#"{"score":4}"#, &[]),
+        Extracted::Done(Review { score: 4 })
+    );
+}
+
+#[test]
 fn a_good_reply_is_done_in_every_mode() {
     let native = ExtractMode::Native(OutputShape::JsonSchema(
         Review::shape().to_json_schema(SchemaDialect::Plain),

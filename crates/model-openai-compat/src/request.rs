@@ -202,6 +202,9 @@ fn shape(
                 }),
             );
         }
+        (OutputShape::JsonObject, _) => {
+            body.insert("response_format".into(), json!({ "type": "json_object" }));
+        }
         (OutputShape::Gbnf(grammar), Flavor::LlamaServer) => {
             body.insert("grammar".into(), json!(grammar));
         }
@@ -269,13 +272,21 @@ fn extras(body: &mut Map<String, Value>, engine: &EngineExtras, flavor: Flavor) 
 /// it may hold.
 pub fn enforceable(flavor: Flavor) -> Vec<Constraint> {
     match flavor {
-        Flavor::LlamaServer => vec![Constraint::JsonSchema, Constraint::Gbnf, Constraint::Choice],
+        Flavor::LlamaServer => vec![
+            Constraint::JsonSchema,
+            Constraint::JsonObject,
+            Constraint::Gbnf,
+            Constraint::Choice,
+        ],
         Flavor::Vllm => vec![
             Constraint::JsonSchema,
+            Constraint::JsonObject,
             Constraint::Regex,
             Constraint::Lark,
             Constraint::Choice,
         ],
-        Flavor::LiteLlm | Flavor::OpenRouter => vec![Constraint::JsonSchema],
+        Flavor::LiteLlm | Flavor::OpenRouter => {
+            vec![Constraint::JsonSchema, Constraint::JsonObject]
+        }
     }
 }

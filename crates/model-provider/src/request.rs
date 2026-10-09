@@ -163,6 +163,10 @@ pub enum OutputShape {
     Lark(String),
     Gbnf(String),
     Choice(Vec<String>),
+    /// The reply is one JSON object, nothing more is enforced (`response_format` of type
+    /// `json_object`). The schema is not part of the shape: the caller puts it in the prompt and
+    /// validates the reply (`model-extract` does both).
+    JsonObject,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

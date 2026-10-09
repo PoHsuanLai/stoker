@@ -122,8 +122,10 @@ fn the_new_output_shapes_and_constraints_round_trip() {
         &OutputShape::Choice(vec!["allow".into(), "deny".into()]),
         r#"{"kind":"choice","v":["allow","deny"]}"#,
     );
+    round_trip(&OutputShape::JsonObject, r#"{"kind":"json_object"}"#);
     round_trip(&Constraint::Gbnf, r#""gbnf""#);
     round_trip(&Constraint::Choice, r#""choice""#);
+    round_trip(&Constraint::JsonObject, r#""json_object""#);
 }
 
 #[test]

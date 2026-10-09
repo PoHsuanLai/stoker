@@ -49,6 +49,10 @@ pub enum Constraint {
     Gbnf,
     /// The reply is exactly one of a list of strings.
     Choice,
+    /// The engine guarantees only that the reply is one JSON object (`response_format` of type
+    /// `json_object`), not which one: the schema travels in the prompt and the caller validates
+    /// the reply. For models that take no `json_schema`.
+    JsonObject,
 }
 
 /// Whether a server still calls tools when a response format is set on the same request. Some

@@ -120,6 +120,40 @@ fn choose_falls_back_to_tool_when_schema_and_tools_conflict() {
 }
 
 #[test]
+fn choose_takes_json_object_for_an_object_when_there_is_no_schema() {
+    use Constraint::JsonObject;
+    let json_object = ExtractMode::Native(OutputShape::JsonObject);
+    assert_eq!(
+        choose(
+            &caps(&[JsonObject], ToolSupport::Native),
+            &record(),
+            No,
+            Together
+        ),
+        json_object
+    );
+    // A schema wins over it; a bare string cannot be an object.
+    assert!(matches!(
+        choose(
+            &caps(&[JsonObject, JsonSchema], Absent),
+            &record(),
+            No,
+            Together
+        ),
+        ExtractMode::Native(OutputShape::JsonSchema(_))
+    ));
+    assert_eq!(
+        choose(
+            &caps(&[JsonObject], Absent),
+            &Shape::Text { max: CharCount(9) },
+            No,
+            Together
+        ),
+        ExtractMode::Prompted
+    );
+}
+
+#[test]
 fn choose_uses_a_tool_when_nothing_constrains_and_the_prompt_last() {
     assert_eq!(
         choose(&caps(&[], ServerParsed), &record(), No, Together),

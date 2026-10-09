@@ -114,7 +114,12 @@ impl Machine {
     pub(crate) fn request(&self, base: &TurnRequest, shape: &Shape) -> TurnRequest {
         let mut request = base.clone();
         match &self.mode {
-            ExtractMode::Native(output) => request.output = output.clone(),
+            ExtractMode::Native(output) => {
+                request.output = output.clone();
+                if *output == OutputShape::JsonObject {
+                    put_schema_in_prompt(&mut request, shape);
+                }
+            }
             ExtractMode::ToolCall { tool } => {
                 request.output = OutputShape::Free;
                 request.tool_choice = ToolChoice::Required;
@@ -127,18 +132,7 @@ impl Machine {
             }
             ExtractMode::Prompted => {
                 request.output = OutputShape::Free;
-                let schema = shape.to_json_schema(SchemaDialect::Plain);
-                let text = Part::Text(prompted_text(schema.0.as_str()));
-                match request.messages.first_mut() {
-                    Some(first) if first.role == Role::System => first.parts.push(text),
-                    _ => request.messages.insert(
-                        0,
-                        Message {
-                            role: Role::System,
-                            parts: vec![text],
-                        },
-                    ),
-                }
+                put_schema_in_prompt(&mut request, shape);
             }
         }
         if let Some(fault) = &self.last_fault {
@@ -202,6 +196,22 @@ impl Machine {
                 JsonText::new(unfenced(text)).map_err(|_| ShapeFault::NotJson)
             }
         }
+    }
+}
+
+/// The schema as system text: appended to the first system message, or a new one in front.
+fn put_schema_in_prompt(request: &mut TurnRequest, shape: &Shape) {
+    let schema = shape.to_json_schema(SchemaDialect::Plain);
+    let text = Part::Text(prompted_text(schema.0.as_str()));
+    match request.messages.first_mut() {
+        Some(first) if first.role == Role::System => first.parts.push(text),
+        _ => request.messages.insert(
+            0,
+            Message {
+                role: Role::System,
+                parts: vec![text],
+            },
+        ),
     }
 }
 

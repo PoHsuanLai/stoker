@@ -28,7 +28,9 @@ pub enum ToolsPresent {
 ///
 /// 1. `caps.output` has `Choice`, `Gbnf` or `Regex` for a `Choice` or bounded `Integer` shape:
 ///    `Native` of it (`Choice`, then `Regex`, then `Gbnf`).
-/// 2. `caps.output` has `JsonSchema`, or `Gbnf` for a shape GBNF can say: `Native` of it.
+/// 2. `caps.output` has `JsonSchema`, or `Gbnf` for a shape GBNF can say: `Native` of it. Failing
+///    both, `JsonObject` for an object-shaped reply: `Native(JsonObject)`, with the schema put in
+///    the prompt and the reply validated against it like any other.
 /// 3. `caps.tools` is not `Absent`: `ToolCall` (the synthetic `final_result`, never a named
 ///    `tool_choice`, which llama-server ignores).
 /// 4. `Prompted`.
@@ -82,7 +84,14 @@ fn general(caps: &Caps, shape: &Shape) -> Option<ExtractMode> {
         .contains(&Constraint::JsonSchema)
         .then(|| OutputShape::JsonSchema(shape.to_json_schema(SchemaDialect::Plain)))
         .or_else(|| gbnf_of(caps, shape))
+        .or_else(|| json_object_of(caps, shape))
         .map(ExtractMode::Native)
+}
+
+/// `json_object` holds a JSON object, so only a shape whose reply is one qualifies.
+fn json_object_of(caps: &Caps, shape: &Shape) -> Option<OutputShape> {
+    let is_object = matches!(shape, Shape::Record(_) | Shape::Tagged { .. });
+    (is_object && caps.output.contains(&Constraint::JsonObject)).then_some(OutputShape::JsonObject)
 }
 
 fn gbnf_of(caps: &Caps, shape: &Shape) -> Option<OutputShape> {
