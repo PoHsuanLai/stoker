@@ -167,6 +167,7 @@ impl<'a, C: ChatCodec, K: TurnSink> ChatSink<'a, C, K> {
                 stop: StopReason::EndTurn,
                 usage: self.usage,
                 served: self.served,
+                first_token: None,
             }),
             Mode::Failing(collect) => collect.into_reply(self.codec, result).and_then(|_| {
                 Err(ProviderError::Unreadable(
@@ -200,6 +201,7 @@ impl<'a, C: ChatCodec, K: TurnSink> ChatSink<'a, C, K> {
                 stop: StopReason::EndTurn,
                 usage: self.usage,
                 served: self.served.clone(),
+                first_token: None,
             });
         }
         let fault = decoder.fault();

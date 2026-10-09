@@ -29,6 +29,7 @@ fn end(usage: TurnUsage) -> TurnEnd {
         stop: StopReason::EndTurn,
         usage,
         served: ModelName("m".into()),
+        first_token: None,
     }
 }
 

@@ -83,6 +83,7 @@ fn request() -> TurnRequest {
         },
         reasoning: Reasoning::On(Effort::Low),
         engine: EngineExtras::None,
+        choice_scores: model_provider::ChoiceScores::Off,
     }
 }
 
@@ -208,6 +209,7 @@ fn end() -> TurnEnd {
         stop: StopReason::ToolUse,
         usage: TurnUsage::default(),
         served: ModelName("holo".into()),
+        first_token: None,
     }
 }
 

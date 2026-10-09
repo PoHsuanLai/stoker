@@ -1203,3 +1203,48 @@ was kept, so none was added (none invented).
 `cargo-fuzz` (`cargo install cargo-fuzz`; not installed here, so the targets were compiled by
 the proptest suites' shared code only and not run under libFuzzer). Seeds are in
 `fuzz/corpus/<target>`.
+
+## First-token log-probabilities for a Choice (2026-10-09, lane `choicelp`)
+
+For docket's shadow decision-model trial: the probability of each declared option from the same call
+that answers it. Stoker carries the raw material; porter renormalises.
+
+### Types (`model-provider`)
+
+- `TurnRequest.choice_scores: ChoiceScores`, `#[serde(default)]`: `Off` (default; the request is
+  unchanged) or `FirstToken { top_k: Count }`.
+- `TurnEnd.first_token: Option<FirstTokenLogprobs>`, absent in serde when `None` (old cassettes read).
+- `FirstTokenLogprobs { top: Vec<TokenLogprob> }` (engine order, most likely first);
+  `TokenLogprob { token: String, logprob: Logprob }`; `Logprob(i32)` is millionths of a nat so the
+  end stays `Eq` (`from_nats` is `None` for NaN, `-inf` is `Logprob::NEVER`, positive clamps to 0;
+  `probability()`).
+- `FirstTokenLogprobs::option_permille(&[&str]) -> Option<Vec<Permille>>`: the pure helper. Largest
+  remainder, sums to exactly 1000, ties to the earlier option. A token counts for the option whose
+  text starts with it (no tokenizer here); `None` if a token with mass starts two options, if no
+  option has mass, or with fewer than two options. Whole-sequence log-probabilities are not carried.
+
+### Per engine
+
+| Engine | Request | Read from |
+| --- | --- | --- |
+| vLLM | `logprobs: true`, `top_logprobs: k` (k held to 1..=20) | `choices[0].logprobs.content[0].top_logprobs` |
+| llama-server | the same two OpenAI fields on `/v1/chat/completions` (not the native `n_probs`) | the same path |
+| LiteLLM, OpenRouter | nothing sent (`Quirks.logprobs = Unsupported`) | always `None` |
+| Anthropic and others | no such API in stoker | `None` |
+
+Both rows are from the engines' documented OpenAI-compatible shape and are "to verify" against a
+recorded fixture; the tests use frames written by hand in that shape. No extra network call.
+
+### Reasoning models: which token
+
+The record is taken once, at the first chunk whose delta has answer text (`content`), never from the
+thinking chunks that come before (`reasoning_content`/`reasoning`, split by the server's reasoning
+parser). It is kept only if (a) that delta has no thinking text, and (b) the first logged token's text
+is a prefix of the delta's answer text. A `</think>` marker as the first logged token, a mixed chunk
+or a byte-fallback piece fails the rule and gives `None`.
+
+### Never fails
+
+Missing, null or malformed `logprobs`, NaN or non-numeric entries, an empty list: `first_token` is
+`None`, the turn ends as before, and `log::debug!` says why (`log` is the only new dependency).
+A stream stopped early by the sink also has `None`.

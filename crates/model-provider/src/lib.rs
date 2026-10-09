@@ -8,6 +8,7 @@ mod control;
 mod embed;
 mod event;
 mod ids;
+mod logprobs;
 mod provider;
 mod request;
 mod retry;
@@ -37,6 +38,7 @@ pub use ids::{
     JsonError, JsonText, ModelName, OpaqueText, SchemaText, SignatureText, ToolCallId, ToolName,
     ToolNameError,
 };
+pub use logprobs::{ChoiceScores, FirstTokenLogprobs, Logprob, TokenLogprob};
 pub use provider::{ModelInfo, Provider, ProviderError};
 pub use request::{
     Effort, ImageBytes, ImageDetail, ImageInput, Limits, Message, NativeTool, OutputShape, Part,

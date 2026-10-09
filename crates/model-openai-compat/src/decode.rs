@@ -8,10 +8,11 @@ use model_provider::{
 use model_wire::{ChatDecoder, CodecError};
 use serde_json::Value;
 
-use crate::Flavor;
 use crate::assemble::{Closed, Fragment, IfMalformed, Pending};
 use crate::envelope::envelope_error;
 use crate::leak::{LeakMarker, LeakWatch};
+use crate::logprobs::FirstToken;
+use crate::{Flavor, LogprobsAsk};
 
 /// The most frame bytes one reply may carry in all; past it the reply is unreadable. A turn is
 /// kilobytes, and the longest legitimate one (a 32 MiB tool argument, the assembler's own cap)
@@ -54,6 +55,7 @@ pub struct StreamDecoder {
     fault: Option<ProviderError>,
     fed: usize,
     leak: LeakWatch,
+    first: FirstToken,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,6 +79,7 @@ impl StreamDecoder {
             fault: None,
             fed: 0,
             leak: LeakWatch::default(),
+            first: FirstToken::default(),
         }
     }
 
@@ -111,6 +114,7 @@ impl StreamDecoder {
         if let Some(choice) = first {
             if let Some(delta) = choice.get("delta").filter(|d| !d.is_null()) {
                 events.extend(self.delta(delta)?);
+                self.first_token(choice, delta);
             }
             // After a finish reason only usage and `[DONE]` may follow: more content or calls
             // are a broken stream, and a second finish reason does not replace the first.
@@ -129,6 +133,26 @@ impl StreamDecoder {
             events.push(TurnEvent::Usage(usage));
         }
         Ok(events)
+    }
+
+    /// Settles the first-token record at the first chunk with answer text (vLLM and
+    /// llama-server only; the others never ask).
+    fn first_token(&mut self, choice: &Value, delta: &Value) {
+        if self.flavor.quirks().logprobs != LogprobsAsk::Request {
+            return;
+        }
+        let answer = delta
+            .get("content")
+            .and_then(|c| content_text(Some(c)).ok())
+            .unwrap_or_default();
+        if answer.is_empty() {
+            return;
+        }
+        let thought = ["reasoning_content", "reasoning"]
+            .iter()
+            .filter_map(|key| delta.get(*key))
+            .any(|v| v.as_str().is_some_and(|s| !s.is_empty()));
+        self.first.see(choice, &answer, thought);
     }
 
     fn delta(&mut self, delta: &Value) -> Result<Vec<TurnEvent>, CodecError> {
@@ -292,6 +316,7 @@ impl ChatDecoder for StreamDecoder {
                 stop,
                 usage: self.usage.unwrap_or_default(),
                 served: self.served,
+                first_token: self.first.into_record(),
             }),
             Phase::Nothing => Err(CodecError::Unreadable),
             Phase::Streaming => Err(CodecError::Truncated),

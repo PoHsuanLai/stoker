@@ -80,6 +80,7 @@ pub fn end(stop: StopReason) -> TurnEnd {
         stop,
         usage: TurnUsage::default(),
         served: ModelName("holo".into()),
+        first_token: None,
     }
 }
 

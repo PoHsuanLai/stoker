@@ -80,6 +80,7 @@ fn play<K: TurnSink>(
                 stop: StopReason::EndTurn,
                 usage: TurnUsage::default(),
                 served,
+                first_token: None,
             });
         }
     }

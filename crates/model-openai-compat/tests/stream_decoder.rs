@@ -106,6 +106,7 @@ fn end(stop: StopReason, usage: TurnUsage) -> Result<TurnEnd, CodecError> {
         stop,
         usage,
         served: ModelName("holo".into()),
+        first_token: None,
     })
 }
 

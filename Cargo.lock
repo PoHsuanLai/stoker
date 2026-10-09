@@ -572,6 +572,7 @@ name = "model-openai-compat"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "log",
  "model-http",
  "model-provider",
  "model-replay",

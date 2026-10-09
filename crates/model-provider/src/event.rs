@@ -3,7 +3,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    CallIndex, ImageCount, ModelName, ThoughtSeal, Tokens, ToolCall, ToolCallId, ToolName,
+    CallIndex, FirstTokenLogprobs, ImageCount, ModelName, ThoughtSeal, Tokens, ToolCall,
+    ToolCallId, ToolName,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -52,6 +53,9 @@ pub struct TurnEnd {
     pub stop: StopReason,
     pub usage: TurnUsage,
     pub served: ModelName,
+    /// The first answer token's top-k, when the request asked and the engine answered usably.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_token: Option<FirstTokenLogprobs>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

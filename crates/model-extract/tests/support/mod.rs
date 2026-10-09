@@ -56,6 +56,7 @@ pub fn base() -> TurnRequest {
         },
         reasoning: Reasoning::Off,
         engine: EngineExtras::None,
+        choice_scores: model_provider::ChoiceScores::Off,
     }
 }
 
@@ -64,5 +65,6 @@ pub fn end(stop: StopReason) -> TurnEnd {
         stop,
         usage: TurnUsage::default(),
         served: ModelName("m".into()),
+        first_token: None,
     }
 }

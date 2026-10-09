@@ -16,6 +16,7 @@ speech-provider = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 serde_json = { workspace = true }
+log = { workspace = true }
 
 [dev-dependencies]
 base64 = { workspace = true }

@@ -44,6 +44,7 @@ pub fn base() -> TurnRequest {
         },
         reasoning: Reasoning::Off,
         engine: EngineExtras::None,
+        choice_scores: model_provider::ChoiceScores::Off,
     }
 }
 

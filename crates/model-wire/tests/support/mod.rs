@@ -250,6 +250,7 @@ impl ChatDecoder for LineDecoder {
                 stop: StopReason::EndTurn,
                 usage: self.usage,
                 served: self.served,
+                first_token: None,
             })
         } else {
             Err(CodecError::Truncated)
@@ -319,6 +320,7 @@ pub fn request(model: &str) -> TurnRequest {
         },
         reasoning: Reasoning::Off,
         engine: model_provider::EngineExtras::None,
+        choice_scores: model_provider::ChoiceScores::Off,
     }
 }
 

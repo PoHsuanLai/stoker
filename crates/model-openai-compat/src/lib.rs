@@ -13,6 +13,7 @@ mod decode;
 mod embed;
 mod envelope;
 mod leak;
+mod logprobs;
 mod messages;
 mod models;
 mod provider;
@@ -26,6 +27,7 @@ pub use audio::{
 pub use codec::{Flavor, OpenAiCodec, RequestJson};
 pub use decode::StreamDecoder;
 pub use leak::LeakMarker;
+pub use logprobs::LogprobsAsk;
 pub use model_wire::CodecError;
 pub use provider::OpenAiCompat;
 pub use quirks::{DimensionsField, Quirks, ToolImages, ToolNaming, UsageAsk};

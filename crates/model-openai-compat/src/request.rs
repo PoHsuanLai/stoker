@@ -12,8 +12,8 @@ use model_provider::{
 use model_wire::CodecError;
 use serde_json::{Map, Value, json};
 
-use crate::messages;
 use crate::{Flavor, RequestJson, ToolNaming, UsageAsk};
+use crate::{logprobs, messages};
 
 /// The JSON body of `POST /chat/completions` for `request`, streaming on.
 pub fn encode_request(request: &TurnRequest, flavor: Flavor) -> Result<RequestJson, CodecError> {
@@ -33,6 +33,7 @@ pub fn encode_request(request: &TurnRequest, flavor: Flavor) -> Result<RequestJs
     sampling(&mut body, &request.sampling, flavor);
     reasoning(&mut body, request.reasoning, flavor);
     shape(&mut body, request, flavor)?;
+    logprobs::encode(&mut body, request.choice_scores, flavor);
     extras(&mut body, &request.engine, flavor);
     Ok(RequestJson(Value::Object(body).to_string()))
 }

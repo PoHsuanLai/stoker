@@ -8,8 +8,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use vision_prep::MediaType;
 
 use crate::{
-    EngineExtras, JsonText, ModelName, Sampling, SchemaText, ThoughtSeal, Tokens, ToolCallId,
-    ToolName, ToolParallelism,
+    ChoiceScores, EngineExtras, JsonText, ModelName, Sampling, SchemaText, ThoughtSeal, Tokens,
+    ToolCallId, ToolName, ToolParallelism,
 };
 use cua_action::WireDialect;
 
@@ -25,6 +25,9 @@ pub struct TurnRequest {
     pub limits: Limits,
     pub sampling: Sampling,
     pub reasoning: Reasoning,
+    /// Whether to ask for the first answer token's log-probabilities; `Off` by default.
+    #[serde(default)]
+    pub choice_scores: ChoiceScores,
     /// Knobs of one engine flavor; `EngineExtras::None` for none.
     pub engine: EngineExtras,
 }

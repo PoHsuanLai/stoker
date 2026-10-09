@@ -74,6 +74,7 @@ fn request(text: &str, image: &[u8]) -> TurnRequest {
         },
         reasoning: Reasoning::Off,
         engine: EngineExtras::None,
+        choice_scores: model_provider::ChoiceScores::Off,
     }
 }
 
@@ -82,6 +83,7 @@ fn end(stop: StopReason) -> TurnEnd {
         stop,
         usage: TurnUsage::default(),
         served: ModelName("holo".into()),
+        first_token: None,
     }
 }
 

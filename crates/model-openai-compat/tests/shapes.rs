@@ -2,8 +2,8 @@ use model_http::{
     AuthHeader, HttpClient, HttpEndpoint, HttpTarget, Proxy, RouteRoot, Timeouts, UrlPath, WaitMs,
 };
 use model_openai_compat::{
-    DimensionsField, Flavor, OpenAiCodec, OpenAiCompat, Quirks, RequestJson, ToolImages,
-    ToolNaming, UsageAsk,
+    DimensionsField, Flavor, LogprobsAsk, OpenAiCodec, OpenAiCompat, Quirks, RequestJson,
+    ToolImages, ToolNaming, UsageAsk,
 };
 use model_provider::ShapeWithTools;
 use model_wire::ChatCodec;
@@ -105,6 +105,7 @@ fn the_quirk_table_is_pinned() {
                 shape_with_tools: ShapeWithTools::AfterResult,
                 describe_root: RouteRoot::Server,
                 dimensions: DimensionsField::Ignored,
+                logprobs: LogprobsAsk::Request,
             },
         ),
         (
@@ -116,6 +117,7 @@ fn the_quirk_table_is_pinned() {
                 shape_with_tools: ShapeWithTools::Together,
                 describe_root: RouteRoot::Base,
                 dimensions: DimensionsField::Send,
+                logprobs: LogprobsAsk::Request,
             },
         ),
         (
@@ -127,6 +129,7 @@ fn the_quirk_table_is_pinned() {
                 shape_with_tools: ShapeWithTools::AfterResult,
                 describe_root: RouteRoot::Base,
                 dimensions: DimensionsField::Send,
+                logprobs: LogprobsAsk::Unsupported,
             },
         ),
         (
@@ -138,6 +141,7 @@ fn the_quirk_table_is_pinned() {
                 shape_with_tools: ShapeWithTools::AfterResult,
                 describe_root: RouteRoot::Base,
                 dimensions: DimensionsField::Send,
+                logprobs: LogprobsAsk::Unsupported,
             },
         ),
     ];
@@ -152,7 +156,7 @@ fn the_quirk_table_is_pinned() {
 fn a_quirk_row_has_pinned_json() {
     assert_eq!(
         serde_json::to_string(&Flavor::LlamaServer.quirks()).unwrap(),
-        r#"{"usage":"request","tool_naming":"auto_only","tool_images":"in_tool_message","shape_with_tools":"after_result","describe_root":"server","dimensions":"ignored"}"#
+        r#"{"usage":"request","tool_naming":"auto_only","tool_images":"in_tool_message","shape_with_tools":"after_result","describe_root":"server","dimensions":"ignored","logprobs":"request"}"#
     );
 }
 

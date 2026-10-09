@@ -58,6 +58,7 @@ fn cassette() -> Cassette {
         stop: StopReason::EndTurn,
         usage: TurnUsage::default(),
         served: ModelName("holo".into()),
+        first_token: None,
     };
     Cassette {
         header: CassetteHeader {

@@ -9,6 +9,7 @@ use model_provider::ShapeWithTools;
 use serde::{Deserialize, Serialize};
 
 use crate::Flavor;
+use crate::logprobs::LogprobsAsk;
 
 /// Whether the request asks for a usage chunk (`stream_options.include_usage`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -59,6 +60,8 @@ pub struct Quirks {
     /// Where `describe` reads: llama-server keeps `/props` at the server root.
     pub describe_root: RouteRoot,
     pub dimensions: DimensionsField,
+    /// Whether `logprobs`/`top_logprobs` are sent for a first-token ask.
+    pub logprobs: LogprobsAsk,
 }
 
 impl Flavor {
@@ -73,6 +76,7 @@ impl Flavor {
                 shape_with_tools: ShapeWithTools::AfterResult,
                 describe_root: RouteRoot::Server,
                 dimensions: DimensionsField::Ignored,
+                logprobs: LogprobsAsk::Request,
             },
             Flavor::Vllm => Quirks {
                 usage: UsageAsk::Request,
@@ -82,6 +86,7 @@ impl Flavor {
                 shape_with_tools: ShapeWithTools::Together,
                 describe_root: RouteRoot::Base,
                 dimensions: DimensionsField::Send,
+                logprobs: LogprobsAsk::Request,
             },
             Flavor::LiteLlm => Quirks {
                 usage: UsageAsk::Request,
@@ -90,6 +95,7 @@ impl Flavor {
                 shape_with_tools: ShapeWithTools::AfterResult,
                 describe_root: RouteRoot::Base,
                 dimensions: DimensionsField::Send,
+                logprobs: LogprobsAsk::Unsupported,
             },
             Flavor::OpenRouter => Quirks {
                 usage: UsageAsk::Never,
@@ -98,6 +104,7 @@ impl Flavor {
                 shape_with_tools: ShapeWithTools::AfterResult,
                 describe_root: RouteRoot::Base,
                 dimensions: DimensionsField::Send,
+                logprobs: LogprobsAsk::Unsupported,
             },
         }
     }

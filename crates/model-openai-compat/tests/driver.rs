@@ -116,6 +116,7 @@ fn want_end() -> TurnEnd {
         stop: StopReason::ToolUse,
         usage: usage(),
         served: ModelName("holo".into()),
+        first_token: None,
     }
 }
 

@@ -134,6 +134,7 @@ impl CuaSession {
             sampling: self.settings.sampling,
             reasoning: self.settings.reasoning,
             engine: self.settings.engine,
+            choice_scores: model_provider::ChoiceScores::Off,
         }
     }
 
@@ -197,6 +198,7 @@ impl CuaSession {
             sampling: self.settings.sampling,
             reasoning: self.settings.reasoning,
             engine: self.settings.engine,
+            choice_scores: model_provider::ChoiceScores::Off,
         }
     }
 
