@@ -1,5 +1,6 @@
 # The description of the `computer_use` function declared to Holo 3.1: ours, provisional (see holo_31.txt).
-# Header lines (starting with `#`) are not sent. Placeholders: {resolution}.
+# Header lines (starting with `#`) are not sent. Placeholders: {resolution}, {scroll}.
 Perform one action in the application window: click, type, press keys, scroll, wait, ask the person, or end the run.
 * The screenshot's coordinate range is {resolution}.
 * Click the centre of an element, never its edge.
+* {scroll}

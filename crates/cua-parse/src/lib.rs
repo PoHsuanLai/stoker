@@ -17,3 +17,4 @@ pub use common::{Batch, bounded};
 pub use limits::{ActionCount, ByteLen, ByteOffset, ParseLimits};
 pub use outcome::{DropReason, Dropped, InSpace, ParseError, Parsed, VerbText, VerbTextError};
 pub use parse::{parse_text, parse_tool_calls};
+pub use tools::SCROLL_PIXELS_RULE;

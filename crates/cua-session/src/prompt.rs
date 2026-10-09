@@ -102,7 +102,9 @@ fn function(description: &str, schema: &str, map: &FrameMap) -> Vec<ToolSpec> {
     match (name, parameters) {
         (Ok(name), Ok(parameters)) => vec![ToolSpec::Function {
             name,
-            description: body(description).replace("{resolution}", &resolution(map)),
+            description: body(description)
+                .replace("{resolution}", &resolution(map))
+                .replace("{scroll}", cua_parse::SCROLL_PIXELS_RULE),
             parameters,
         }],
         _ => unreachable!("the shipped prompt files are valid"),

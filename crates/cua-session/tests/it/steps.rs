@@ -86,7 +86,12 @@ fn a_tool_dialect_request_declares_the_function_and_the_space() {
         };
         assert_eq!(name.as_str(), "computer_use");
         assert!(description.contains(resolution), "{description}");
-        assert!(!description.contains("{resolution}"));
+        assert!(!description.contains("{resolution}") && !description.contains("{scroll}"));
+        // The sign of a scroll is spelled out, in the words the parser's test pins.
+        assert!(
+            description.contains(cua_parse::SCROLL_PIXELS_RULE),
+            "{description}"
+        );
         assert!(parameters.0.as_str().contains("left_click"));
         let user = request.messages.last().unwrap();
         assert_eq!(user.role, Role::User);

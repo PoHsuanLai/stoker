@@ -127,6 +127,25 @@ fn qwen_click_family() {
 }
 
 #[test]
+fn the_sign_of_a_scroll_is_what_the_models_are_told() {
+    // The words the tool description carries...
+    assert_eq!(
+        cua_parse::SCROLL_PIXELS_RULE,
+        "A scroll's `pixels` is positive to scroll up and negative to scroll down; for a horizontal scroll, positive is right and negative is left."
+    );
+    // ...and what both tool dialects read.
+    let dir = |p: cua_parse::Parsed| match &image_actions(&p)[0] {
+        CuaAction::Scroll { dir, .. } => *dir,
+        other => panic!("a scroll, got {other:?}"),
+    };
+    for (pixels, want) in [(30, ScrollDir::Up), (-30, ScrollDir::Down)] {
+        let args = format!(r#"{{"action":"scroll","coordinate":[5,5],"pixels":{pixels}}}"#);
+        assert_eq!(dir(qwen(&args)), want, "qwen {pixels}");
+        assert_eq!(dir(holo("computer_use", &args)), want, "holo {pixels}");
+    }
+}
+
+#[test]
 fn qwen_drag_scroll_wait_and_conclusions() {
     let p = qwen(r#"{"action":"left_click_drag","start_coordinate":[1,2],"coordinate":[30,40]}"#);
     assert_eq!(

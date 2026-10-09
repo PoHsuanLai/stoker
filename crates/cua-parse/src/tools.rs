@@ -23,6 +23,9 @@ use crate::{DropReason, ParseError, ParseLimits, chord};
 
 /// Qwen's function name.
 const QWEN_FUNCTION: &str = "computer_use";
+/// What a model is told about the sign of a scroll's `pixels`: the words the tool description
+/// carries, so that what it is told and what [`scroll`] reads cannot drift apart (a test pins both).
+pub const SCROLL_PIXELS_RULE: &str = "A scroll's `pixels` is positive to scroll up and negative to scroll down; for a horizontal scroll, positive is right and negative is left.";
 /// Holo's `scroll` with a direction and no pixel amount.
 const SCROLL_NOTCHES: u16 = 5;
 const MS_PER_SECOND: f64 = 1000.0;
