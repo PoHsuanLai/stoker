@@ -114,7 +114,7 @@ fn verb_action<S: CoordSpace>(
         }),
         ("terminate", _) | ("finish", true) => Ok(CuaAction::Finish {
             outcome: outcome(string(args, "status")?)?,
-            summary: bounded(Summary::new(optional_string(args, "summary")))?,
+            summary: bounded(Summary::new(final_words(args)))?,
             extracted: Vec::new(),
         }),
         ("answer", _) => Ok(CuaAction::Finish {
@@ -191,6 +191,16 @@ fn string<'a>(args: &'a Args, name: &str) -> Verdict<&'a str> {
 
 fn optional_string<'a>(args: &'a Args, name: &str) -> &'a str {
     args.get(name).and_then(Value::as_str).unwrap_or_default()
+}
+
+/// The words a finishing call says to the person: `summary`, or `text` when there is no
+/// `summary` argument at all (Holo 3.1 writes its answer as `text`). A present `summary` wins.
+fn final_words(args: &Args) -> &str {
+    if args.contains_key("summary") {
+        optional_string(args, "summary")
+    } else {
+        optional_string(args, "text")
+    }
 }
 
 /// `keys: ["ctrl", "c"]` (Qwen), or a string such as `"ctrl+c"` under `keys` or `key`.

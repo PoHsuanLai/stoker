@@ -1248,3 +1248,7 @@ or a byte-fallback piece fails the rule and gives `None`.
 Missing, null or malformed `logprobs`, NaN or non-numeric entries, an empty list: `first_token` is
 `None`, the turn ends as before, and `log::debug!` says why (`log` is the only new dependency).
 A stream stopped early by the sink also has `None`.
+
+## cua-parse: terminate reads its words from text (2026-10-09, lane `termtext`)
+
+Holo 3.1 4B writes its final answer in a `text` argument, not `summary`. In the cua eval, 28 of 104 live runs ended with no words for the person because only `summary` was read. `terminate` (and Holo's `finish`, which shares the arm) now reads `text` when there is no `summary` argument; a present `summary` wins, and nothing else changed (no other aliases; `answer` still reads `text` only). Covered by `terminate_words_come_from_summary_or_text` in `crates/cua-parse/tests/tools.rs`.

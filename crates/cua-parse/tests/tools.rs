@@ -217,6 +217,42 @@ fn qwen_drag_scroll_wait_and_conclusions() {
 }
 
 #[test]
+fn terminate_words_come_from_summary_or_text() {
+    let words = |p: &cua_parse::Parsed| match &image_actions(p)[0] {
+        CuaAction::Finish {
+            outcome, summary, ..
+        } => (*outcome, summary.as_str().to_owned()),
+        other => panic!("{other:?}"),
+    };
+    let done = |words: &str| (FinishOutcome::Done, words.to_owned());
+
+    // Holo 3.1 writes its answer as `text`: that is read when there is no `summary`.
+    let p = qwen(r#"{"action":"terminate","status":"success","text":"The answer is 42."}"#);
+    assert_eq!(words(&p), done("The answer is 42."));
+    let p = holo("finish", r#"{"status":"success","text":"Saved."}"#);
+    assert_eq!(words(&p), done("Saved."));
+
+    // `summary` alone is unchanged.
+    let p = qwen(r#"{"action":"terminate","status":"success","summary":"42"}"#);
+    assert_eq!(words(&p), done("42"));
+
+    // Both: `summary` wins.
+    let p = qwen(r#"{"action":"terminate","status":"success","summary":"42","text":"forty-two"}"#);
+    assert_eq!(words(&p), done("42"));
+
+    // Neither: empty, as before. Other arguments are still ignored, not read as words.
+    let p = qwen(r#"{"action":"terminate","status":"success"}"#);
+    assert_eq!(words(&p), done(""));
+    let p = qwen(r#"{"action":"terminate","status":"success","answer":"42","note":"x"}"#);
+    assert_eq!(words(&p), done(""));
+    assert!(p.dropped.is_empty());
+
+    // `answer` keeps reading `text` only, as before.
+    let p = qwen(r#"{"action":"answer","text":"42"}"#);
+    assert_eq!(words(&p), done("42"));
+}
+
+#[test]
 fn key_spellings_in_tool_calls() {
     let chord = |args: &str| match &image_actions(&qwen(args))[0] {
         CuaAction::Key { chord, .. } => chord.clone(),
