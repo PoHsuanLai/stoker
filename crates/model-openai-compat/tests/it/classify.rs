@@ -2,7 +2,7 @@
 
 use model_http::{BodyKind, HttpStatus, ResponseHead, WaitSeconds};
 use model_openai_compat::{Flavor, OpenAiCodec};
-use model_provider::{ProviderError, RetrySeconds, ServerStatus, Tokens};
+use model_provider::{ProviderDetail, ProviderError, RetrySeconds, ServerStatus, Tokens};
 use model_wire::ErrorWire;
 
 fn head(status: u16, body: BodyKind, retry_after: Option<u32>) -> ResponseHead {
@@ -27,6 +27,10 @@ fn status_classes_decide() {
     let cases: &[(u16, ProviderError)] = &[
         (401, ProviderError::Unauthorized),
         (403, ProviderError::Unauthorized),
+        (
+            402,
+            ProviderError::PaymentRequired(ProviderDetail::new(402, "")),
+        ),
         (408, ProviderError::Timeout),
         (429, ProviderError::RateLimited(RetrySeconds(0))),
         (500, ProviderError::Server(ServerStatus(500))),
@@ -95,13 +99,72 @@ fn a_context_overflow_carries_the_limit_from_the_envelope_or_the_message() {
 }
 
 #[test]
-fn a_bad_request_keeps_only_the_error_type_slug() {
-    let body = r#"{"error":{"message":"the prompt SECRET text is wrong","type":"BadRequestError","code":400}}"#;
-    let error = classify(400, body);
-    assert_eq!(error, bad("badrequesterror"));
-    assert!(!format!("{error:?}").contains("SECRET"));
-    let nested = r#"{"error":"the prompt SECRET text"}"#;
-    assert_eq!(classify(404, nested), bad("error"));
+fn a_client_error_keeps_the_status_and_a_redacted_message() {
+    let openrouter = r#"{"error":{"message":"This request requires more credits, or fewer max_tokens. You requested up to 65536 tokens, but can only afford 367.","code":402}}"#;
+    let cases: &[(u16, &str, ProviderError)] = &[
+        (
+            402,
+            openrouter,
+            ProviderError::PaymentRequired(ProviderDetail::new(
+                402,
+                "This request requires more credits, or fewer max_tokens. You requested up to 65536 tokens, but can only afford 367.",
+            )),
+        ),
+        (
+            400,
+            r#"{"error":{"message":"Provider returned error: response_format json_schema is not supported","type":"invalid_request_error","code":400}}"#,
+            bad(
+                "http_400 invalid_request_error: Provider returned error: response_format json_schema is not supported",
+            ),
+        ),
+        (
+            400,
+            r#"{"error":"unknown field foo"}"#,
+            bad("http_400 error: unknown field foo"),
+        ),
+        (
+            404,
+            r#"{"detail":"no such route"}"#,
+            bad("http_404: no such route"),
+        ),
+        (
+            401,
+            r#"{"error":{"message":"No auth credentials found sk-or-v1-0123456789abcdef","code":401}}"#,
+            ProviderError::AuthRejected(ProviderDetail::new(
+                401,
+                "No auth credentials found [redacted]",
+            )),
+        ),
+        (
+            403,
+            r#"{"error":{"message":"key disabled"}}"#,
+            ProviderError::AuthRejected(ProviderDetail::new(403, "key disabled")),
+        ),
+        (
+            429,
+            r#"{"error":{"message":"slow down"}}"#,
+            ProviderError::RateLimited(RetrySeconds(0)),
+        ),
+    ];
+    for (status, body, want) in cases {
+        assert_eq!(&classify(*status, body), want, "{status} {body}");
+    }
+}
+
+#[test]
+fn a_provider_message_never_carries_a_credential_or_runs_long() {
+    let body = format!(
+        r#"{{"error":{{"message":"Authorization: Bearer abc123 api_key=hunter2 {}"}}}}"#,
+        "long ".repeat(100)
+    );
+    let text = format!("{:?}", classify(400, &body));
+    for secret in ["abc123", "hunter2"] {
+        assert!(!text.contains(secret), "{text}");
+    }
+    assert!(text.len() < 400, "{text}");
+    // A 5xx and a context overflow still carry no message.
+    let leaky = r#"{"error":{"message":"SECRET prompt","type":"server_error"}}"#;
+    assert!(!format!("{:?}", classify(500, leaky)).contains("SECRET"));
 }
 
 #[test]

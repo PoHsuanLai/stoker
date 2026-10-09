@@ -6,9 +6,10 @@ use std::sync::Mutex;
 use std::task::{Context, Poll, Waker};
 
 use model_provider::{
-    Attempt, Flow, ModelInfo, ModelName, Permille, Provider, ProviderError, RetryClass,
-    RetryPolicy, RetrySeconds, Retrying, Script, ScriptedProvider, ServerStatus, Sleeper,
-    StopReason, Tokens, TurnEnd, TurnEvent, TurnRequest, TurnSink, TurnUsage, WaitMs, next_wait,
+    Attempt, Flow, ModelInfo, ModelName, Permille, Provider, ProviderDetail, ProviderError,
+    RetryClass, RetryPolicy, RetrySeconds, Retrying, Script, ScriptedProvider, ServerStatus,
+    Sleeper, StopReason, Tokens, TurnEnd, TurnEvent, TurnRequest, TurnSink, TurnUsage, WaitMs,
+    next_wait,
 };
 use proptest::prelude::*;
 
@@ -68,6 +69,14 @@ fn errors_are_classified() {
         (ProviderError::Server(ServerStatus(404)), RetryClass::Never),
         (ProviderError::Server(ServerStatus(600)), RetryClass::Never),
         (ProviderError::Unauthorized, RetryClass::Never),
+        (
+            ProviderError::AuthRejected(ProviderDetail::new(401, "bad key")),
+            RetryClass::Never,
+        ),
+        (
+            ProviderError::PaymentRequired(ProviderDetail::new(402, "no credit")),
+            RetryClass::Never,
+        ),
         (
             ProviderError::ContextOverflow { limit: Tokens(1) },
             RetryClass::Never,

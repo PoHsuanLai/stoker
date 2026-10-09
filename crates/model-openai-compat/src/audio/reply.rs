@@ -8,7 +8,7 @@ use serde_json::Value;
 use speech_provider::{AudioFormat, AudioMs, AudioSink, VoiceId};
 
 use super::PcmDecoder;
-use crate::classify::classify;
+use crate::classify::classify_bare;
 
 /// An error reply is read to this many bytes (the classifier needs the envelope, not a page).
 const ERROR_BODY_MAX: usize = 64 << 10;
@@ -64,9 +64,9 @@ impl Whole {
 
     fn verdict(&self, sent: Result<HttpStatus, HttpError>) -> Result<(), ProviderError> {
         match (sent, &self.head) {
-            (Err(HttpError::Rejected), Some(head)) => Err(classify(head, &self.body)),
+            (Err(HttpError::Rejected), Some(head)) => Err(classify_bare(head, &self.body)),
             (Err(error), _) => Err(http_error(error)),
-            (Ok(_), Some(head)) if is_failure(head) => Err(classify(head, &self.body)),
+            (Ok(_), Some(head)) if is_failure(head) => Err(classify_bare(head, &self.body)),
             (Ok(_), Some(_)) if self.capped => {
                 Err(ProviderError::Unreadable("the reply is too large".into()))
             }

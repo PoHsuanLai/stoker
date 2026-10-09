@@ -37,6 +37,8 @@ impl ProviderError {
             }
             ProviderError::Server(_)
             | ProviderError::Unauthorized
+            | ProviderError::AuthRejected(_)
+            | ProviderError::PaymentRequired(_)
             | ProviderError::ContextOverflow { .. }
             | ProviderError::BadRequest(_)
             | ProviderError::Refused(_)

@@ -5,6 +5,7 @@
 
 mod caps;
 mod control;
+mod detail;
 mod embed;
 mod event;
 mod ids;
@@ -29,6 +30,7 @@ pub use control::{
 /// Re-exported so a crate that builds `ImageLimits` need not depend on `cua-action` and
 /// `vision-prep` itself (a dependency edge changes every consumer's lock file).
 pub use cua_action::ModelSpace;
+pub use detail::{ProviderDetail, redact_excerpt};
 pub use embed::{
     EmbedCaps, EmbedEnd, EmbedFault, EmbedPrompts, EmbedRole, EmbedTurn, EmbedVector, Embedder,
     PrefixText, plan_batches,

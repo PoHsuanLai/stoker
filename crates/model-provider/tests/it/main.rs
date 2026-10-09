@@ -1,5 +1,6 @@
 //! The integration tests of `model-provider`, one binary (one link) for all of them.
 
+mod detail;
 mod embed;
 mod logprobs;
 mod retry;

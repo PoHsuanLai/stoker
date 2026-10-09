@@ -2,7 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ModelName, RetrySeconds, ServerStatus, Tokens, TurnEnd, TurnRequest, TurnSink};
+use crate::{
+    ModelName, ProviderDetail, RetrySeconds, ServerStatus, Tokens, TurnEnd, TurnRequest, TurnSink,
+};
 
 /// One endpoint: a running engine or a cloud account.
 ///
@@ -46,6 +48,14 @@ pub enum ProviderError {
     RateLimited(RetrySeconds),
     #[error("unauthorized")]
     Unauthorized,
+    /// The provider refused the credentials (401, 403) and said why. `Unauthorized` is the same
+    /// failure when no message came with it.
+    #[error("the endpoint refused the credentials ({0})")]
+    AuthRejected(ProviderDetail),
+    /// The account is out of credit (402). Retrying cannot help; the person has to top up or pick
+    /// another model.
+    #[error("the account is out of credit ({0})")]
+    PaymentRequired(ProviderDetail),
     /// A 5xx the server answered with. Never carries the body (it can echo the prompt).
     #[error("the server failed with status {0:?}")]
     Server(ServerStatus),
