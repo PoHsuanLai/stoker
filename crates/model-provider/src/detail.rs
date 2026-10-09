@@ -95,7 +95,7 @@ fn is_credential(core: &str, lower: &str) -> bool {
 
 /// `api_key=abc` or `token:abc`: a secret name, a separator, then a value.
 fn has_secret_value(lower: &str) -> bool {
-    match lower.split_once(|c: char| c == '=' || c == ':') {
+    match lower.split_once(['=', ':']) {
         Some((name, value)) => !value.is_empty() && names_a_secret(name),
         None => false,
     }
