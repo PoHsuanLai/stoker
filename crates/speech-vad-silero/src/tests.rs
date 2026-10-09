@@ -6,8 +6,8 @@ use speech_provider::{Frame512, SpeechProb, VoiceActivity, Voiced};
 
 use crate::core::{CONTEXT_SAMPLES, Detector, INPUT_SAMPLES, Infer, Input, State};
 use crate::core::{thousandths, verdict};
-use crate::ort_run::{OrtInfer, dylib_path};
-use crate::{SileroConfig, SileroError, SileroModelPath, SileroVad};
+use crate::ort_run::OrtInfer;
+use crate::{OnnxRuntimePath, OrtError, SileroConfig, SileroError, SileroModelPath, SileroVad};
 
 #[derive(Debug, Default)]
 struct Seen {
@@ -169,6 +169,7 @@ fn a_missing_model_file_is_model_missing() {
     let config = SileroConfig {
         model: SileroModelPath(PathBuf::from("/nonexistent/silero_vad.onnx")),
         threshold: SpeechProb(500),
+        runtime: OnnxRuntimePath::from_env_value(None),
     };
     assert_eq!(
         SileroVad::load(&config).unwrap_err(),
@@ -182,6 +183,7 @@ fn a_file_that_is_not_a_model_is_a_runtime_error() {
     let config = SileroConfig {
         model: SileroModelPath(path),
         threshold: SpeechProb(500),
+        runtime: OnnxRuntimePath::from_env_value(None),
     };
     assert!(matches!(
         SileroVad::load(&config),
@@ -229,9 +231,11 @@ fn the_fixture_is_whole_frames_with_one_reference_row_each() {
 fn matches_the_onnxruntime_reference_within_a_thousandth() {
     let path =
         std::env::var("STOKER_SILERO_ONNX").expect("set STOKER_SILERO_ONNX to silero_vad.onnx");
+    let library = std::env::var("ORT_DYLIB_PATH").ok();
     let config = SileroConfig {
         model: SileroModelPath(PathBuf::from(path)),
         threshold: SpeechProb(500),
+        runtime: OnnxRuntimePath::from_env_value(library.as_deref()),
     };
     let started = std::time::Instant::now();
     let mut vad = SileroVad::load(&config).unwrap();
@@ -261,22 +265,31 @@ fn matches_the_onnxruntime_reference_within_a_thousandth() {
 fn a_missing_onnxruntime_library_is_an_error_not_a_panic() {
     let dylib = PathBuf::from("/nonexistent/libonnxruntime.so");
     let model = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
-    assert!(OrtInfer::load_with(&dylib, &model).is_err());
+    assert!(matches!(
+        OrtInfer::load(&OnnxRuntimePath(dylib.clone()), &model),
+        Err(OrtError::LibraryMissing(missing)) if missing == dylib
+    ));
 }
 
 #[test]
 fn an_unloadable_onnxruntime_library_is_an_error_not_a_panic() {
     // A file that exists but is not a shared library.
     let dylib = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
-    assert!(OrtInfer::load_with(&dylib, &dylib).is_err());
+    assert!(OrtInfer::load(&OnnxRuntimePath(dylib.clone()), &dylib).is_err());
 }
 
 #[test]
 fn the_library_path_is_the_env_value_else_the_platform_default() {
     assert_eq!(
-        dylib_path(Some("/opt/ort/libonnxruntime.so")),
-        PathBuf::from("/opt/ort/libonnxruntime.so")
+        OnnxRuntimePath::from_env_value(Some("/opt/ort/libonnxruntime.so")),
+        OnnxRuntimePath(PathBuf::from("/opt/ort/libonnxruntime.so"))
     );
-    assert_eq!(dylib_path(Some("")), dylib_path(None));
-    assert!(dylib_path(None).components().count() == 1);
+    assert_eq!(
+        OnnxRuntimePath::from_env_value(Some("")),
+        OnnxRuntimePath::platform_default()
+    );
+    assert_eq!(
+        OnnxRuntimePath::from_env_value(None).0.components().count(),
+        1
+    );
 }
