@@ -378,7 +378,15 @@ request**:
   `RateLimited` with the head's seconds, 5xx `Server` unless the envelope says not ready or a
   context overflow, anything else the envelope's kind or `BadRequest("http_<n>")`); vLLM's
   `maximum context length is N tokens` message is read for its number only; an HTML page served as
-  200 is `Unreadable`.
+  200 is `Unreadable`. A 4xx on the chat path also keeps the provider's status and a message
+  excerpt, cut to 240 characters with anything token-shaped replaced (`ProviderDetail`,
+  `redact_excerpt`): 402 is `PaymentRequired`, a 401 or 403 with a message is `AuthRejected` (without
+  one, `Unauthorized`), other client errors `BadRequest("http_<n> <slug>: <excerpt>")`. The speech
+  endpoints use the bare `classify_bare` and carry no message.
+- `Constraint::JsonObject` / `OutputShape::JsonObject` (`structured = ["json_object"]` in a catalog
+  entry, as `deepseek-v4-pro` has): the request carries `response_format: json_object`; `model-extract`
+  puts the schema in the system text and checks every reply against it like any other mode. It is
+  chosen only after `json_schema` and `gbnf`, and only for a record or tagged shape.
 
 ### `HttpClient`
 

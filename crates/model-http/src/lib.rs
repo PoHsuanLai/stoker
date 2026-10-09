@@ -5,6 +5,25 @@
 //! that does I/O, and it sits behind the `hyper` feature that only a daemon turns on, so the
 //! crates that need only the seam types reach no HTTP stack and no runtime. A codec (`model-wire`) builds an `Exchange` and reads the response from a
 //! `BodySink`, which sees the `ResponseHead` before the first byte of the body.
+//!
+//! ```
+//! use model_http::{
+//!     AuthHeader, HostName, HttpClient, HttpEndpoint, HttpTarget, Port, Proxy, Timeouts, UrlPath,
+//!     WaitMs,
+//! };
+//!
+//! // A local engine on a loopback port, no credentials.
+//! let endpoint = HttpEndpoint {
+//!     target: HttpTarget::Tcp { host: HostName("127.0.0.1".into()), port: Port(8000) },
+//!     proxy: Proxy::Direct,
+//!     base: UrlPath("/v1".into()),
+//!     auth: AuthHeader::None,
+//!     headers: vec![],
+//!     timeouts: Timeouts { connect: WaitMs(2_000), first_byte: WaitMs(60_000), idle: WaitMs(30_000) },
+//! };
+//! let client = HttpClient::new(endpoint.clone());
+//! assert_eq!(client.endpoint(), &endpoint);
+//! ```
 
 mod auth;
 mod client;

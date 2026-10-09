@@ -2,6 +2,18 @@
 //!
 //! A [`Provider`] is one endpoint (a running engine or a cloud account). A turn pushes events
 //! into a [`TurnSink`]; cancellation is dropping the future.
+//!
+//! ```
+//! use model_provider::{JsonText, ProviderDetail, ProviderError, RetryClass};
+//!
+//! // Model output crosses the boundary as checked JSON text.
+//! assert!(JsonText::new(r#"{"score": 7}"#).is_ok());
+//! assert!(JsonText::new("{").is_err());
+//!
+//! // An error is something a caller acts on: no credit is not worth a retry.
+//! let error = ProviderError::PaymentRequired(ProviderDetail::new(402, "can only afford 367 tokens"));
+//! assert_eq!(error.retry_class(), RetryClass::Never);
+//! ```
 
 mod caps;
 mod control;

@@ -8,6 +8,19 @@
 //! and replayed at the transport (`model-replay::wire`).
 //!
 //! Pure over a seam: the crate reaches no HTTP stack and no runtime.
+//!
+//! ```
+//! use model_http::{HttpError, HttpStatus};
+//! use model_provider::{ProviderError, ServerStatus};
+//! use model_wire::http_error;
+//!
+//! // A transport failure becomes the error a caller acts on, carrying no body.
+//! assert_eq!(http_error(HttpError::Timeout), ProviderError::Timeout);
+//! assert_eq!(
+//!     http_error(HttpError::Status(HttpStatus(503))),
+//!     ProviderError::Server(ServerStatus(503))
+//! );
+//! ```
 
 mod codec;
 mod collect;
