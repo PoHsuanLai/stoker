@@ -97,9 +97,7 @@ impl Shape {
 }
 
 fn text_of(value: &Value) -> SchemaText {
-    let text = value.to_string();
-    // A `Value` always prints as JSON, so `new` cannot fail.
-    SchemaText(JsonText::new(text).expect("a serde_json Value prints as valid JSON"))
+    SchemaText(JsonText::of_value(value))
 }
 
 /// Rewrites a schema for a provider: see [`SchemaDialect`]. Text that is not JSON comes back

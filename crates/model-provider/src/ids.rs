@@ -75,6 +75,12 @@ impl JsonText {
         Ok(Self(text))
     }
 
+    /// The compact JSON of a `Value`. A `Value` always prints as valid JSON, so this cannot fail
+    /// and needs no check.
+    pub(crate) fn of_value(value: &serde_json::Value) -> Self {
+        Self(value.to_string())
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
