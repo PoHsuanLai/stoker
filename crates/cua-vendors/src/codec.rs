@@ -6,6 +6,7 @@ use model_provider::{ImageInput, JsonText, NativeTool, Part, SafetySignal, ToolC
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use crate::anthropic::AnthropicTool;
 use crate::args::{self, Verdict};
 use crate::safety::apply_safety;
 use crate::{StepResult, anthropic, gemini, openai, results};
@@ -87,8 +88,12 @@ impl WireCodec for WireCodecs {
 
     fn decode(&self, calls: &[ToolCall], safety: &[SafetySignal]) -> Result<Parsed, WireError> {
         let mut parsed = match self {
-            WireCodecs::AnthropicToolset20260801 => decode_anthropic(calls, false)?,
-            WireCodecs::AnthropicComputer20251124 => decode_anthropic(calls, true)?,
+            WireCodecs::AnthropicToolset20260801 => {
+                decode_anthropic(calls, AnthropicTool::Toolset)?
+            }
+            WireCodecs::AnthropicComputer20251124 => {
+                decode_anthropic(calls, AnthropicTool::Computer2025)?
+            }
             WireCodecs::OpenAiComputer => decode_openai(calls)?,
             WireCodecs::GeminiComputerUse => decode_gemini(calls)?,
         };
@@ -170,7 +175,7 @@ fn nothing() -> Parsed {
     }
 }
 
-fn decode_anthropic(calls: &[ToolCall], legacy: bool) -> Result<Parsed, WireError> {
+fn decode_anthropic(calls: &[ToolCall], tool: AnthropicTool) -> Result<Parsed, WireError> {
     if calls.is_empty() {
         return Ok(nothing());
     }
@@ -181,7 +186,7 @@ fn decode_anthropic(calls: &[ToolCall], legacy: bool) -> Result<Parsed, WireErro
             tally.unreadable(name);
             continue;
         };
-        match anthropic::member(name, &args, legacy) {
+        match anthropic::member(name, &args, tool) {
             Some(verb) if anthropic::is_member(&verb) => {
                 tally.push(&verb, anthropic::action(&verb, &args));
             }

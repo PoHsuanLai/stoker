@@ -22,15 +22,24 @@ use serde_json::Value;
 
 use crate::args::{Args, Verdict, field, number, pair, point, string};
 
+/// The two Anthropic tools a call can come from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AnthropicTool {
+    /// The 2026 toolset: each member is a tool of its own, named by the call.
+    Toolset,
+    /// The 2025 computer tool: one tool named `computer`, the member in `input.action`.
+    Computer2025,
+}
+
 /// The member a call names: the tool's own name for the toolset, `input.action` for the 2025 tool.
-pub(crate) fn member(name: &str, args: &Args, legacy: bool) -> Option<String> {
-    match (legacy, name) {
-        (true, "computer") => args
+pub(crate) fn member(name: &str, args: &Args, tool: AnthropicTool) -> Option<String> {
+    match (tool, name) {
+        (AnthropicTool::Computer2025, "computer") => args
             .get("action")
             .and_then(Value::as_str)
             .map(str::to_owned),
-        (true, _) => None,
-        (false, name) => Some(name.to_owned()),
+        (AnthropicTool::Computer2025, _) => None,
+        (AnthropicTool::Toolset, name) => Some(name.to_owned()),
     }
 }
 
