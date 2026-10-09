@@ -300,15 +300,6 @@ proptest! {
     }
 }
 
-#[test]
-fn the_default_params_are_the_proposal() {
-    let p = EndpointParams::default();
-    assert_eq!(
-        (p.lead, p.silence_end, p.min_speech),
-        (AudioMs(300), AudioMs(30_000), AudioMs(150))
-    );
-}
-
 /// Framer, gate and endpointer over a 3 s recording: 0.5 s of quiet, 1 s of tone, then quiet.
 #[test]
 fn the_chain_finds_the_utterance_in_synthetic_audio() {

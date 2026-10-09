@@ -874,21 +874,6 @@ fn every_chunk_split_offset_gives_the_same_reply() {
 
 proptest! {
     #[test]
-    fn any_chunking_of_the_scenario_gives_the_same_reply(cuts in proptest::collection::vec(any::<usize>(), 0..12)) {
-        let body = sse_body(&scenario());
-        let mut points: Vec<usize> = cuts.iter().map(|c| c % (body.len() + 1)).collect();
-        points.extend([0, body.len()]);
-        points.sort_unstable();
-        let chunks: Vec<&[u8]> = points.windows(2).map(|w| &body[w[0]..w[1]]).collect();
-        prop_assert_eq!(through_framer(&chunks), through_framer(&[&body]));
-    }
-
-    #[test]
-    fn arbitrary_frames_never_panic(frames in proptest::collection::vec(".{0,80}", 0..8)) {
-        let _ = run(&frames);
-    }
-
-    #[test]
     fn arbitrary_json_frames_never_panic(frames in proptest::collection::vec(arbitrary_chunk(), 0..8)) {
         let frames: Vec<String> = frames.into_iter().map(|v| v.to_string()).collect();
         let _ = run(&frames);

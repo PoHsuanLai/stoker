@@ -69,3 +69,20 @@ pub fn engine(kind: &str) -> String {
 pub fn narrowed_engine(kind: &str, narrowing: &str) -> String {
     engine(kind).replace("args = []", &format!("args = []\n{narrowing}"))
 }
+
+pub const EMBED_ONLY: &str = r#"
+id = "nomic-embed-text-v1.5"
+label = "Nomic Embed Text v1.5"
+licence = { kind = "open", v = "Apache-2.0" }
+family = "nomic"
+cold_start_estimate_s = 3
+source = { kind = "hugging_face", v = { repo = "nomic-ai/nomic-embed-text-v1.5-GGUF", revision = "0123456789abcdef0123456789abcdef01234567" } }
+vram = { weights_mib = 300, kv_per_1k_ctx_mib = 4, overhead_mib = 200 }
+roles = ["embeddings"]
+embed = { dims = 768, max_batch = 32, max_input = 8192, prompts = { query = "search_query: ", document = "search_document: " } }
+
+[[engine]]
+kind = "llama_server"
+args = ["--embeddings"]
+weights = { kind = "gguf", v = { model = "nomic.gguf", mmproj = "" } }
+"#;

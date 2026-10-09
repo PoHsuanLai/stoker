@@ -1,5 +1,7 @@
 //! The shipped catalogue in the one-catalogue shape, checked against the older files it replaced.
 
+mod support;
+
 use std::path::PathBuf;
 
 use model_catalog::{
@@ -201,13 +203,30 @@ fn the_shipped_slots() {
 }
 
 #[test]
-fn shipped_entries_round_trip_through_toml() {
+fn entries_round_trip_through_toml() {
+    let parse = |text: String| parse_entry(&text).unwrap();
+    let mut cases: Vec<(String, ModelEntry)> = vec![
+        (
+            "multimodal".into(),
+            parse(support::multimodal("mm", support::ENGINE)),
+        ),
+        ("text-only".into(), parse(support::text_only("t"))),
+        ("embed-only".into(), parse(support::EMBED_ONLY.to_owned())),
+    ];
+    for id in IDS
+        .iter()
+        .filter(|id| !LOCAL_TEXT.contains(id) && !ATTACHED.contains(id))
+    {
+        cases.push((format!("older {id}"), before(id)));
+    }
     for id in IDS {
-        let entry = shipped(id);
+        cases.push((format!("shipped {id}"), shipped(id)));
+    }
+    for (label, entry) in cases {
         assert_eq!(
             parse_entry(&toml::to_string(&entry).unwrap()).unwrap(),
             entry,
-            "{id}"
+            "{label}"
         );
     }
 }

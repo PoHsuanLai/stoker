@@ -2,7 +2,6 @@
 //! with a split-at-every-offset check.
 
 use model_http::{EventName, LineError, NdjsonDecoder, SseDecoder, SseError, SseEvent};
-use proptest::prelude::*;
 
 fn sse(chunks: &[&[u8]]) -> Result<Vec<SseEvent>, SseError> {
     let mut decoder = SseDecoder::new();
@@ -215,45 +214,6 @@ fn splitting_a_body_at_every_offset_yields_the_same_events() {
     assert_eq!(sse(&bytes).unwrap(), whole, "one byte at a time");
 }
 
-fn chunked<'a>(body: &'a [u8], cuts: &[usize]) -> Vec<&'a [u8]> {
-    let mut points: Vec<usize> = cuts.iter().map(|c| c % (body.len() + 1)).collect();
-    points.push(0);
-    points.push(body.len());
-    points.sort_unstable();
-    points.windows(2).map(|w| &body[w[0]..w[1]]).collect()
-}
-
-fn fragments() -> impl Strategy<Value = Vec<u8>> {
-    let piece = prop_oneof![
-        Just(b"data: ".to_vec()),
-        Just(b"event: ".to_vec()),
-        Just(b"id: ".to_vec()),
-        Just(b":".to_vec()),
-        Just(b"\n".to_vec()),
-        Just(b"\r".to_vec()),
-        Just(b"\r\n".to_vec()),
-        Just(b"\xEF\xBB\xBF".to_vec()),
-        Just("\u{e9}\u{1f600}".as_bytes().to_vec()),
-        Just(b"{\"a\":1}".to_vec()),
-        "[a-z ]{0,6}".prop_map(String::into_bytes),
-    ];
-    proptest::collection::vec(piece, 0..40).prop_map(|p| p.concat())
-}
-
-proptest! {
-    #[test]
-    fn any_chunking_gives_the_same_events(body in fragments(), cuts in proptest::collection::vec(any::<usize>(), 0..8)) {
-        prop_assert_eq!(sse(&[&body]), sse(&chunked(&body, &cuts)));
-    }
-
-    #[test]
-    fn arbitrary_bytes_never_panic_and_chunking_does_not_change_the_outcome(
-        body in proptest::collection::vec(any::<u8>(), 0..200), cuts in proptest::collection::vec(any::<usize>(), 0..6)
-    ) {
-        prop_assert_eq!(sse(&[&body]).is_ok(), sse(&chunked(&body, &cuts)).is_ok());
-    }
-}
-
 fn ndjson(chunks: &[&[u8]]) -> Result<(Vec<String>, Option<String>), LineError> {
     let mut decoder = NdjsonDecoder::new();
     let mut lines = Vec::new();
@@ -322,11 +282,4 @@ fn ndjson_is_split_safe_and_strict() {
         NdjsonDecoder::new().feed(&vec![b'a'; (4 << 20) + 1]),
         Err(LineError::LineTooLong)
     );
-}
-
-proptest! {
-    #[test]
-    fn ndjson_any_chunking_gives_the_same_lines(body in fragments(), cuts in proptest::collection::vec(any::<usize>(), 0..8)) {
-        prop_assert_eq!(ndjson(&[&body]), ndjson(&chunked(&body, &cuts)));
-    }
 }

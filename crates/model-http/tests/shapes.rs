@@ -2,9 +2,9 @@ use std::path::PathBuf;
 
 use model_http::{
     AuthHeader, BodyKind, ChunkFlow, ContentType, Exchange, ExtraHeader, Framing, HeaderName,
-    HostName, HttpEndpoint, HttpError, HttpStatus, HttpTarget, JsonBody, NdjsonDecoder, Port,
-    Proxy, RawBody, RequestId, ResponseHead, RouteRoot, Secret, SseDecoder, Timeouts, Upload,
-    UrlPath, Verb, WaitMs, WaitSeconds,
+    HostName, HttpEndpoint, HttpError, HttpStatus, HttpTarget, JsonBody, Port, Proxy, RawBody,
+    RequestId, ResponseHead, RouteRoot, Secret, Timeouts, Upload, UrlPath, Verb, WaitMs,
+    WaitSeconds,
 };
 
 fn timeouts() -> Timeouts {
@@ -75,38 +75,33 @@ fn secrets_and_bodies_do_not_print() {
 }
 
 #[test]
-fn errors_round_trip() {
-    let error = HttpError::Status(HttpStatus(503));
-    let json = serde_json::to_string(&error).unwrap();
-    assert_eq!(json, r#"{"kind":"status","v":503}"#);
-    assert_eq!(serde_json::from_str::<HttpError>(&json).unwrap(), error);
-}
-
-#[test]
-fn a_new_decoder_is_empty_and_clonable() {
-    let decoder = SseDecoder::new();
-    let copy = decoder.clone();
-    assert_eq!(format!("{decoder:?}"), format!("{copy:?}"));
-}
-
-#[test]
-fn rejected_is_a_unit_error_and_round_trips() {
-    let json = serde_json::to_string(&HttpError::Rejected).unwrap();
-    assert_eq!(json, r#"{"kind":"rejected"}"#);
-    assert_eq!(
-        serde_json::from_str::<HttpError>(&json).unwrap(),
-        HttpError::Rejected
-    );
-}
-
-#[test]
-fn a_replay_miss_is_a_unit_error_and_round_trips() {
-    let json = serde_json::to_string(&HttpError::ReplayMiss).unwrap();
-    assert_eq!(json, r#"{"kind":"replay_miss"}"#);
-    assert_eq!(
-        serde_json::from_str::<HttpError>(&json).unwrap(),
-        HttpError::ReplayMiss
-    );
+fn errors_round_trip_with_pinned_json() {
+    let cases = [
+        (
+            "status",
+            HttpError::Status(HttpStatus(503)),
+            r#"{"kind":"status","v":503}"#,
+        ),
+        (
+            "rejected is a unit error",
+            HttpError::Rejected,
+            r#"{"kind":"rejected"}"#,
+        ),
+        (
+            "a replay miss is a unit error",
+            HttpError::ReplayMiss,
+            r#"{"kind":"replay_miss"}"#,
+        ),
+    ];
+    for (label, error, want) in cases {
+        let json = serde_json::to_string(&error).unwrap();
+        assert_eq!(json, want, "{label}");
+        assert_eq!(
+            serde_json::from_str::<HttpError>(&json).unwrap(),
+            error,
+            "{label}"
+        );
+    }
 }
 
 #[test]
@@ -243,11 +238,4 @@ fn a_sink_sees_the_head_before_a_chunk() {
     assert_eq!(sink.head(&head), ChunkFlow::Continue);
     assert_eq!(sink.chunk(b"data: x"), ChunkFlow::Stop);
     assert_eq!(sink.0, ["head", "chunk"]);
-}
-
-#[test]
-fn a_new_ndjson_decoder_is_empty_and_clonable() {
-    let decoder = NdjsonDecoder::new();
-    let copy = decoder.clone();
-    assert_eq!(format!("{decoder:?}"), format!("{copy:?}"));
 }

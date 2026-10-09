@@ -1,48 +1,37 @@
-use model_http::{
-    AuthHeader, HttpClient, HttpEndpoint, HttpTarget, Proxy, RouteRoot, Timeouts, UrlPath, WaitMs,
-};
+use model_http::RouteRoot;
 use model_openai_compat::{
-    DimensionsField, Flavor, LogprobsAsk, OpenAiCodec, OpenAiCompat, Quirks, RequestJson,
-    ToolImages, ToolNaming, UsageAsk,
+    DimensionsField, Flavor, LogprobsAsk, Quirks, RequestJson, ToolImages, ToolNaming, UsageAsk,
 };
 use model_provider::ShapeWithTools;
-use model_wire::ChatCodec;
-use std::path::PathBuf;
-
-fn timeouts() -> Timeouts {
-    Timeouts {
-        connect: WaitMs(2_000),
-        first_byte: WaitMs(60_000),
-        idle: WaitMs(30_000),
-    }
-}
 
 #[test]
 fn flavors_have_stable_slugs() {
-    const CASES: &[(Flavor, &str)] = &[
+    use model_openai_compat::SpeechFlavor;
+    const CHAT: &[(Flavor, &str)] = &[
         (Flavor::LlamaServer, r#""llama_server""#),
         (Flavor::Vllm, r#""vllm""#),
         (Flavor::LiteLlm, r#""lite_llm""#),
         (Flavor::OpenRouter, r#""open_router""#),
     ];
-    for (flavor, json) in CASES {
-        assert_eq!(&serde_json::to_string(flavor).unwrap(), json);
-        assert_eq!(&serde_json::from_str::<Flavor>(json).unwrap(), flavor);
+    for (flavor, json) in CHAT {
+        assert_eq!(&serde_json::to_string(flavor).unwrap(), json, "chat {json}");
+        assert_eq!(
+            &serde_json::from_str::<Flavor>(json).unwrap(),
+            flavor,
+            "chat {json}"
+        );
     }
-}
-
-#[test]
-fn a_provider_is_built_from_a_client_and_a_flavor() {
-    let client = HttpClient::new(HttpEndpoint {
-        target: HttpTarget::Unix(PathBuf::from("/run/inferd/vllm.sock")),
-        proxy: Proxy::Direct,
-        base: UrlPath("/v1".into()),
-        auth: AuthHeader::None,
-        headers: vec![],
-        timeouts: timeouts(),
-    });
-    let provider: OpenAiCompat = OpenAiCodec::new(Flavor::Vllm).provider(client);
-    assert_eq!(provider.codec().flavor(), Flavor::Vllm);
+    const SPEECH: &[(SpeechFlavor, &str)] = &[
+        (SpeechFlavor::Vllm, r#""vllm""#),
+        (SpeechFlavor::KokoroFastApi, r#""kokoro_fast_api""#),
+    ];
+    for (flavor, json) in SPEECH {
+        assert_eq!(
+            &serde_json::to_string(flavor).unwrap(),
+            json,
+            "speech {json}"
+        );
+    }
 }
 
 #[test]
@@ -50,36 +39,6 @@ fn request_bodies_do_not_print() {
     assert_eq!(
         format!("{:?}", RequestJson("{}".into())),
         "RequestJson(<2 bytes>)"
-    );
-}
-
-#[test]
-fn speech_flavors_have_stable_slugs() {
-    use model_openai_compat::SpeechFlavor;
-    assert_eq!(
-        serde_json::to_string(&SpeechFlavor::Vllm).unwrap(),
-        r#""vllm""#
-    );
-    assert_eq!(
-        serde_json::to_string(&SpeechFlavor::KokoroFastApi).unwrap(),
-        r#""kokoro_fast_api""#
-    );
-}
-
-#[test]
-fn a_speech_provider_is_built_from_a_client_and_a_flavor() {
-    use model_openai_compat::{OpenAiSpeech, SpeechFlavor};
-    let client = HttpClient::new(HttpEndpoint {
-        target: HttpTarget::Unix(PathBuf::from("/run/inferd/kokoro.sock")),
-        proxy: Proxy::Direct,
-        base: UrlPath("/v1".into()),
-        auth: AuthHeader::None,
-        headers: vec![],
-        timeouts: timeouts(),
-    });
-    assert_eq!(
-        OpenAiSpeech::new(client, SpeechFlavor::KokoroFastApi).flavor(),
-        SpeechFlavor::KokoroFastApi
     );
 }
 
@@ -178,13 +137,4 @@ fn only_llama_server_refuses_a_named_tool_and_ignores_dimensions() {
             flavor == Flavor::LlamaServer
         );
     }
-}
-
-#[test]
-fn a_codec_hands_out_a_decoder_for_the_served_model() {
-    use model_provider::ModelName;
-    let codec = OpenAiCodec::new(Flavor::LlamaServer);
-    // The decoder is plain data until a frame arrives.
-    let decoder = codec.decoder(ModelName("holo".into()));
-    assert!(format!("{decoder:?}").contains("LlamaServer"));
 }

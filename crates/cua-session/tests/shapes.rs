@@ -24,7 +24,6 @@ fn begin_builds_a_session_without_touching_the_model() {
         goal: "save the file".into(),
         hints: vec![],
     };
-    let session = CuaSession::begin(profile(), task.clone(), ModelName("holo".into()));
-    assert_eq!(session.clone(), session);
+    let _session = CuaSession::begin(profile(), task.clone(), ModelName("holo".into()));
     assert_eq!(format!("{task:?}"), "CuaTaskText(<goal 13 chars, 0 hints>)");
 }

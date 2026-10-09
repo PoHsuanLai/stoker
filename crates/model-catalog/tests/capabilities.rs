@@ -24,15 +24,6 @@ fn a_multimodal_entry_parses_and_derives_the_older_view() {
 }
 
 #[test]
-fn an_entry_round_trips_through_its_file_shape() {
-    for text in [multimodal("mm", ENGINE), text_only("t")] {
-        let entry = parse_entry(&text).unwrap();
-        let again = parse_entry(&toml::to_string(&entry).unwrap()).unwrap();
-        assert_eq!(again, entry);
-    }
-}
-
-#[test]
 fn vector_and_actions_are_refused_as_inputs() {
     for bad in [Modality::Vector, Modality::Actions] {
         let slug = serde_json::to_string(&bad).unwrap();

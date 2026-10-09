@@ -362,10 +362,14 @@ fn the_sleepers_jitter_shaves_every_backoff() {
     let retrying = Retrying::new(inner, POLICY, &sleeper);
     let mut sink = Keep(vec![]);
     assert_eq!(block_on(retrying.turn(&request(), &mut sink)), Ok(end()));
-    assert_eq!(*sleeper.0.lock().unwrap(), vec![WaitMs(75), WaitMs(150)]);
-}
-
-#[test]
-fn a_sleeper_without_a_jitter_source_shaves_nothing() {
-    assert_eq!((&Recorder::default()).jitter(), Permille(0));
+    assert_eq!(
+        *sleeper.0.lock().unwrap(),
+        vec![WaitMs(75), WaitMs(150)],
+        "a jittery sleeper shaves every backoff"
+    );
+    assert_eq!(
+        (&Recorder::default()).jitter(),
+        Permille(0),
+        "a sleeper without a jitter source shaves nothing"
+    );
 }

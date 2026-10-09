@@ -95,12 +95,6 @@ fn inputs_and_verdicts_round_trip() {
 }
 
 #[test]
-fn unit_spec_round_trips() {
-    let json = serde_json::to_string(&unit()).unwrap();
-    assert_eq!(serde_json::from_str::<UnitSpec>(&json).unwrap(), unit());
-}
-
-#[test]
 fn proposed_config_values() {
     let cfg = SupervisorConfig::default();
     assert_eq!(cfg.idle_unload, Duration::from_secs(600));

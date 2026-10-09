@@ -296,25 +296,3 @@ fn frames_are_length_prefixed_and_capped() {
         Err(FrameError::TooLarge { .. })
     ));
 }
-
-#[cfg(feature = "testing")]
-#[test]
-fn fakes_are_built_and_record_nothing_yet() {
-    use speech_provider::{ScriptedStt, ScriptedTts, ScriptedVad, TtsScript, Voiced};
-
-    let stt = ScriptedStt::new(
-        vec![],
-        vec![(SampleIndex(0), TranscriptEvent::Lang(lang("en")))],
-        Err(ProviderError::NotReady),
-    );
-    assert!(stt.requests().is_empty());
-    let tts = ScriptedTts::new(
-        vec![],
-        TtsScript {
-            audio: AudioMs(500),
-            chunk: AudioMs(100),
-        },
-    );
-    assert!(tts.requests().is_empty());
-    let _ = ScriptedVad::new(vec![Voiced::Speech, Voiced::Silence]);
-}

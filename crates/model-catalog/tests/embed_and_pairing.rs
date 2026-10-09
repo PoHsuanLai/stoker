@@ -1,24 +1,10 @@
 //! The `embed` table (interface ask 98) and the llama-server weights pairing (ask 66).
 
+mod support;
+
 use model_catalog::{CatalogError, WeightFiles, parse_entry};
 use model_provider::{BatchMax, Dims, EmbedCaps, EmbedPrompts, PrefixText, Tokens};
-
-const EMBED_ONLY: &str = r#"
-id = "nomic-embed-text-v1.5"
-label = "Nomic Embed Text v1.5"
-licence = { kind = "open", v = "Apache-2.0" }
-family = "nomic"
-cold_start_estimate_s = 3
-source = { kind = "hugging_face", v = { repo = "nomic-ai/nomic-embed-text-v1.5-GGUF", revision = "0123456789abcdef0123456789abcdef01234567" } }
-vram = { weights_mib = 300, kv_per_1k_ctx_mib = 4, overhead_mib = 200 }
-roles = ["embeddings"]
-embed = { dims = 768, max_batch = 32, max_input = 8192, prompts = { query = "search_query: ", document = "search_document: " } }
-
-[[engine]]
-kind = "llama_server"
-args = ["--embeddings"]
-weights = { kind = "gguf", v = { model = "nomic.gguf", mmproj = "" } }
-"#;
+use support::EMBED_ONLY;
 
 fn caps() -> EmbedCaps {
     EmbedCaps {
@@ -39,13 +25,6 @@ fn an_embeddings_entry_with_an_embed_table_needs_no_chat_fields() {
     assert_eq!(entry.caps, None);
     assert_eq!(entry.sampling, None);
     assert_eq!(entry.speech, None);
-}
-
-#[test]
-fn the_embed_table_round_trips_through_toml() {
-    let entry = parse_entry(EMBED_ONLY).unwrap();
-    let text = toml::to_string(&entry).unwrap();
-    assert_eq!(parse_entry(&text).unwrap(), entry);
 }
 
 #[test]

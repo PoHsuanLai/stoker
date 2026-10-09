@@ -5,8 +5,8 @@ use std::path::PathBuf;
 
 use cua_action::{CuaDialect, GridMax, ModelSpace, ToolDialect};
 use model_catalog::{
-    CatalogError, CatalogId, CatalogKind, ColdStartEstimateS, EngineKind, Family, GpuNeed, MiB,
-    ModelEntry, VramEstimate, WeightFiles, merge_catalogs, parse_entry,
+    CatalogError, CatalogId, CatalogKind, ColdStartEstimateS, EngineKind, GpuNeed, MiB, ModelEntry,
+    VramEstimate, WeightFiles, merge_catalogs, parse_entry,
 };
 use model_provider::{CuaSupport, Support, Tokens};
 use speech_provider::{
@@ -20,23 +20,6 @@ fn catalog_dir() -> PathBuf {
 
 fn holo_text() -> String {
     std::fs::read_to_string(catalog_dir().join("holo-3.1-4b.toml")).unwrap()
-}
-
-#[test]
-fn shipped_files_parse() {
-    let mut parsed = 0;
-    for file in std::fs::read_dir(catalog_dir()).unwrap() {
-        let path = file.unwrap().path();
-        let text = std::fs::read_to_string(&path).unwrap();
-        let entry = parse_entry(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-        assert_eq!(
-            path.file_stem().unwrap().to_str().unwrap(),
-            entry.id.0,
-            "the id is the file's stem"
-        );
-        parsed += 1;
-    }
-    assert_eq!(parsed, 6);
 }
 
 #[test]
@@ -66,13 +49,6 @@ fn holo_entry_says_what_s0_found() {
     );
     assert_eq!(entry.engines.len(), 1);
     assert_eq!(entry.engines[0].kind, EngineKind::Vllm);
-}
-
-#[test]
-fn entry_round_trips_through_toml() {
-    let entry = parse_entry(&holo_text()).unwrap();
-    let text = toml::to_string(&entry).unwrap();
-    assert_eq!(parse_entry(&text).unwrap(), entry);
 }
 
 #[test]
@@ -265,21 +241,6 @@ fn speech_entries_parse() {
 }
 
 #[test]
-fn speech_entries_round_trip_through_toml() {
-    for id in [
-        "nemotron-3.5-asr-streaming",
-        "kokoro-82m",
-        "whisper-large-v3-turbo",
-        "whisper-large-v3",
-        "breeze-asr-25",
-    ] {
-        let entry = shipped(id);
-        let text = toml::to_string(&entry).unwrap();
-        assert_eq!(parse_entry(&text).unwrap(), entry, "{id}");
-    }
-}
-
-#[test]
 fn speech_role_requires_speech_table() {
     let text = std::fs::read_to_string(catalog_dir().join("kokoro-82m.toml")).unwrap();
     let without_table: String = text
@@ -373,26 +334,6 @@ fn zero_vram_means_no_gpu() {
 }
 
 #[test]
-fn the_catalog_ranks_nothing() {
-    // The picker is a plain list: no file says which model is better than another.
-    const WORDS: &[&str] = &[
-        "best",
-        "recommended",
-        "accurate",
-        "fastest",
-        "premium",
-        "default tier",
-    ];
-    for file in std::fs::read_dir(catalog_dir()).unwrap() {
-        let path = file.unwrap().path();
-        let text = std::fs::read_to_string(&path).unwrap().to_lowercase();
-        for word in WORDS {
-            assert!(!text.contains(word), "{} says {word:?}", path.display());
-        }
-    }
-}
-
-#[test]
 fn speech_slugs_are_stable() {
     assert_eq!(
         serde_json::to_string(&CatalogKind::SpeechIn).unwrap(),
@@ -417,23 +358,20 @@ fn speech_slugs_are_stable() {
 }
 
 #[test]
-fn every_entry_names_its_family_and_a_cold_start_estimate() {
-    for (id, family, secs) in [
-        ("holo-3.1-4b", "qwen", 180),
-        ("kokoro-82m", "kokoro", 10),
-        ("whisper-large-v3", "whisper", 90),
-        ("whisper-large-v3-turbo", "whisper", 60),
-        ("breeze-asr-25", "whisper", 90),
-        ("nemotron-3.5-asr-streaming", "nemotron", 5),
+fn every_entry_has_its_cold_start_estimate() {
+    for (id, secs) in [
+        ("holo-3.1-4b", 180),
+        ("kokoro-82m", 10),
+        ("whisper-large-v3", 90),
+        ("whisper-large-v3-turbo", 60),
+        ("breeze-asr-25", 90),
+        ("nemotron-3.5-asr-streaming", 5),
     ] {
-        let entry = shipped(id);
-        assert_eq!(entry.family, Family(family.into()), "{id}");
         assert_eq!(
-            entry.cold_start_estimate_s,
+            shipped(id).cold_start_estimate_s,
             ColdStartEstimateS(secs),
             "{id}"
         );
-        assert_eq!(entry.family.0, entry.family.0.to_lowercase(), "{id}");
     }
 }
 

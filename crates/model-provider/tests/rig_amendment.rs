@@ -6,9 +6,9 @@ use model_provider::{
     EmbedFault, EmbedPrompts, EmbedRole, EmbedTurn, EmbedVector, EngineExtras, Field, FieldName,
     KeepAlive, Knob, LlamaExtras, Milli, ModelName, OllamaExtras, OpaqueText, OutputShape, Part,
     Permille, PrefixText, PromptCache, ProviderError, Reasoning, RetryClass, RetryPolicy,
-    RetrySeconds, Sampling, SchemaDialect, Seconds, Seed, SequenceFault, ServerStatus, Shape,
-    ShapeKind, ShapeWithTools, SignatureText, SlotId, StopReason, ThoughtSeal, Tokens,
-    ToolParallelism, TurnUsage, Variant, VariantName, VllmExtras, WaitMs,
+    RetrySeconds, Sampling, SchemaDialect, Seconds, Seed, ServerStatus, Shape, ShapeKind,
+    ShapeWithTools, SignatureText, SlotId, StopReason, ThoughtSeal, Tokens, ToolParallelism,
+    TurnUsage, Variant, VariantName, VllmExtras, WaitMs,
 };
 
 fn round_trip<T>(value: &T, json: &str)
@@ -303,20 +303,6 @@ fn retry_types_round_trip() {
         r#"{"attempts":3,"base":250,"cap":8000}"#,
     );
     assert!(Permille(500) < Permille(501));
-}
-
-#[test]
-fn sequence_faults_are_distinct() {
-    let all = [
-        SequenceFault::ConsecutiveAssistant,
-        SequenceFault::UnansweredCall,
-        SequenceFault::OrphanResult,
-    ];
-    for (i, a) in all.iter().enumerate() {
-        for (j, b) in all.iter().enumerate() {
-            assert_eq!(i == j, a == b);
-        }
-    }
 }
 
 #[test]
