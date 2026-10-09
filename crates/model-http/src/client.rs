@@ -1,6 +1,9 @@
 //! The client: one endpoint, and the types a transport and a sink share. The request seam is
 //! `Transport` (`exchange`); the response body is pushed into a sink as it arrives.
 
+#[cfg(feature = "tls")]
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{HttpEndpoint, ResponseHead};
@@ -104,6 +107,10 @@ pub enum TlsRoots {
 pub struct HttpClient {
     endpoint: HttpEndpoint,
     roots: TlsRoots,
+    /// This client's TLS connector, built on its first `Tls` exchange. Shared by clones, which
+    /// have the same roots.
+    #[cfg(feature = "tls")]
+    tls: Arc<crate::tls::Cache>,
 }
 
 impl HttpClient {
@@ -113,7 +120,12 @@ impl HttpClient {
     }
 
     pub fn with_roots(endpoint: HttpEndpoint, roots: TlsRoots) -> Self {
-        Self { endpoint, roots }
+        Self {
+            endpoint,
+            roots,
+            #[cfg(feature = "tls")]
+            tls: Arc::default(),
+        }
     }
 
     pub fn roots(&self) -> &TlsRoots {
@@ -122,5 +134,10 @@ impl HttpClient {
 
     pub fn endpoint(&self) -> &HttpEndpoint {
         &self.endpoint
+    }
+
+    #[cfg(feature = "tls")]
+    pub(crate) fn tls(&self) -> &crate::tls::Cache {
+        &self.tls
     }
 }

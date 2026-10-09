@@ -23,7 +23,7 @@ use tokio::time::timeout;
 use crate::{
     AuthHeader, BodyKind, BodySink, ChunkFlow, Exchange, Framing, HttpClient, HttpEndpoint,
     HttpError, HttpStatus, HttpTarget, Proxy, RequestId, ResponseHead, RouteRoot, Timeouts,
-    TlsRoots, Transport, Upload, UploadTransport, Verb, WaitMs, WaitSeconds,
+    Transport, Upload, UploadTransport, Verb, WaitMs, WaitSeconds,
 };
 
 impl Transport for HttpClient {
@@ -32,7 +32,6 @@ impl Transport for HttpClient {
         ex: &Exchange,
         sink: &mut K,
     ) -> impl Future<Output = Result<HttpStatus, HttpError>> + Send {
-        let endpoint = self.endpoint();
         let parts = Parts {
             method: match ex.verb {
                 Verb::Get => Method::GET,
@@ -47,7 +46,7 @@ impl Transport for HttpClient {
                 .as_ref()
                 .map_or_else(Bytes::new, |b| Bytes::from(b.0.clone())),
         };
-        send(endpoint, self.roots(), parts, sink)
+        send(self, parts, sink)
     }
 }
 
@@ -65,7 +64,7 @@ impl UploadTransport for HttpClient {
             content_type: Some(up.body.content_type.0.as_str()),
             body: Bytes::from(up.body.bytes.clone()),
         };
-        send(self.endpoint(), self.roots(), parts, sink)
+        send(self, parts, sink)
     }
 }
 
@@ -81,17 +80,17 @@ struct Parts<'a> {
 
 /// Connects to the endpoint and runs one request on the connection.
 async fn send<K: BodySink>(
-    endpoint: &HttpEndpoint,
-    roots: &TlsRoots,
+    client: &HttpClient,
     parts: Parts<'_>,
     sink: &mut K,
 ) -> Result<HttpStatus, HttpError> {
+    let endpoint = client.endpoint();
     let request = build(endpoint, parts)?;
     let timeouts = &endpoint.timeouts;
     match (&endpoint.proxy, &endpoint.target) {
         (Proxy::Via(_), _) => Err(HttpError::Connect),
         (Proxy::Direct, HttpTarget::Tls { host, port }) => {
-            secure(roots, (host, *port), request, timeouts, sink).await
+            secure(client, (host, *port), request, timeouts, sink).await
         }
         (Proxy::Direct, HttpTarget::Tcp { host, port }) => {
             let stream = within(
@@ -113,26 +112,31 @@ async fn send<K: BodySink>(
 
 #[cfg(feature = "tls")]
 async fn secure<K: BodySink>(
-    roots: &TlsRoots,
+    client: &HttpClient,
     (host, port): (&crate::HostName, crate::Port),
     request: Request<Full<Bytes>>,
     timeouts: &Timeouts,
     sink: &mut K,
 ) -> Result<HttpStatus, HttpError> {
     let name = crate::tls::server_name(host)?;
+    let connector = client.tls().get(client.roots())?;
     let stream = within(
         timeouts.connect,
         TcpStream::connect((host.0.as_str(), port.0)),
     )
     .await?
     .map_err(|_| HttpError::Connect)?;
-    let tls = within(timeouts.connect, crate::tls::handshake(roots, name, stream)).await??;
+    let tls = within(
+        timeouts.connect,
+        crate::tls::handshake(connector, name, stream),
+    )
+    .await??;
     talk(tls, request, timeouts, sink).await
 }
 
 #[cfg(not(feature = "tls"))]
 async fn secure<K: BodySink>(
-    _roots: &TlsRoots,
+    _client: &HttpClient,
     _target: (&crate::HostName, crate::Port),
     _request: Request<Full<Bytes>>,
     _timeouts: &Timeouts,
