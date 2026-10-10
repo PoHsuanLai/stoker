@@ -97,7 +97,7 @@ impl Shape {
 }
 
 fn text_of(value: &Value) -> SchemaText {
-    SchemaText(JsonText::of_value(value))
+    SchemaText(JsonText::from_value(value))
 }
 
 /// Rewrites a schema for a provider: see [`SchemaDialect`]. Text that is not JSON comes back

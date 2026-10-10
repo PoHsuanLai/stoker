@@ -77,9 +77,7 @@ impl WireCodec for WireCodecs {
                 json!({"type": "computer_use", "environment": "desktop"})
             }
         };
-        // A `Value` prints as valid JSON.
-        let config = JsonText::new(config.to_string())
-            .unwrap_or_else(|_| unreachable!("a serde_json Value prints as valid JSON"));
+        let config = JsonText::from_value(&config);
         vec![ToolSpec::Native(NativeTool {
             dialect: self.dialect(),
             config,
