@@ -5,8 +5,9 @@ use std::collections::BTreeSet;
 use cua_action::{
     ActionClass, Button, Choice, Chord, ChordError, ClickCount, Coord, CuaAction, CuaDialect,
     Extracted, ExtractedText, FieldName, FinishOutcome, GridMax, GridSpace, ImageSpace, Length,
-    ModelSpace, Modifier, NodeId, Notches, Point, Rect, Repeat, ScrollBy, ScrollDir, Size, Summary,
-    Target, TextDialect, TextError, ToolDialect, TypedText, WaitMs, WindowSpace, WireDialect,
+    ModelSpace, Modifier, NodeId, Notches, Point, Rect, Repeat, RunMode, ScrollBy, ScrollDir, Size,
+    Summary, Target, TextDialect, TextError, ToolDialect, TypedText, WaitMs, WindowClass,
+    WindowSpace, WindowTrust, WireDialect,
 };
 use keyboard_types::Key;
 
@@ -327,4 +328,38 @@ fn the_centre_target_maps_unchanged_and_round_trips() {
         serde_json::from_str::<Target<WindowSpace>>(&json).unwrap(),
         Target::Centre
     );
+}
+
+#[test]
+fn gate_vocabulary_round_trips_by_snake_case_name() {
+    fn check<T>(cases: &[(T, &str)])
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned + PartialEq + std::fmt::Debug,
+    {
+        for (value, name) in cases {
+            let json = format!("\"{name}\"");
+            assert_eq!(serde_json::to_string(value).unwrap(), json);
+            assert_eq!(&serde_json::from_str::<T>(&json).unwrap(), value);
+        }
+    }
+    check(&[
+        (RunMode::InPlace, "in_place"),
+        (RunMode::AgentWorkspace, "agent_workspace"),
+        (RunMode::NestedSession, "nested_session"),
+    ]);
+    check(&[
+        (WindowTrust::Quire, "quire"),
+        (WindowTrust::Flatpak, "flatpak"),
+        (WindowTrust::Native, "native"),
+        (WindowTrust::Shell, "shell"),
+    ]);
+    check(&[
+        (WindowClass::Ordinary, "ordinary"),
+        (WindowClass::MailCompose, "mail_compose"),
+        (WindowClass::Terminal, "terminal"),
+        (WindowClass::Payments, "payments"),
+        (WindowClass::Admin, "admin"),
+        (WindowClass::PasswordManager, "password_manager"),
+        (WindowClass::Banking, "banking"),
+    ]);
 }
