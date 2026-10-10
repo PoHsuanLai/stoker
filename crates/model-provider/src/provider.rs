@@ -48,8 +48,9 @@ pub enum ProviderError {
     RateLimited(RetrySeconds),
     #[error("unauthorized")]
     Unauthorized,
-    /// The provider refused the credentials (401, 403) and said why. `Unauthorized` is the same
-    /// failure when no message came with it.
+    /// The provider knows the credentials and refused them (403), with its reason when it gave
+    /// one. A missing or wrong key (401) is `Unauthorized`: signing in again can fix that, and
+    /// this it cannot.
     #[error("the endpoint refused the credentials ({0})")]
     AuthRejected(ProviderDetail),
     /// The account is out of credit (402). Retrying cannot help; the person has to top up or pick

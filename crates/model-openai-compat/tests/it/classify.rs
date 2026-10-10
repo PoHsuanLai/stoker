@@ -26,7 +26,10 @@ fn bad(slug: &str) -> ProviderError {
 fn status_classes_decide() {
     let cases: &[(u16, ProviderError)] = &[
         (401, ProviderError::Unauthorized),
-        (403, ProviderError::Unauthorized),
+        (
+            403,
+            ProviderError::AuthRejected(ProviderDetail::new(403, "")),
+        ),
         (
             402,
             ProviderError::PaymentRequired(ProviderDetail::new(402, "")),
@@ -127,18 +130,16 @@ fn a_client_error_keeps_the_status_and_a_redacted_message() {
             r#"{"detail":"no such route"}"#,
             bad("http_404: no such route"),
         ),
+        // A 401 is a key to sign in again with, whatever the body says.
         (
             401,
-            r#"{"error":{"message":"No auth credentials found sk-or-v1-0123456789abcdef","code":401}}"#,
-            ProviderError::AuthRejected(ProviderDetail::new(
-                401,
-                "No auth credentials found [redacted]",
-            )),
+            r#"{"error":{"message":"No auth credentials found","code":401}}"#,
+            ProviderError::Unauthorized,
         ),
         (
             403,
-            r#"{"error":{"message":"key disabled"}}"#,
-            ProviderError::AuthRejected(ProviderDetail::new(403, "key disabled")),
+            r#"{"error":{"message":"key sk-or-v1-0123456789abcdef is disabled"}}"#,
+            ProviderError::AuthRejected(ProviderDetail::new(403, "key [redacted] is disabled")),
         ),
         (
             429,
@@ -183,7 +184,7 @@ fn an_envelope_of_another_class_decides_a_client_error() {
     assert_eq!(classify(401, "{}"), ProviderError::Unauthorized);
     assert_eq!(
         classify(403, r#"{"error":{"type":"overloaded"}}"#),
-        ProviderError::Unauthorized
+        ProviderError::AuthRejected(ProviderDetail::new(403, ""))
     );
 }
 
