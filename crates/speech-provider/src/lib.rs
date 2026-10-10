@@ -8,6 +8,17 @@
 //!
 //! What a person said, what a model heard and every sample are personal: `PcmBytes`, `HeardText`
 //! and `SpokenText` write `Debug` by hand and print a length, never the content.
+//!
+//! ```
+//! use speech_provider::{HostIn, decode_frame, encode_frame, frame_length};
+//!
+//! // One frame of the host wire: a 4-byte length, then the JSON body.
+//! let frame = encode_frame(&HostIn::End).unwrap();
+//! let header: [u8; 4] = frame[..4].try_into().unwrap();
+//! let len = frame_length(header).unwrap();
+//! let back: HostIn = decode_frame(&frame[4..4 + len]).unwrap();
+//! assert_eq!(back, HostIn::End);
+//! ```
 
 mod audio;
 mod caps;

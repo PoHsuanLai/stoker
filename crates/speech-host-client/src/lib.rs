@@ -10,6 +10,21 @@
 //! The `net` feature (on by default) holds everything that needs tokio: the `SpeechToText`
 //! impl and the socket framing. Without it the crate keeps `HostSocket`, `SpeechHostClient` and
 //! `FrameBuffer`, so a consumer can name the types without a runtime.
+//!
+//! ```
+//! use std::path::PathBuf;
+//!
+//! use speech_host_client::{FrameBuffer, HostSocket, SpeechHostClient};
+//!
+//! // Naming a host connects to nothing: a connection is made per utterance.
+//! let socket = HostSocket(PathBuf::from("/run/user/1000/inferd/speech.sock"));
+//! let client = SpeechHostClient::new(socket.clone());
+//! assert_eq!(client.socket(), &socket);
+//!
+//! // Frames are cut from bytes in any chunking; with none read there is no frame yet.
+//! let mut frames = FrameBuffer::default();
+//! assert_eq!(frames.take(), Ok(None));
+//! ```
 
 #[cfg(feature = "net")]
 mod client;
