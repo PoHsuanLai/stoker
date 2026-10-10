@@ -10,7 +10,7 @@ use speech_provider::{
 };
 use tokio::net::UnixStream;
 
-use crate::framed::{self, FrameReader};
+use crate::stream::{self as framed, FrameReader};
 
 /// Where the write side is, which decides whether a `Cancel` may follow it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

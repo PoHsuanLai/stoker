@@ -6,20 +6,24 @@
 //! Errors: a host that cannot be reached, closes early or breaks the stream is `Unreachable`; a
 //! frame that is over the cap, is not JSON of the vocabulary, or a host of another vocabulary
 //! version is `Unreadable`; a `Failed` frame is passed through as the error it carries.
+//!
+//! The `net` feature (on by default) holds everything that needs tokio: the `SpeechToText`
+//! impl and the socket framing. Without it the crate keeps `HostSocket`, `SpeechHostClient` and
+//! `FrameBuffer`, so a consumer can name the types without a runtime.
 
+#[cfg(feature = "net")]
+mod client;
 mod framed;
+#[cfg(feature = "net")]
 mod session;
+#[cfg(feature = "net")]
+mod stream;
 
 pub use framed::FrameBuffer;
 
 use std::path::PathBuf;
 
-use model_provider::ProviderError;
 use serde::{Deserialize, Serialize};
-use speech_provider::{
-    AudioSource, SpeechModelInfo, SpeechToText, SttEnd, SttRequest, TranscriptSink,
-};
-use tokio::net::UnixStream;
 
 /// The host's Unix socket.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -40,38 +44,4 @@ impl SpeechHostClient {
     pub fn socket(&self) -> &HostSocket {
         &self.socket
     }
-}
-
-impl SpeechToText for SpeechHostClient {
-    fn describe(&self) -> impl Future<Output = Result<Vec<SpeechModelInfo>, ProviderError>> + Send {
-        let socket = self.socket.clone();
-        async move {
-            let stream = connect(&socket).await?;
-            let mut guard = session::Wire::new(&stream);
-            let mut reader = framed::FrameReader::default();
-            let models = session::hello(&mut guard, &mut reader).await?;
-            guard.finish();
-            Ok(models)
-        }
-    }
-
-    fn transcribe<A: AudioSource, K: TranscriptSink>(
-        &self,
-        request: &SttRequest,
-        audio: &mut A,
-        sink: &mut K,
-    ) -> impl Future<Output = Result<SttEnd, ProviderError>> + Send {
-        let socket = self.socket.clone();
-        let request = request.clone();
-        async move {
-            let stream = connect(&socket).await?;
-            session::utterance(&stream, request, audio, sink).await
-        }
-    }
-}
-
-async fn connect(socket: &HostSocket) -> Result<UnixStream, ProviderError> {
-    UnixStream::connect(&socket.0)
-        .await
-        .map_err(|_| ProviderError::Unreachable)
 }
