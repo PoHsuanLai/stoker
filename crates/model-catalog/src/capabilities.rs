@@ -32,6 +32,7 @@ pub struct TextOut {
 /// The detail tables a modality needs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum DetailTable {
     TextOut,
     ImageIn,

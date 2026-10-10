@@ -81,6 +81,7 @@ pub struct EmbedEnd {
 /// A reply that is not the shape that was asked for. Checked before a vector reaches a store.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "v", rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum EmbedFault {
     #[error("asked for {want:?} vectors, got {got:?}")]
     CountMismatch { want: Count, got: Count },

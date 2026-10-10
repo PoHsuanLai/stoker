@@ -157,6 +157,8 @@ impl Machine {
             StopReason::MaxTokens => return Extracted::Failed(ExtractFailure::Truncated),
             StopReason::ContentFilter => return Extracted::Failed(ExtractFailure::Refused),
             StopReason::EndTurn | StopReason::ToolUse | StopReason::StopSequence => {}
+            // A stop this build does not know: the reply may be cut, so it is not trusted.
+            _ => return Extracted::Failed(ExtractFailure::Truncated),
         }
         let fault = match self
             .candidate(text, calls, shape)

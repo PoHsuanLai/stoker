@@ -27,12 +27,14 @@ pub struct EnvPair {
 /// What an engine may reach. Engines listen on a Unix socket only, so there is one network mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum Network {
     None,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum GpuAccess {
     Nvidia,
     Absent,

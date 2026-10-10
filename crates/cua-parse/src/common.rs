@@ -153,7 +153,8 @@ impl<S: CoordSpace> Batch<S> {
 pub fn bounded<T>(result: Result<T, TextError>) -> Result<T, DropReason> {
     result.map_err(|e| match e {
         TextError::TooLong { .. } => DropReason::TooLong,
-        TextError::Empty | TextError::ControlChar { .. } => DropReason::BadArgument,
+        // Empty, control characters and any later fault: a bad argument.
+        _ => DropReason::BadArgument,
     })
 }
 

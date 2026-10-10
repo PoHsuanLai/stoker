@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 /// Why a string is not a valid bounded text.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "v", rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum TextError {
     #[error("the text is empty")]
     Empty,

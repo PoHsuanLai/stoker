@@ -94,7 +94,8 @@ fn assistant(parts: &[&Part]) -> Result<Value, CodecError> {
             Part::Text(t) => text.push_str(t),
             Part::ToolCall(call) => calls.push(tool_call(call)),
             Part::Thought { .. } => {}
-            Part::Image(_) | Part::ToolResult(_) => return Err(CodecError::UnsupportedShape),
+            // Image, ToolResult and any part kind this build does not know cannot be sent.
+            _ => return Err(CodecError::UnsupportedShape),
         }
     }
     let mut message = json!({ "role": "assistant", "content": text });
@@ -125,7 +126,7 @@ fn tool_result(
             Part::Text(text) => texts.push(text.as_str()),
             Part::Image(image) => pictures.push(image_part(image)),
             Part::Thought { .. } => {}
-            Part::ToolCall(_) | Part::ToolResult(_) => return Err(CodecError::UnsupportedShape),
+            _ => return Err(CodecError::UnsupportedShape),
         }
     }
     let text = texts.join("\n");
@@ -149,9 +150,8 @@ fn content_part(part: &Part) -> Result<Value, CodecError> {
     match part {
         Part::Text(text) => Ok(json!({ "type": "text", "text": text })),
         Part::Image(image) => Ok(image_part(image)),
-        Part::Thought { .. } | Part::ToolCall(_) | Part::ToolResult(_) => {
-            Err(CodecError::UnsupportedShape)
-        }
+        // Thought, ToolCall, ToolResult and any part kind this build does not know.
+        _ => Err(CodecError::UnsupportedShape),
     }
 }
 

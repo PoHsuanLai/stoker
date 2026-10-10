@@ -15,6 +15,7 @@ use crate::{Capabilities, EngineKind, Locality, Modality, ModelEntry, Serving};
 /// `ai.model.<slot>.<tier>`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum Slot {
     /// Text in, text out.
     Text,
@@ -32,6 +33,7 @@ pub enum Slot {
 
 /// Whether a slot needs the model to call tools.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum ToolNeed {
     Any,
     /// The text side must support tool calls (native or parsed by the engine).

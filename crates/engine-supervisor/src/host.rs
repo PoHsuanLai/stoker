@@ -3,6 +3,7 @@
 use crate::{EngineId, ExitCode, GpuMemory, Probe, UnitSpec};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum HostError {
     #[error("the host refused to start the engine")]
     Refused,
@@ -11,6 +12,7 @@ pub enum HostError {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum GpuError {
     #[error("no GPU tool answered")]
     Unavailable,

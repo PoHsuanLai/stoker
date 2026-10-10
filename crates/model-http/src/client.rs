@@ -60,6 +60,7 @@ pub trait BodySink: Send {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "v", rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum HttpError {
     #[error("could not connect")]
     Connect,
@@ -94,6 +95,7 @@ impl core::fmt::Debug for DerCertificate {
 /// Which certificates may vouch for a `Tls` target's server. Verification of the chain, the
 /// validity dates and the host name is always on; this only says which roots it ends in.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
 pub enum TlsRoots {
     /// The platform's trust store (`rustls-native-certs`).
     #[default]

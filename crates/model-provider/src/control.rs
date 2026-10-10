@@ -32,6 +32,7 @@ pub enum ToolParallelism {
 /// vLLM cannot reach llama-server by accident; the codec for a flavor ignores the other arms.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "v", rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum EngineExtras {
     None,
     LlamaServer(LlamaExtras),
@@ -73,6 +74,7 @@ pub struct OllamaExtras {
 /// How long Ollama keeps the model loaded after the call.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "v", rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum KeepAlive {
     EngineDefault,
     Unload,

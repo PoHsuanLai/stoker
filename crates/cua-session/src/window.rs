@@ -19,6 +19,7 @@ fn verb_of<S: CoordSpace>(action: &CuaAction<S>) -> &'static str {
         CuaAction::Observe => "observe",
         CuaAction::Finish { .. } => "finish",
         CuaAction::Ask { .. } => "ask",
+        _ => "act",
     }
 }
 

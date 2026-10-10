@@ -71,6 +71,7 @@ pub struct AttachedEngine {
 /// Who starts the entry's engine.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "v", rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum Serving {
     /// This computer starts it from the entry's `[[engine]]` profiles, within its GPU share.
     #[default]

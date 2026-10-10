@@ -20,6 +20,7 @@ pub fn http_error(error: HttpError) -> ProviderError {
         HttpError::Status(status) => ProviderError::BadRequest(format!("http_{}", status.0)),
         HttpError::Rejected => ProviderError::Unreadable("rejected without a reply".into()),
         HttpError::ReplayMiss => ProviderError::BadRequest("no recorded exchange".into()),
+        _ => ProviderError::Unreadable("the transport failed".into()),
     }
 }
 

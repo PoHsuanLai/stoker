@@ -111,6 +111,7 @@ fn phrase<S: CoordSpace>(action: &CuaAction<S>) -> String {
         CuaAction::Observe => "look at the screen again".to_owned(),
         CuaAction::Finish { .. } => "finish".to_owned(),
         CuaAction::Ask { .. } => "ask the person".to_owned(),
+        _ => "act".to_owned(),
     }
 }
 

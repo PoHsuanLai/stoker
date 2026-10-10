@@ -67,6 +67,7 @@ impl WaitSeconds {
 /// What the `Content-Type` says the body is. `Html` catches an error page served as 200.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum BodyKind {
     EventStream,
     Json,

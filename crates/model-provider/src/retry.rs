@@ -17,6 +17,7 @@ use crate::{
 /// How a failure may be retried.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "v", rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum RetryClass {
     Never,
     /// A transient fault: try again after the backoff.

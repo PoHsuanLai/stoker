@@ -37,10 +37,8 @@ impl TurnSink for TranscriptSink {
             TurnEvent::ThoughtDelta(text) => self.thought.push_str(&text),
             TurnEvent::ToolCallDone(call) => self.calls.push(call),
             TurnEvent::Safety(signal) => self.safety.push(signal),
-            TurnEvent::ThoughtSealed(_)
-            | TurnEvent::ToolCallStarted { .. }
-            | TurnEvent::ToolCallDelta { .. }
-            | TurnEvent::Usage(_) => {}
+            // Seals, call starts and deltas, usage, and events this build does not know are not kept.
+            _ => {}
         }
         Flow::Continue
     }

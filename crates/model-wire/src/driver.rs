@@ -105,5 +105,6 @@ fn check_reply(end: &EmbedEnd, turn: &EmbedTurn) -> Result<(), ProviderError> {
             "expected vectors of width {}, got {}",
             want.0, got.0
         )),
+        _ => ProviderError::Unreadable("the vectors failed a check".into()),
     })
 }

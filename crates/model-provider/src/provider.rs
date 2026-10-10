@@ -37,6 +37,7 @@ pub struct ModelInfo {
 /// Each arm is something a caller acts on.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "v", rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum ProviderError {
     #[error("the endpoint is unreachable")]
     Unreachable,

@@ -112,7 +112,8 @@ pub(crate) fn frame_bytes(frame: &WireFrame, framing: Framing) -> Vec<u8> {
                 .collect();
             format!("{event}{data}\n")
         }
-        Framing::Ndjson | Framing::Whole => format!("{}\n", frame.data),
+        // Ndjson, Whole and any framing this build does not know: one line per frame.
+        _ => format!("{}\n", frame.data),
     };
     text.into_bytes()
 }

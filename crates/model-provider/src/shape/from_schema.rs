@@ -67,6 +67,7 @@ pub struct KeywordText(pub String);
 
 /// Why one schema node is refused.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum Refused {
     #[error("the text is not JSON")]
     NotJson,

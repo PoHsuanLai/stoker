@@ -40,6 +40,7 @@ pub enum ScrollDir {
 
 /// Why a key cannot be part of a chord.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum ChordError {
     #[error("the key is unidentified")]
     Unidentified,

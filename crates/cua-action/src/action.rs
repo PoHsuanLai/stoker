@@ -16,6 +16,7 @@ use crate::{
 /// parser drops them, so a model cannot act through a verb the schema lacks.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "v", rename_all = "snake_case", bound = "")]
+#[non_exhaustive]
 pub enum CuaAction<S: CoordSpace> {
     Click {
         at: Target<S>,

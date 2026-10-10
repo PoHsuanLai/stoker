@@ -34,9 +34,14 @@ pub struct ImagePrint {
 pub enum PartPrint {
     Text(String),
     Image(ImagePrint),
-    Thought { text: String, seal: ThoughtSeal },
+    Thought {
+        text: String,
+        seal: ThoughtSeal,
+    },
     ToolCall(ToolCall),
     ToolResult(ToolResultPrint),
+    /// A part kind this build does not know.
+    Unknown,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -124,5 +129,6 @@ fn part_print(part: &Part) -> PartPrint {
             status: result.status,
             parts: result.parts.iter().map(part_print).collect(),
         }),
+        _ => PartPrint::Unknown,
     }
 }

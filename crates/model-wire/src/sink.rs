@@ -26,7 +26,8 @@ impl Framer {
         match framing {
             Framing::Sse => Framer::Sse(SseDecoder::new()),
             Framing::Ndjson => Framer::Ndjson(NdjsonDecoder::new()),
-            Framing::Whole => Framer::Whole(Vec::new()),
+            // Whole, and any framing this build does not know: read the body as one frame.
+            _ => Framer::Whole(Vec::new()),
         }
     }
 

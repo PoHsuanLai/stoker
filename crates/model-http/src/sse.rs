@@ -18,6 +18,7 @@ pub struct SseEvent {
 
 /// A stream that is not valid SSE (not UTF-8, or a line over the limit). Never a panic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum SseError {
     #[error("the stream is not valid UTF-8")]
     NotUtf8,

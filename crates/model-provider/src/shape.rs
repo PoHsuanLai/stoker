@@ -152,6 +152,7 @@ pub enum SchemaDialect {
 /// Why a shape cannot be converted, or a value does not fit it. Names a field and a kind, never a
 /// value: a model's text may be untrusted and must not travel into a repair prompt.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum ShapeFault {
     #[error("this shape has no form in the requested language")]
     NotRepresentable,

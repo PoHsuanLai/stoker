@@ -22,6 +22,7 @@ pub struct UrlPath(pub String);
 /// How to reach a server. Engines are on a Unix socket; TLS is for cloud hosts.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "v", rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum HttpTarget {
     Tcp { host: HostName, port: Port },
     Unix(PathBuf),
@@ -32,6 +33,7 @@ pub enum HttpTarget {
 /// backend).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "v", rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum Proxy {
     Direct,
     Via(Box<HttpTarget>),

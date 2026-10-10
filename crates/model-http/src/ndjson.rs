@@ -3,6 +3,7 @@
 /// A stream that is not valid NDJSON framing (a complete line that is not UTF-8, or a line over
 /// the limit). Never a panic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum LineError {
     #[error("a line is not valid UTF-8")]
     NotUtf8,

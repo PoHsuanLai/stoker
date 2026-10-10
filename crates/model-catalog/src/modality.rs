@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 /// model is handed an embedding or a list of actions, and the parser refuses them as inputs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum Modality {
     Text,
     Image,

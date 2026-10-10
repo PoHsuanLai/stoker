@@ -75,6 +75,7 @@ fn tools(
                 }))
             }
             ToolSpec::Native(_) => Err(CodecError::NativeToolUnsupported),
+            _ => Err(CodecError::UnsupportedShape),
         })
         .collect::<Result<Vec<_>, _>>()?;
     body.insert("tools".into(), Value::Array(specs));
@@ -85,6 +86,8 @@ fn tools(
         ToolChoice::Named(name) => {
             json!({ "type": "function", "function": { "name": name.as_str() } })
         }
+        // A choice this build does not know cannot be sent faithfully: refuse the request.
+        _ => return Err(CodecError::UnsupportedShape),
     };
     body.insert("tool_choice".into(), choice);
     body.insert(
@@ -137,6 +140,8 @@ fn reasoning(body: &mut Map<String, Value>, reasoning: Reasoning, flavor: Flavor
                 .unwrap_or_default(),
         ),
         Reasoning::Off => None,
+        // A mode this build does not know sends nothing, like the engine default.
+        _ => return,
     };
     match (flavor, effort) {
         (Flavor::LlamaServer, effort) => {
