@@ -4,6 +4,20 @@
 //! is a dev-script action, never automatic. Speech cassettes (`speech`) and wire cassettes (`wire`,
 //! HTTP exchanges recorded at the `Transport` seam) share the file format and the header with the
 //! chat ones.
+//!
+//! ```no_run
+//! use model_replay::{Cassette, ReplayMode, ReplayProvider};
+//!
+//! // A cassette recorded earlier by a dev script; `from_jsonl` also checks every stream.
+//! let text = std::fs::read_to_string("tests/cassettes/greeting.jsonl")?;
+//! let cassette = Cassette::from_jsonl(&text)?;
+//!
+//! // The nth turn of the test gets the nth recorded interaction.
+//! let provider = ReplayProvider::new(cassette, ReplayMode::InOrder);
+//! // ... run the code under test with `provider` as its `Provider` ...
+//! assert!(provider.misses().is_empty());
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
 
 mod canon;
 mod cassette;
