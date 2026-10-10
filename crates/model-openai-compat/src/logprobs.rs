@@ -53,17 +53,23 @@ pub(crate) enum FirstToken {
     Settled(Option<FirstTokenLogprobs>),
 }
 
+/// Whether the delta that carried the answer's first text also carried thinking text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Thinking {
+    WithAnswer,
+    Absent,
+}
+
 impl FirstToken {
-    /// `choice` is the chunk's choice; `answer` its non-empty answer text; `thought` whether the
+    /// `choice` is the chunk's choice; `answer` its non-empty answer text; `thinking` whether the
     /// same delta carried thinking text.
-    pub(crate) fn see(&mut self, choice: &Value, answer: &str, thought: bool) {
+    pub(crate) fn see(&mut self, choice: &Value, answer: &str, thinking: Thinking) {
         if !matches!(self, FirstToken::Waiting) {
             return;
         }
-        let read = if thought {
-            Err(Miss::ThoughtInSameChunk)
-        } else {
-            read(choice, answer)
+        let read = match thinking {
+            Thinking::WithAnswer => Err(Miss::ThoughtInSameChunk),
+            Thinking::Absent => read(choice, answer),
         };
         *self = FirstToken::Settled(match read {
             Ok(record) => Some(record),

@@ -11,7 +11,7 @@ use serde_json::Value;
 use crate::assemble::{Closed, Fragment, IfMalformed, Pending};
 use crate::envelope::envelope_error;
 use crate::leak::{LeakMarker, LeakWatch};
-use crate::logprobs::FirstToken;
+use crate::logprobs::{FirstToken, Thinking};
 use crate::{Flavor, LogprobsAsk};
 
 /// The most frame bytes one reply may carry in all; past it the reply is unreadable. A turn is
@@ -148,11 +148,15 @@ impl StreamDecoder {
         if answer.is_empty() {
             return;
         }
-        let thought = ["reasoning_content", "reasoning"]
+        let thinking = match ["reasoning_content", "reasoning"]
             .iter()
             .filter_map(|key| delta.get(*key))
-            .any(|v| v.as_str().is_some_and(|s| !s.is_empty()));
-        self.first.see(choice, &answer, thought);
+            .any(|v| v.as_str().is_some_and(|s| !s.is_empty()))
+        {
+            true => Thinking::WithAnswer,
+            false => Thinking::Absent,
+        };
+        self.first.see(choice, &answer, thinking);
     }
 
     fn delta(&mut self, delta: &Value) -> Result<Vec<TurnEvent>, CodecError> {

@@ -336,12 +336,9 @@ fn caps(
     }
 }
 
-fn present(any: bool) -> Support {
-    if any {
-        Support::Present
-    } else {
-        Support::Absent
-    }
+/// `Present` when the search found something.
+fn present<T>(found: Option<T>) -> Support {
+    found.map_or(Support::Absent, |_| Support::Present)
 }
 
 impl SpeechReplay {
@@ -372,10 +369,10 @@ impl SpeechReplay {
         };
         let streaming = calls
             .iter()
-            .any(|c| matches!(c.print.mode, SttMode::Streaming { .. }));
+            .find(|c| matches!(c.print.mode, SttMode::Streaming { .. }));
         let events = || calls.iter().flat_map(|c| c.events.iter());
-        let partials = events().any(|e| matches!(e, TranscriptEvent::Partial { .. }));
-        let finals = events().any(|e| matches!(e, TranscriptEvent::Final { .. }));
+        let partials = events().find(|e| matches!(e, TranscriptEvent::Partial { .. }));
+        let finals = events().find(|e| matches!(e, TranscriptEvent::Final { .. }));
         let longest = calls
             .iter()
             .map(|c| c.print.audio.duration)
