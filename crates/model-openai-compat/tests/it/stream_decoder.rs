@@ -140,7 +140,10 @@ fn finish_reasons_map_to_stop_reasons() {
         ("content_filter", StopReason::ContentFilter),
         ("tool_calls", StopReason::ToolUse),
         ("function_call", StopReason::ToolUse),
-        ("something_new", StopReason::EndTurn),
+        ("end_turn", StopReason::EndTurn),
+        ("stop_sequence", StopReason::EndTurn),
+        ("error", StopReason::Unrecognized),
+        ("something_new", StopReason::Unrecognized),
     ];
     for (reason, stop) in CASES {
         let got = run(&[chunk(json!({"content":"x"}), Some(reason))]);

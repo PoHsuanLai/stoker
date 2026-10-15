@@ -214,14 +214,19 @@ fn more_calls_than_the_limit_is_unreadable() {
 }
 
 #[test]
-fn an_unknown_finish_reason_ends_the_turn() {
+fn an_unknown_finish_reason_is_an_unrecognized_stop_and_drops_a_half_written_call() {
     let reply = go(&[chunk(json!({"content":"hi"}), Some("banana"))]);
-    assert_eq!(stop(&reply), Some(StopReason::EndTurn));
+    assert_eq!(stop(&reply), Some(StopReason::Unrecognized));
     let reply = go(&[chunk(
         calls(vec![call(0, Some("a"), Some("f"), Some("{}"))]),
-        Some("banana"),
+        Some("error"),
     )]);
-    assert_eq!(stop(&reply), Some(StopReason::ToolUse));
+    assert_eq!(stop(&reply), Some(StopReason::Unrecognized));
+    let reply = go(&[chunk(
+        calls(vec![call(0, Some("a"), Some("f"), Some("{\"x\":"))]),
+        Some("error"),
+    )]);
+    assert_eq!(stop(&reply), Some(StopReason::Unrecognized));
 }
 
 #[test]

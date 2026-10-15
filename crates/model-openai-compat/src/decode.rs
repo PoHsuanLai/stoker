@@ -121,7 +121,10 @@ impl StreamDecoder {
             if finished && !events.is_empty() {
                 return Err(CodecError::Unreadable);
             }
-            if let Some(reason) = choice.get("finish_reason").and_then(Value::as_str)
+            if let Some(reason) = choice
+                .get("finish_reason")
+                .and_then(Value::as_str)
+                .filter(|reason| !reason.is_empty())
                 && !finished
             {
                 events.extend(self.finish_reason(reason)?);
@@ -257,9 +260,12 @@ impl StreamDecoder {
     }
 
     fn finish_reason(&mut self, reason: &str) -> Result<Vec<TurnEvent>, CodecError> {
+        // A call left half-written by a cut turn is dropped, not a hard error.
         let how = match reason {
             "length" => IfMalformed::Drop,
-            _ => IfMalformed::Fail,
+            "content_filter" | "tool_calls" | "function_call" | "stop" | "end_turn"
+            | "stop_sequence" => IfMalformed::Fail,
+            _ => IfMalformed::Drop,
         };
         let events = self.close_all(how)?;
         let stop = match reason {
@@ -267,8 +273,10 @@ impl StreamDecoder {
             "content_filter" => StopReason::ContentFilter,
             "tool_calls" | "function_call" => StopReason::ToolUse,
             // Some servers say `stop` for a turn that made calls.
-            _ if self.delivered > 0 => StopReason::ToolUse,
-            _ => StopReason::EndTurn,
+            "stop" | "end_turn" | "stop_sequence" if self.delivered > 0 => StopReason::ToolUse,
+            "stop" | "end_turn" | "stop_sequence" => StopReason::EndTurn,
+            // `error`, `abort`, `timeout` and whatever a gateway invents: the reply may be cut.
+            _ => StopReason::Unrecognized,
         };
         self.phase = Phase::Finished(stop);
         Ok(events)

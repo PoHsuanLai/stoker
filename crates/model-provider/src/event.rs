@@ -68,6 +68,9 @@ pub enum StopReason {
     MaxTokens,
     StopSequence,
     ContentFilter,
+    /// The server ended the turn with a reason this crate does not know (`error`, `abort`, a
+    /// gateway's own word): the reply may be cut, so a caller must not treat it as a clean stop.
+    Unrecognized,
 }
 
 /// A sink's answer to an event: keep going, or end the turn early (with `StopReason::EndTurn`).
@@ -89,6 +92,7 @@ impl From<StopReason> for genai_names::Finish {
             StopReason::ToolUse => genai_names::Finish::ToolCalls,
             StopReason::MaxTokens => genai_names::Finish::Length,
             StopReason::ContentFilter => genai_names::Finish::ContentFilter,
+            StopReason::Unrecognized => genai_names::Finish::Error,
         }
     }
 }

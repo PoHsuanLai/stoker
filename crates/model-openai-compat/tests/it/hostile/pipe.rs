@@ -102,17 +102,17 @@ pub fn assert_sound(reply: &Reply) {
     }
     if let Ok(end) = &reply.end {
         assert!(end.usage.cached <= end.usage.input);
-        // A call that arrived whole before a `length` cut stands (its arguments are a complete
+        // A call that arrived whole before a `length` cut (or an unrecognized stop) stands (its arguments are a complete
         // object); the turn then says `MaxTokens`.
         if !finished.is_empty() {
             assert!(matches!(
                 end.stop,
-                StopReason::ToolUse | StopReason::MaxTokens
+                StopReason::ToolUse | StopReason::MaxTokens | StopReason::Unrecognized
             ));
         }
         // A clean end leaves no call half-delivered, except one the token budget cut off (a
         // started call is then dropped, never completed).
-        if end.stop != StopReason::MaxTokens {
+        if !matches!(end.stop, StopReason::MaxTokens | StopReason::Unrecognized) {
             assert_eq!(
                 started.len(),
                 finished.len(),
