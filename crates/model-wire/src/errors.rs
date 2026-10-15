@@ -14,6 +14,9 @@ pub fn http_error(error: HttpError) -> ProviderError {
     match error {
         HttpError::Connect | HttpError::Tls | HttpError::Broken => ProviderError::Unreachable,
         HttpError::Timeout => ProviderError::Timeout,
+        HttpError::Insecure => {
+            ProviderError::BadRequest("a key may not be sent over plain http".into())
+        }
         HttpError::Status(status) if (500..600).contains(&status.0) => {
             ProviderError::Server(ServerStatus(status.0))
         }

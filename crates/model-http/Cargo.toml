@@ -19,6 +19,7 @@ tls = ["hyper", "dep:tokio-rustls", "dep:rustls-native-certs", "dep:rustls-pki-t
 
 [dependencies]
 serde = { workspace = true }
+zeroize = { workspace = true }
 thiserror = { workspace = true }
 hyper = { workspace = true, optional = true, features = ["client", "http1"] }
 hyper-util = { workspace = true, optional = true, features = ["tokio"] }

@@ -16,51 +16,42 @@ fn timeouts() -> Timeouts {
 }
 
 #[test]
-fn endpoint_round_trips_with_pinned_json() {
-    let endpoint = HttpEndpoint {
-        target: HttpTarget::Unix(PathBuf::from("/run/user/1000/inferd/vllm.sock")),
-        proxy: Proxy::Direct,
-        base: UrlPath("/v1".into()),
-        auth: AuthHeader::None,
-        headers: vec![],
-        timeouts: timeouts(),
-    };
-    let json = serde_json::to_string(&endpoint).unwrap();
+fn endpoints_read_from_pinned_json() {
+    let local = r#"{"target":{"kind":"unix","v":"/run/user/1000/inferd/vllm.sock"},"proxy":{"kind":"direct"},"base":"/v1","auth":{"kind":"none"},"headers":[],"timeouts":{"connect":2000,"first_byte":60000,"idle":30000}}"#;
     assert_eq!(
-        json,
-        r#"{"target":{"kind":"unix","v":"/run/user/1000/inferd/vllm.sock"},"proxy":{"kind":"direct"},"base":"/v1","auth":{"kind":"none"},"headers":[],"timeouts":{"connect":2000,"first_byte":60000,"idle":30000}}"#
+        serde_json::from_str::<HttpEndpoint>(local).unwrap(),
+        HttpEndpoint {
+            target: HttpTarget::Unix(PathBuf::from("/run/user/1000/inferd/vllm.sock")),
+            proxy: Proxy::Direct,
+            base: UrlPath("/v1".into()),
+            auth: AuthHeader::None,
+            headers: vec![],
+            timeouts: timeouts(),
+        }
     );
+    // A proxied cloud target, with a vendor header for the key and one more header.
+    let cloud = r#"{"target":{"kind":"tls","v":{"host":"api.example.com","port":443}},"proxy":{"kind":"via","v":{"kind":"unix","v":"/run/egress.sock"}},"base":"/v1","auth":{"kind":"header","v":{"name":"x-api-key","value":"k"}},"headers":[{"name":"anthropic-version","value":"2023-06-01"}],"timeouts":{"connect":2000,"first_byte":60000,"idle":30000}}"#;
     assert_eq!(
-        serde_json::from_str::<HttpEndpoint>(&json).unwrap(),
-        endpoint
-    );
-}
-
-#[test]
-fn a_proxied_cloud_target_round_trips() {
-    let endpoint = HttpEndpoint {
-        target: HttpTarget::Tls {
-            host: HostName("api.example.com".into()),
-            port: Port(443),
-        },
-        proxy: Proxy::Via(Box::new(HttpTarget::Unix(PathBuf::from(
-            "/run/egress.sock",
-        )))),
-        base: UrlPath("/v1".into()),
-        auth: AuthHeader::Header {
-            name: HeaderName("x-api-key".into()),
-            value: Secret("k".into()),
-        },
-        headers: vec![ExtraHeader {
-            name: HeaderName("anthropic-version".into()),
-            value: Secret("2023-06-01".into()),
-        }],
-        timeouts: timeouts(),
-    };
-    let json = serde_json::to_string(&endpoint).unwrap();
-    assert_eq!(
-        serde_json::from_str::<HttpEndpoint>(&json).unwrap(),
-        endpoint
+        serde_json::from_str::<HttpEndpoint>(cloud).unwrap(),
+        HttpEndpoint {
+            target: HttpTarget::Tls {
+                host: HostName("api.example.com".into()),
+                port: Port(443),
+            },
+            proxy: Proxy::Via(Box::new(HttpTarget::Unix(PathBuf::from(
+                "/run/egress.sock",
+            )))),
+            base: UrlPath("/v1".into()),
+            auth: AuthHeader::Header {
+                name: HeaderName("x-api-key".into()),
+                value: Secret("k".into()),
+            },
+            headers: vec![ExtraHeader {
+                name: HeaderName("anthropic-version".into()),
+                value: Secret("2023-06-01".into()),
+            }],
+            timeouts: timeouts(),
+        }
     );
 }
 
@@ -91,6 +82,11 @@ fn errors_round_trip_with_pinned_json() {
             "a replay miss is a unit error",
             HttpError::ReplayMiss,
             r#"{"kind":"replay_miss"}"#,
+        ),
+        (
+            "insecure is a unit error",
+            HttpError::Insecure,
+            r#"{"kind":"insecure"}"#,
         ),
     ];
     for (label, error, want) in cases {

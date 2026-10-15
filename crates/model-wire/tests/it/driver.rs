@@ -255,6 +255,10 @@ fn transport_failures_map_to_provider_errors() {
         (HttpError::Timeout, ProviderError::Timeout),
         (HttpError::Broken, ProviderError::Unreachable),
         (
+            HttpError::Insecure,
+            ProviderError::BadRequest("a key may not be sent over plain http".into()),
+        ),
+        (
             HttpError::Status(HttpStatus(503)),
             ProviderError::Server(model_provider::ServerStatus(503)),
         ),

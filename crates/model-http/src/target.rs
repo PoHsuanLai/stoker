@@ -39,8 +39,9 @@ pub enum Proxy {
     Via(Box<HttpTarget>),
 }
 
-/// Everything needed to talk to one server.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Everything needed to talk to one server. Read from config, never written back: it holds the
+/// key, so it has no `Serialize`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct HttpEndpoint {
     pub target: HttpTarget,
     pub proxy: Proxy,

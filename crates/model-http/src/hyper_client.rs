@@ -152,6 +152,33 @@ async fn within<T>(wait: WaitMs, future: impl Future<Output = T>) -> Result<T, H
         .map_err(|_| HttpError::Timeout)
 }
 
+/// Whether a key may go to a plain `Tcp` host on this machine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Loopback {
+    Refused,
+    Allowed,
+}
+
+/// A key goes over TLS or a Unix socket; over plain `Tcp` only to a loopback host, and only when
+/// the caller opted in.
+fn allow_key(target: &HttpTarget, loopback: Loopback) -> Result<(), HttpError> {
+    match target {
+        HttpTarget::Tcp { host, .. } if loopback == Loopback::Allowed && is_loopback(&host.0) => {
+            Ok(())
+        }
+        HttpTarget::Tcp { .. } => Err(HttpError::Insecure),
+        _ => Ok(()),
+    }
+}
+
+fn is_loopback(host: &str) -> bool {
+    let bare = host.trim_start_matches('[').trim_end_matches(']');
+    bare.eq_ignore_ascii_case("localhost")
+        || bare
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback())
+}
+
 /// The request line, headers and body of `parts` against `endpoint`. A header value that cannot
 /// be written (a newline in a secret) is a request that is never sent.
 fn build(endpoint: &HttpEndpoint, parts: Parts<'_>) -> Result<Request<Full<Bytes>>, HttpError> {
@@ -185,6 +212,11 @@ fn build(endpoint: &HttpEndpoint, parts: Parts<'_>) -> Result<Request<Full<Bytes
     match &endpoint.auth {
         AuthHeader::None => {}
         AuthHeader::Bearer(token) => {
+            allow_key(&endpoint.target, Loopback::Refused)?;
+            headers.push(secret(AUTHORIZATION, &format!("Bearer {}", token.0))?);
+        }
+        AuthHeader::LoopbackBearer(token) => {
+            allow_key(&endpoint.target, Loopback::Allowed)?;
             headers.push(secret(AUTHORIZATION, &format!("Bearer {}", token.0))?);
         }
         AuthHeader::Header { name, value } => {

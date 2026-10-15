@@ -89,6 +89,10 @@ pub enum HttpError {
     Tls,
     #[error("the connection broke mid-response")]
     Broken,
+    /// The request would send a key over plain http to a host that is not on this machine (or to
+    /// one that is, without the `LoopbackBearer` opt-in). Nothing was sent.
+    #[error("a key may not be sent over plain http")]
+    Insecure,
     #[error("the server answered {0:?}")]
     Status(HttpStatus),
     /// The server answered non-success. The head and the body already went to the sink, so the

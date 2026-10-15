@@ -720,6 +720,59 @@ async fn a_proxy_is_not_built_and_sends_nothing() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn a_key_over_plain_http_needs_the_loopback_opt_in_and_a_loopback_host() {
+    let key = || Secret("sk-test-token".into());
+    // `Bearer` alone is refused on plain Tcp, even to a loopback server: nothing is sent.
+    let server = serve(Wire::Tcp, vec![]).await;
+    let mut ep = endpoint(server.target.clone());
+    ep.auth = AuthHeader::Bearer(key());
+    let mut seen = Seen::default();
+    let result = run(ep, &post("/chat/completions", Framing::Sse), &mut seen).await;
+    assert_eq!(result, Err(HttpError::Insecure));
+    assert!(server.request.lock().unwrap().is_empty());
+    // The opt-in does not widen the host: a name that is not loopback is refused before any
+    // connection is tried.
+    let mut ep = endpoint(HttpTarget::Tcp {
+        host: HostName("api.example.test".into()),
+        port: Port(80),
+    });
+    ep.auth = AuthHeader::LoopbackBearer(key());
+    let result = run(
+        ep,
+        &post("/chat/completions", Framing::Sse),
+        &mut Seen::default(),
+    )
+    .await;
+    assert_eq!(result, Err(HttpError::Insecure));
+    // Opted in, to loopback: sent.
+    let server = serve(
+        Wire::Tcp,
+        vec![
+            head(
+                "200 OK",
+                &["Content-Type: application/json", "Content-Length: 2"],
+            ),
+            write(b"{}".to_vec()),
+        ],
+    )
+    .await;
+    let mut ep = endpoint(server.target.clone());
+    ep.auth = AuthHeader::LoopbackBearer(key());
+    let result = run(
+        ep,
+        &post("/chat/completions", Framing::Sse),
+        &mut Seen::default(),
+    )
+    .await;
+    assert_eq!(result, Ok(HttpStatus(200)));
+    let raw = server.request.lock().unwrap().to_ascii_lowercase();
+    assert!(
+        raw.contains("authorization: bearer sk-test-token\r\n"),
+        "{raw}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn a_header_that_cannot_be_written_is_a_request_never_sent() {
     let server = serve(Wire::Unix, vec![]).await;
     let mut ep = endpoint(server.target.clone());
