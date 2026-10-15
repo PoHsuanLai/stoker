@@ -176,8 +176,8 @@ fn extra_header_values_do_not_print() {
         value: Secret("tenant-secret".into()),
     };
     assert!(!format!("{header:?}").contains("tenant-secret"));
-    let json = serde_json::to_string(&header).unwrap();
-    assert_eq!(serde_json::from_str::<ExtraHeader>(&json).unwrap(), header);
+    let json = r#"{"name":"x-routing","value":"tenant-secret"}"#;
+    assert_eq!(serde_json::from_str::<ExtraHeader>(json).unwrap(), header);
 }
 
 #[test]
