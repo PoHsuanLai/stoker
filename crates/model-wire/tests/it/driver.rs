@@ -615,17 +615,15 @@ fn every_exit_tells_the_sink_what_the_attempt_may_have_cost() {
 struct Hang;
 
 impl model_http::Transport for Hang {
-    fn exchange<K: model_http::BodySink>(
+    async fn exchange<K: model_http::BodySink>(
         &self,
         _ex: &model_http::Exchange,
         sink: &mut K,
-    ) -> impl Future<Output = Result<HttpStatus, HttpError>> + Send {
-        async move {
-            sink.head(&head(200, BodyKind::EventStream));
-            sink.chunk(sse(&["usage:7,0"]).as_bytes());
-            std::future::pending::<()>().await;
-            Ok(HttpStatus(200))
-        }
+    ) -> Result<HttpStatus, HttpError> {
+        sink.head(&head(200, BodyKind::EventStream));
+        sink.chunk(sse(&["usage:7,0"]).as_bytes());
+        std::future::pending::<()>().await;
+        Ok(HttpStatus(200))
     }
 }
 
@@ -640,8 +638,9 @@ fn a_dropped_turn_still_tells_the_sink() {
         Hang,
     );
     let mut sink = Keep::default();
+    let req = request("m");
     {
-        let turn = d.turn(&request("m"), &mut sink);
+        let turn = d.turn(&req, &mut sink);
         let mut turn = std::pin::pin!(turn);
         let polled = turn.as_mut().poll(&mut Context::from_waker(Waker::noop()));
         assert!(matches!(polled, Poll::Pending));
