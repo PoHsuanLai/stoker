@@ -394,3 +394,14 @@ run by hand against the user's own engine.
 - **No hard-coded proposed values.** The six `ai.engine.*` values and `ai.cua.history_frames`,
   `ai.cua.repair_attempts` are settings read by the daemon; `SupervisorConfig::default()` holds
   the proposed numbers only as the settings' defaults.
+
+## 9. Install
+
+`scripts/install.sh` installs `catalog/*.toml` under `PREFIX/share/stoker/catalog` (inferd reads
+`/usr/share/stoker/catalog` and `$XDG_DATA_HOME/stoker/catalog`, so use `--prefix /usr` for a
+machine-wide install). Nothing is built: stoker is libraries and data. Flags: `--prefix DIR`
+(default `/usr/local`), `--destdir DIR` (for packages), `--user` (under `~/.local/share`, no root),
+`--dry-run` (print every action); `--no-build`, `--bin-dir`, `--sandbox` and `--distro` are
+accepted for the same command line as the other repos and do nothing here. Root steps use `$SUDO`,
+else sudo, doas or pkexec, else they are printed. The speech host (`speech-host-sherpa`) is not
+installed: it needs the sherpa libraries that `dev/build-sherpa.sh` fetches.
