@@ -154,6 +154,7 @@ fn stop_reasons_map_to_the_convention_finish_reasons() {
         (StopReason::ToolUse, Finish::ToolCalls),
         (StopReason::MaxTokens, Finish::Length),
         (StopReason::ContentFilter, Finish::ContentFilter),
+        (StopReason::Unrecognized, Finish::Error),
     ];
     for (stop, finish) in CASES {
         assert_eq!(Finish::from(*stop), *finish);
