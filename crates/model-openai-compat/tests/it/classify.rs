@@ -153,6 +153,23 @@ fn a_client_error_keeps_the_status_and_a_redacted_message() {
 }
 
 #[test]
+fn a_provider_message_is_in_the_error_but_never_in_its_display() {
+    let body = r#"{"error":{"message":"Invalid 'messages[3].content': dear diary","type":"invalid_request_error"}}"#;
+    let error = classify(400, body);
+    assert_eq!(
+        error.provider_message(),
+        Some("Invalid 'messages[3].content': dear diary")
+    );
+    assert_eq!(
+        error.to_string(),
+        "the endpoint rejected the request: http_400 invalid_request_error"
+    );
+    let credit = classify(402, r#"{"error":{"message":"you owe the quoted prompt"}}"#);
+    assert_eq!(credit.provider_message(), Some("you owe the quoted prompt"));
+    assert!(!credit.to_string().contains("quoted"));
+}
+
+#[test]
 fn a_provider_message_never_carries_a_credential_or_runs_long() {
     let body = format!(
         r#"{{"error":{{"message":"Authorization: Bearer abc123 api_key=hunter2 {}"}}}}"#,

@@ -8,8 +8,10 @@ use crate::envelope::envelope_error;
 
 /// Maps a non-success response, or an HTML page served as 200, to what a caller acts on. A
 /// client error keeps the provider's status and a bounded, redacted excerpt of its message
-/// (`ProviderDetail`), so the person and the logs see why: no credit, an unsupported parameter, a
-/// refused key. A 401 stays `Unauthorized`, whatever its body says. A 5xx never carries the body, and neither does a context overflow.
+/// (`ProviderDetail`, or after the slug of a `BadRequest`): a log can say why (no credit, an
+/// unsupported parameter, a refused key) through `ProviderError::provider_message`, but `Display`
+/// leaves the message out because it can quote the prompt. A 401 stays `Unauthorized`, whatever
+/// its body says. A 5xx never carries the body, and neither does a context overflow.
 pub(crate) fn classify(head: &ResponseHead, body: &[u8]) -> ProviderError {
     let parsed: Option<Value> = serde_json::from_slice(body).ok();
     let status = head.status.0;
@@ -29,7 +31,7 @@ pub(crate) fn classify(head: &ResponseHead, body: &[u8]) -> ProviderError {
             } else {
                 format!("http_{status} {slug}")
             };
-            ProviderError::BadRequest(format!("{prefix}: {}", detail.message))
+            ProviderError::bad_request_with_message(&prefix, &detail.message)
         }
         other => other,
     }

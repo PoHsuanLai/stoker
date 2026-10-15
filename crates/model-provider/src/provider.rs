@@ -34,6 +34,38 @@ pub struct ModelInfo {
     pub trained_context: Tokens,
 }
 
+/// What separates a `BadRequest`'s slug from the provider's message.
+const MESSAGE_SEP: &str = ": ";
+
+fn slug_of(text: &str) -> &str {
+    text.split_once(MESSAGE_SEP).map_or(text, |(slug, _)| slug)
+}
+
+impl ProviderError {
+    /// A rejected request that carries the provider's (already redacted) message, kept out of
+    /// `Display`.
+    pub fn bad_request_with_message(slug: &str, message: &str) -> Self {
+        if message.is_empty() {
+            ProviderError::BadRequest(slug.to_owned())
+        } else {
+            ProviderError::BadRequest(format!("{slug}{MESSAGE_SEP}{message}"))
+        }
+    }
+
+    /// The provider's own words behind a refusal, for a log or a debug view: never for a person
+    /// or a model, because they can quote the prompt. `None` when the provider gave none.
+    pub fn provider_message(&self) -> Option<&str> {
+        let message = match self {
+            ProviderError::AuthRejected(detail) | ProviderError::PaymentRequired(detail) => {
+                detail.message.as_str()
+            }
+            ProviderError::BadRequest(text) => text.split_once(MESSAGE_SEP)?.1,
+            _ => return None,
+        };
+        (!message.is_empty()).then_some(message)
+    }
+}
+
 /// Each arm is something a caller acts on.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "v", rename_all = "snake_case")]
@@ -63,7 +95,10 @@ pub enum ProviderError {
     Server(ServerStatus),
     #[error("the prompt exceeds the context limit of {limit:?}")]
     ContextOverflow { limit: Tokens },
-    #[error("the endpoint rejected the request: {0}")]
+    /// The text is the error's type slug (`http_400 invalid_request_error`), optionally followed by
+    /// `": "` and the provider's own message. `Display` prints the part before the separator only,
+    /// because the message can quote the prompt; [`ProviderError::provider_message`] has the rest.
+    #[error("the endpoint rejected the request: {}", slug_of(.0))]
     BadRequest(String),
     #[error("the model refused: {0}")]
     Refused(String),

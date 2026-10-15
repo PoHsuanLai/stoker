@@ -1,5 +1,6 @@
 //! What a provider said when it refused: its HTTP status and a bounded, redacted excerpt of its
-//! message, so the person and the logs keep the reason.
+//! message. The message can quote the prompt, so `Display` leaves it out: it stays in the
+//! `message` field (and `Debug`) for a log that is allowed to hold it.
 
 use std::fmt;
 
@@ -32,7 +33,8 @@ const SECRET_NAMES: [&str; 8] = [
 pub struct ProviderDetail {
     pub status: ServerStatus,
     /// At most 240 characters, one line, with anything credential-shaped replaced. Empty when the
-    /// provider gave no message.
+    /// provider gave no message. Not part of `Display`: it can echo the prompt, so show it only
+    /// where the prompt may be shown.
     pub message: String,
 }
 
@@ -48,10 +50,7 @@ impl ProviderDetail {
 
 impl fmt::Display for ProviderDetail {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.message.is_empty() {
-            true => write!(f, "http {}", self.status.0),
-            false => write!(f, "http {}: {}", self.status.0, self.message),
-        }
+        write!(f, "http {}", self.status.0)
     }
 }
 
