@@ -339,9 +339,14 @@ pub fn embed_turn(inputs: &[&str], dims: Knob<Dims>) -> EmbedTurn {
 pub struct Keep {
     pub events: Vec<TurnEvent>,
     pub stop_after: Option<usize>,
+    pub reports: Vec<model_provider::UsageReport>,
 }
 
 impl TurnSink for Keep {
+    fn ended(&mut self, report: model_provider::UsageReport) {
+        self.reports.push(report);
+    }
+
     fn event(&mut self, event: TurnEvent) -> Flow {
         self.events.push(event);
         match self.stop_after {

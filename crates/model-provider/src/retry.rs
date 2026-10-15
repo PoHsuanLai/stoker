@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     Attempt, Flow, ModelInfo, Permille, Provider, ProviderError, RetrySeconds, TurnEnd, TurnEvent,
-    TurnRequest, TurnSink, WaitMs,
+    TurnRequest, TurnSink, UsageReport, WaitMs,
 };
 
 /// How a failure may be retried.
@@ -179,5 +179,9 @@ impl<K: TurnSink> TurnSink for Counting<'_, K> {
     fn event(&mut self, event: TurnEvent) -> Flow {
         self.seen += 1;
         self.inner.event(event)
+    }
+
+    fn ended(&mut self, report: UsageReport) {
+        self.inner.ended(report);
     }
 }

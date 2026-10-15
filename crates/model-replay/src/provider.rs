@@ -4,7 +4,7 @@ use std::sync::Mutex;
 
 use model_provider::{
     Flow, ModelInfo, ModelName, Provider, ProviderError, StopReason, TurnEnd, TurnEvent,
-    TurnRequest, TurnSink, TurnUsage,
+    TurnRequest, TurnSink, TurnUsage, UsageReport,
 };
 use serde::{Deserialize, Serialize};
 
@@ -214,6 +214,10 @@ impl<K: TurnSink> TurnSink for Tee<'_, K> {
     fn event(&mut self, event: TurnEvent) -> Flow {
         self.seen.push(event.clone());
         self.inner.event(event)
+    }
+
+    fn ended(&mut self, report: UsageReport) {
+        self.inner.ended(report);
     }
 }
 

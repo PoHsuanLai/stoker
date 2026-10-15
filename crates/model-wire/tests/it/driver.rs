@@ -540,3 +540,115 @@ fn a_stream_of_comments_ends_at_the_byte_cap() {
         "the connection closed at the cap"
     );
 }
+
+#[test]
+fn every_exit_tells_the_sink_what_the_attempt_may_have_cost() {
+    use model_provider::UsageReport::{Known, Nothing, Unknown};
+    let usage = |input, output| TurnUsage {
+        input: Tokens(input),
+        output: Tokens(output),
+        ..TurnUsage::default()
+    };
+    let stream = |frames: &[&str]| Canned::ok(head(200, BodyKind::EventStream), &[&sse(frames)]);
+    let cases = [
+        (
+            "complete, counted",
+            stream(&["text:a", "usage:3,2", "done"]),
+            None,
+            Known(usage(3, 2)),
+        ),
+        (
+            "complete, the server sent no count",
+            stream(&["text:a", "done"]),
+            None,
+            Unknown {
+                seen: TurnUsage::default(),
+            },
+        ),
+        (
+            "stopped early by the sink",
+            stream(&["usage:5,1", "text:a", "text:b", "done"]),
+            Some(2),
+            Unknown { seen: usage(5, 1) },
+        ),
+        (
+            "a frame that cannot be read",
+            stream(&["text:a", "bad"]),
+            None,
+            Unknown {
+                seen: TurnUsage::default(),
+            },
+        ),
+        (
+            "refused with a client error",
+            Canned::rejected(head(400, BodyKind::Json), "{}"),
+            None,
+            Nothing,
+        ),
+        (
+            "could not connect",
+            Canned::fails(HttpError::Connect),
+            None,
+            Nothing,
+        ),
+        (
+            "timed out after the request went out",
+            Canned::fails(HttpError::Timeout),
+            None,
+            Unknown {
+                seen: TurnUsage::default(),
+            },
+        ),
+    ];
+    for (label, canned, stop_after, want) in cases {
+        let d = driver(Framing::Sse, vec![canned]);
+        let mut sink = Keep {
+            stop_after,
+            ..Keep::default()
+        };
+        let _ = turn(&d, &mut sink);
+        assert_eq!(sink.reports, vec![want], "{label}");
+    }
+}
+
+/// A transport that sends the head and one usage chunk, then waits for ever.
+struct Hang;
+
+impl model_http::Transport for Hang {
+    fn exchange<K: model_http::BodySink>(
+        &self,
+        _ex: &model_http::Exchange,
+        sink: &mut K,
+    ) -> impl Future<Output = Result<HttpStatus, HttpError>> + Send {
+        async move {
+            sink.head(&head(200, BodyKind::EventStream));
+            sink.chunk(sse(&["usage:7,0"]).as_bytes());
+            std::future::pending::<()>().await;
+            Ok(HttpStatus(200))
+        }
+    }
+}
+
+#[test]
+fn a_dropped_turn_still_tells_the_sink() {
+    use model_provider::UsageReport::Unknown;
+    use std::task::{Context, Poll, Waker};
+    let d = Driver::new(
+        LineCodec {
+            framing: Framing::Sse,
+        },
+        Hang,
+    );
+    let mut sink = Keep::default();
+    {
+        let turn = d.turn(&request("m"), &mut sink);
+        let mut turn = std::pin::pin!(turn);
+        let polled = turn.as_mut().poll(&mut Context::from_waker(Waker::noop()));
+        assert!(matches!(polled, Poll::Pending));
+    }
+    let seen = TurnUsage {
+        input: Tokens(7),
+        ..TurnUsage::default()
+    };
+    assert_eq!(sink.reports, vec![Unknown { seen }]);
+}

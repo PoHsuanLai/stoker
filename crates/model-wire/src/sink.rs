@@ -8,6 +8,7 @@ use model_http::{
 };
 use model_provider::{
     Flow, ModelName, ProviderError, StopReason, TurnEnd, TurnEvent, TurnSink, TurnUsage,
+    UsageReport,
 };
 
 use crate::collect::{Collect, REPLY_BODY_MAX, is_failure};
@@ -98,7 +99,39 @@ enum Mode<D> {
     Done,
 }
 
-/// The `BodySink` of one chat turn.
+/// Whether the server has sent a usage count in this stream.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Counted {
+    No,
+    Yes,
+}
+
+/// Whether the stream ran to its end (the decoder finished it) or was cut short (stopped by the
+/// sink, failed, or dropped).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Ending {
+    Whole,
+    Cut,
+}
+
+/// Whether the request reached a model at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reached {
+    /// Refused, or never sent: nothing ran.
+    Nothing,
+    Model,
+}
+
+/// What a turn that is dropped before `conclude` may have cost.
+fn interrupted<D>(mode: &Mode<D>, seen: TurnUsage) -> UsageReport {
+    match mode {
+        Mode::Failing(_) => UsageReport::Nothing,
+        _ => UsageReport::Unknown { seen },
+    }
+}
+
+/// The `BodySink` of one chat turn. When it drops, however the turn ended, it tells the caller's
+/// sink what the attempt may have cost ([`TurnSink::ended`]).
 pub(crate) struct ChatSink<'a, C: ChatCodec, K: TurnSink> {
     codec: &'a C,
     sink: &'a mut K,
@@ -110,6 +143,9 @@ pub(crate) struct ChatSink<'a, C: ChatCodec, K: TurnSink> {
     deadline: Option<WaitMs>,
     progress: Progress,
     raw: usize,
+    counted: Counted,
+    ending: Ending,
+    report: Option<UsageReport>,
 }
 
 impl<'a, C: ChatCodec, K: TurnSink> ChatSink<'a, C, K> {
@@ -131,6 +167,9 @@ impl<'a, C: ChatCodec, K: TurnSink> ChatSink<'a, C, K> {
             deadline,
             progress: Progress::Made,
             raw: 0,
+            counted: Counted::No,
+            ending: Ending::Cut,
+            report: None,
         }
     }
 
@@ -139,6 +178,7 @@ impl<'a, C: ChatCodec, K: TurnSink> ChatSink<'a, C, K> {
         for event in events {
             if let TurnEvent::Usage(usage) = &event {
                 self.usage = *usage;
+                self.counted = Counted::Yes;
             }
             if self.sink.event(event) == Flow::Stop {
                 return Flow::Stop;
@@ -191,17 +231,45 @@ impl<'a, C: ChatCodec, K: TurnSink> ChatSink<'a, C, K> {
         }
     }
 
-    /// The turn's result, once the transport is done with the exchange.
+    /// The turn's result, once the transport is done with the exchange; the usage report for the
+    /// caller's sink follows from how it ended.
     pub(crate) fn conclude(
         mut self,
         result: Result<HttpStatus, HttpError>,
     ) -> Result<TurnEnd, ProviderError> {
+        let reached = match (&self.mode, &result) {
+            (Mode::Failing(_), _) => Reached::Nothing,
+            (
+                Mode::Head(_) | Mode::Done,
+                Err(
+                    HttpError::Connect
+                    | HttpError::Tls
+                    | HttpError::Insecure
+                    | HttpError::ReplayMiss,
+                ),
+            ) => Reached::Nothing,
+            _ => Reached::Model,
+        };
+        let end = self.settle(result);
+        self.report = Some(match (reached, &end) {
+            (Reached::Nothing, _) => UsageReport::Nothing,
+            (Reached::Model, Ok(end))
+                if self.ending == Ending::Whole && self.counted == Counted::Yes =>
+            {
+                UsageReport::Known(end.usage)
+            }
+            (Reached::Model, _) => UsageReport::Unknown { seen: self.usage },
+        });
+        end
+    }
+
+    fn settle(&mut self, result: Result<HttpStatus, HttpError>) -> Result<TurnEnd, ProviderError> {
         match std::mem::replace(&mut self.mode, Mode::Done) {
             Mode::Failed(error) => Err(error),
             Mode::Stopped => Ok(TurnEnd {
                 stop: StopReason::EndTurn,
                 usage: self.usage,
-                served: self.served,
+                served: self.served.clone(),
                 first_token: None,
             }),
             Mode::Failing(collect) => collect.into_reply(self.codec, result).and_then(|_| {
@@ -240,9 +308,21 @@ impl<'a, C: ChatCodec, K: TurnSink> ChatSink<'a, C, K> {
             });
         }
         let fault = decoder.fault();
-        decoder
+        let end = decoder
             .finish()
-            .map_err(|e| fault.unwrap_or_else(|| codec_error(e)))
+            .map_err(|e| fault.unwrap_or_else(|| codec_error(e)))?;
+        self.ending = Ending::Whole;
+        Ok(end)
+    }
+}
+
+impl<C: ChatCodec, K: TurnSink> Drop for ChatSink<'_, C, K> {
+    fn drop(&mut self) {
+        let report = self
+            .report
+            .take()
+            .unwrap_or_else(|| interrupted(&self.mode, self.usage));
+        self.sink.ended(report);
     }
 }
 

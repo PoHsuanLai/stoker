@@ -83,6 +83,32 @@ pub enum Flow {
 /// Where a provider pushes a turn's events.
 pub trait TurnSink: Send {
     fn event(&mut self, event: TurnEvent) -> Flow;
+
+    /// Called once per attempt when the provider is done with the sink, however the attempt ended:
+    /// complete, failed, stopped early by this sink, or dropped mid-stream (cancellation). A
+    /// caller that bills a turn charges from this, not from `TurnEnd`, which an error or a drop
+    /// never delivers. A retried turn reports once per attempt; the sum is the cost. The default
+    /// ignores it.
+    fn ended(&mut self, report: UsageReport) {
+        let _ = report;
+    }
+}
+
+/// What an attempt is known to have cost when it ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "v", rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum UsageReport {
+    /// The server's final count of a complete turn.
+    Known(TurnUsage),
+    /// The model may have run and no final count arrived: the server sent none, the stream broke,
+    /// this sink stopped it, or the caller dropped the turn. `seen` is the most the server had
+    /// said (often zero); the provider may still bill for more, so a caller should charge a
+    /// pessimistic estimate, never `seen` alone.
+    Unknown { seen: TurnUsage },
+    /// The request was refused or never reached a model (could not connect, a non-success
+    /// answer): nothing ran, nothing to charge.
+    Nothing,
 }
 
 impl From<StopReason> for genai_names::Finish {
