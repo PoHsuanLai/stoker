@@ -102,14 +102,14 @@ fn the_wait_doubles_to_the_cap_and_the_budget_ends_it() {
         (1, RetryClass::Transient, 250, Some(75)),
         (1, RetryClass::Transient, 1000, Some(0)),
         (1, RetryClass::Transient, 60_000, Some(0)),
-        (1, RetryClass::Overload(RetrySeconds(5)), 0, Some(5000)),
+        (1, RetryClass::Overload(RetrySeconds(5)), 0, Some(1000)),
         (3, RetryClass::Overload(RetrySeconds(0)), 0, Some(400)),
         (1, RetryClass::Overload(RetrySeconds(1)), 500, Some(1000)),
         (
             1,
             RetryClass::Overload(RetrySeconds(u32::MAX)),
             0,
-            Some(u32::MAX),
+            Some(1000),
         ),
     ];
     for (attempt, class, jitter, want) in CASES {
@@ -151,7 +151,7 @@ fn the_cap_holds_and_the_shift_cannot_overflow() {
 
 proptest! {
     #[test]
-    fn a_wait_never_exceeds_the_cap_unless_the_server_asked_for_more(
+    fn a_wait_never_exceeds_the_cap_server_asked_or_not(
         attempt in 1u8..255, attempts in 1u8..255, base in any::<u32>(), cap in any::<u32>(),
         jitter in any::<u16>(), server in 0u32..100_000
     ) {
@@ -161,7 +161,7 @@ proptest! {
         if let Some(WaitMs(wait)) = transient { prop_assert!(wait <= cap); }
         let overload = next_wait(&policy, Attempt(attempt), RetryClass::Overload(RetrySeconds(server)), Permille(jitter));
         if let (Some(WaitMs(wait)), Some(WaitMs(plain))) = (overload, transient) {
-            prop_assert!(wait >= plain && wait >= server * 1000);
+            prop_assert!(wait >= plain && wait >= (server * 1000).min(cap) && wait <= cap);
         }
     }
 }
@@ -268,13 +268,13 @@ fn a_turn_that_fails_before_any_event_is_retried_with_backoff() {
 }
 
 #[test]
-fn retry_after_is_honoured() {
+fn retry_after_is_honoured_up_to_the_cap() {
     let (result, waits, _, _) = run(vec![
         fail(ProviderError::RateLimited(RetrySeconds(3))),
         delta(),
     ]);
     assert_eq!(result, Ok(end()));
-    assert_eq!(waits, vec![WaitMs(3000)]);
+    assert_eq!(waits, vec![WaitMs(1000)]);
 }
 
 #[test]

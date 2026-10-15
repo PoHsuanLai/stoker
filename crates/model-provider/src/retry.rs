@@ -63,7 +63,8 @@ pub struct RetryPolicy {
 }
 
 /// How long to wait before try `attempt + 1`, or `None` when the class or the budget says stop.
-/// `jitter` scales the wait down by up to that share, so callers spread out.
+/// `jitter` scales the wait down by up to that share, so callers spread out. No wait, a
+/// server-requested one included, exceeds `policy.cap`.
 pub fn next_wait(
     policy: &RetryPolicy,
     attempt: Attempt,
@@ -78,7 +79,10 @@ pub fn next_wait(
     let jitter = u64::from(jitter.0.min(1000));
     let backoff = capped - capped * jitter / 1000;
     let wait = match class {
-        RetryClass::Overload(server) => backoff.max(u64::from(server.0) * 1000),
+        // The server's number is capped like the backoff: one `Retry-After` must not park a turn.
+        RetryClass::Overload(server) => backoff
+            .max(u64::from(server.0) * 1000)
+            .min(u64::from(policy.cap.0)),
         RetryClass::Never | RetryClass::Transient => backoff,
     };
     Some(WaitMs(u32::try_from(wait).unwrap_or(u32::MAX)))
