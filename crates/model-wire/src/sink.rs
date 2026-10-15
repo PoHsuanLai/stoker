@@ -3,7 +3,8 @@
 //! into frames for the decoder.
 
 use model_http::{
-    BodySink, ChunkFlow, Framing, HttpError, HttpStatus, NdjsonDecoder, ResponseHead, SseDecoder,
+    BodySink, ChunkFlow, Framing, HttpError, HttpStatus, NdjsonDecoder, Progress, ResponseHead,
+    SseDecoder, WaitMs,
 };
 use model_provider::{
     Flow, ModelName, ProviderError, StopReason, TurnEnd, TurnEvent, TurnSink, TurnUsage,
@@ -64,6 +65,21 @@ impl Framer {
     }
 }
 
+/// The most raw body bytes one streamed reply may carry, comments and empty events included. The
+/// codec caps the frames it reads; this caps what the wire carries, so a stream of keep-alive
+/// lines ends too.
+const STREAM_BYTES_MAX: usize = 80 << 20;
+
+/// Whether `frames` hold anything: a stream of comments or empty events makes no progress.
+fn progress_of(framing: Framing, frames: &[String]) -> Progress {
+    match framing {
+        Framing::Sse | Framing::Ndjson if frames.iter().all(|f| f.trim().is_empty()) => {
+            Progress::Idle
+        }
+        _ => Progress::Made,
+    }
+}
+
 /// Where the reply has got to.
 enum Mode<D> {
     /// Waiting for the head; the decoder is ready.
@@ -91,10 +107,19 @@ pub(crate) struct ChatSink<'a, C: ChatCodec, K: TurnSink> {
     served: ModelName,
     usage: TurnUsage,
     head: Option<ResponseHead>,
+    deadline: Option<WaitMs>,
+    progress: Progress,
+    raw: usize,
 }
 
 impl<'a, C: ChatCodec, K: TurnSink> ChatSink<'a, C, K> {
-    pub(crate) fn new(codec: &'a C, sink: &'a mut K, framing: Framing, served: ModelName) -> Self {
+    pub(crate) fn new(
+        codec: &'a C,
+        sink: &'a mut K,
+        framing: Framing,
+        served: ModelName,
+        deadline: Option<WaitMs>,
+    ) -> Self {
         Self {
             mode: Mode::Head(codec.decoder(served.clone())),
             codec,
@@ -103,6 +128,9 @@ impl<'a, C: ChatCodec, K: TurnSink> ChatSink<'a, C, K> {
             served,
             usage: TurnUsage::default(),
             head: None,
+            deadline,
+            progress: Progress::Made,
+            raw: 0,
         }
     }
 
@@ -138,9 +166,15 @@ impl<'a, C: ChatCodec, K: TurnSink> ChatSink<'a, C, K> {
     }
 
     fn read(&mut self, mut decoder: C::Decoder, mut framer: Framer, bytes: &[u8]) -> ChunkFlow {
-        let step = framer
-            .feed(bytes)
-            .and_then(|frames| self.decode(&mut decoder, frames));
+        self.raw = self.raw.saturating_add(bytes.len());
+        let step = if self.raw > STREAM_BYTES_MAX {
+            Err(ProviderError::Unreadable("the reply is too large".into()))
+        } else {
+            framer.feed(bytes).and_then(|frames| {
+                self.progress = progress_of(self.framing, &frames);
+                self.decode(&mut decoder, frames)
+            })
+        };
         match step {
             Ok(Flow::Continue) => {
                 self.mode = Mode::Reading { decoder, framer };
@@ -257,5 +291,13 @@ impl<C: ChatCodec, K: TurnSink> BodySink for ChatSink<'_, C, K> {
                 ChunkFlow::Stop
             }
         }
+    }
+
+    fn progress(&self) -> Progress {
+        self.progress
+    }
+
+    fn deadline(&self) -> Option<WaitMs> {
+        self.deadline
     }
 }

@@ -18,12 +18,12 @@ use hyper::{Method, Request, Response};
 use hyper_util::rt::TokioIo;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::{TcpStream, UnixStream};
-use tokio::time::timeout;
+use tokio::time::{Instant, timeout, timeout_at};
 
 use crate::{
     AuthHeader, BodyKind, BodySink, ChunkFlow, Exchange, Framing, HttpClient, HttpEndpoint,
-    HttpError, HttpStatus, HttpTarget, Proxy, RequestId, ResponseHead, RouteRoot, Timeouts,
-    Transport, Upload, UploadTransport, Verb, WaitMs, WaitSeconds,
+    HttpError, HttpStatus, HttpTarget, Progress, Proxy, RequestId, ResponseHead, RouteRoot,
+    Timeouts, Transport, Upload, UploadTransport, Verb, WaitMs, WaitSeconds,
 };
 
 impl Transport for HttpClient {
@@ -228,7 +228,8 @@ where
     let (mut sender, connection) = within(timeouts.connect, http1::handshake(TokioIo::new(io)))
         .await?
         .map_err(|_| HttpError::Connect)?;
-    let work = respond(&mut sender, request, timeouts, sink);
+    let total = sink.deadline();
+    let work = bounded(total, respond(&mut sender, request, timeouts, sink));
     tokio::pin!(work);
     tokio::pin!(connection);
     let mut open = true;
@@ -240,6 +241,17 @@ where
             // body or with the error the broken connection gives it.
             _ = &mut connection, if open => open = false,
         }
+    }
+}
+
+/// Runs `future` within `total` when there is one.
+async fn bounded<T>(
+    total: Option<WaitMs>,
+    future: impl Future<Output = Result<T, HttpError>>,
+) -> Result<T, HttpError> {
+    match total {
+        Some(wait) => within(wait, future).await?,
+        None => future.await,
     }
 }
 
@@ -256,13 +268,23 @@ async fn respond<K: BodySink>(
     let status = head.status;
     let mut body = response.into_body();
     let mut flow = sink.head(&head);
+    let idle = Duration::from_millis(u64::from(timeouts.idle.0));
+    // The idle timer restarts only when a chunk made progress, so keep-alive comments and empty
+    // events do not hold the turn open.
+    let mut idle_until = Instant::now() + idle;
     while flow == ChunkFlow::Continue {
-        match within(timeouts.idle, body.frame()).await? {
+        match timeout_at(idle_until, body.frame())
+            .await
+            .map_err(|_| HttpError::Timeout)?
+        {
             None => break,
             Some(Err(_)) => return Err(HttpError::Broken),
             Some(Ok(frame)) => {
                 if let Ok(data) = frame.into_data() {
                     flow = sink.chunk(&data);
+                    if sink.progress() == Progress::Made {
+                        idle_until = Instant::now() + idle;
+                    }
                 }
             }
         }

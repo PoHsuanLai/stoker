@@ -40,7 +40,7 @@ mod tls;
 pub use auth::{AuthHeader, ExtraHeader, HeaderName, Secret};
 pub use client::{
     BodySink, ChunkFlow, ContentType, DerCertificate, HttpClient, HttpError, HttpStatus, JsonBody,
-    RawBody, TlsRoots,
+    Progress, RawBody, TlsRoots,
 };
 pub use exchange::{
     Exchange, Framing, RouteRoot, Timeouts, Transport, Upload, UploadTransport, Verb,

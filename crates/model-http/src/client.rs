@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{HttpEndpoint, ResponseHead};
+use crate::{HttpEndpoint, ResponseHead, WaitMs};
 
 /// An HTTP status code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -50,12 +50,31 @@ pub enum ChunkFlow {
     Stop,
 }
 
+/// Whether the last chunk carried anything of the reply. A transport restarts its idle timer only
+/// on `Made`, so a stream of keep-alive comments or empty events cannot hold a turn open.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Progress {
+    Made,
+    Idle,
+}
+
 /// Receives a response: its head once, then the body in chunks (already split into frames when
 /// the exchange asked for `Framing::Sse` or `Ndjson`).
 pub trait BodySink: Send {
     /// Once, before any chunk. `Stop` closes the connection without reading the body.
     fn head(&mut self, head: &ResponseHead) -> ChunkFlow;
     fn chunk(&mut self, bytes: &[u8]) -> ChunkFlow;
+
+    /// Whether the chunk just delivered made progress. The default counts every chunk.
+    fn progress(&self) -> Progress {
+        Progress::Made
+    }
+
+    /// The most time the whole exchange may take after the connection is open (`None`: only the
+    /// per-stage timeouts apply). An overrun is `HttpError::Timeout`.
+    fn deadline(&self) -> Option<WaitMs> {
+        None
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error, Serialize, Deserialize)]

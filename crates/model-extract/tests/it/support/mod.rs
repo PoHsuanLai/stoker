@@ -45,6 +45,7 @@ pub fn base() -> TurnRequest {
         limits: Limits {
             max_output: Tokens(64),
             stop: vec![],
+            deadline: None,
         },
         sampling: Sampling {
             temperature: Milli(0),

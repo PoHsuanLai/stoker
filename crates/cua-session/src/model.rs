@@ -74,6 +74,7 @@ impl Default for TurnSettings {
             limits: Limits {
                 max_output: Tokens(1024),
                 stop: Vec::new(),
+                deadline: None,
             },
             reasoning: Reasoning::Off,
             tool_calls: ToolParallelism::One,

@@ -1,6 +1,6 @@
 //! Joins a codec to a transport.
 
-use model_http::Transport;
+use model_http::{Transport, WaitMs};
 use model_provider::{
     Count, Dims, EmbedEnd, EmbedFault, EmbedTurn, Embedder, Knob, ModelInfo, Provider,
     ProviderError, TurnEnd, TurnRequest, TurnSink, TurnUsage,
@@ -57,7 +57,14 @@ impl<C: ChatCodec, T: Transport> Provider for Driver<C, T> {
         sink: &mut K,
     ) -> Result<TurnEnd, ProviderError> {
         let exchange = self.codec.encode(request).map_err(codec_error)?;
-        let mut adapter = ChatSink::new(&self.codec, sink, exchange.framing, request.model.clone());
+        let deadline = request.limits.deadline.map(|w| WaitMs(w.0));
+        let mut adapter = ChatSink::new(
+            &self.codec,
+            sink,
+            exchange.framing,
+            request.model.clone(),
+            deadline,
+        );
         let result = self.transport.exchange(&exchange, &mut adapter).await;
         adapter.conclude(result)
     }

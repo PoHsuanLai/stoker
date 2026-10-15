@@ -9,7 +9,7 @@ use vision_prep::MediaType;
 
 use crate::{
     ChoiceScores, EngineExtras, JsonText, ModelName, Sampling, SchemaText, ThoughtSeal, Tokens,
-    ToolCallId, ToolName, ToolParallelism,
+    ToolCallId, ToolName, ToolParallelism, WaitMs,
 };
 use cua_action::WireDialect;
 
@@ -177,6 +177,11 @@ pub enum OutputShape {
 pub struct Limits {
     pub max_output: Tokens,
     pub stop: Vec<String>,
+    /// The most time the whole turn may take once the connection is open, however many keep-alive
+    /// frames arrive. `None` leaves only the endpoint's per-stage timeouts. An overrun is
+    /// `ProviderError::Timeout`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deadline: Option<WaitMs>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

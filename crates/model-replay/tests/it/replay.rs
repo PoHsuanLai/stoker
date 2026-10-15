@@ -63,6 +63,7 @@ fn request(text: &str, image: &[u8]) -> TurnRequest {
         limits: Limits {
             max_output: Tokens(64),
             stop: vec![],
+            deadline: None,
         },
         sampling: Sampling {
             temperature: Milli(0),

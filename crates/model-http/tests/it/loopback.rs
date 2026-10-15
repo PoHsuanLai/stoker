@@ -13,8 +13,8 @@ use std::time::Duration;
 
 use model_http::{
     AuthHeader, BodyKind, BodySink, ChunkFlow, Exchange, ExtraHeader, Framing, HeaderName,
-    HostName, HttpClient, HttpEndpoint, HttpError, HttpStatus, HttpTarget, JsonBody, Port, Proxy,
-    ResponseHead, RouteRoot, Secret, Timeouts, Transport, UrlPath, Verb, WaitMs,
+    HostName, HttpClient, HttpEndpoint, HttpError, HttpStatus, HttpTarget, JsonBody, Port,
+    Progress, Proxy, ResponseHead, RouteRoot, Secret, Timeouts, Transport, UrlPath, Verb, WaitMs,
 };
 use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, UnixListener};
@@ -28,6 +28,8 @@ enum Step {
     UntilHead,
     /// Write a chunk every 5 ms until the client closes the connection (or 400 chunks).
     Flood,
+    /// Write the same text as a chunk every 5 ms until the client closes (or 400 chunks).
+    Drip(&'static str),
 }
 
 struct Server {
@@ -141,9 +143,13 @@ async fn handle<S>(
                     let _ = rx.await;
                 }
             }
-            Step::Flood => {
+            Step::Flood | Step::Drip(_) => {
+                let text = match step {
+                    Step::Drip(text) => text,
+                    _ => "data: x\n\n",
+                };
                 for _ in 0..400 {
-                    let sent = stream.write_all(&chunk("data: x\n\n")).await;
+                    let sent = stream.write_all(&chunk(text)).await;
                     if sent.is_err() || stream.flush().await.is_err() {
                         peer_closed.store(true, Ordering::SeqCst);
                         return;
@@ -223,6 +229,9 @@ struct Seen {
     order: Vec<&'static str>,
     on_head: Option<oneshot::Sender<()>>,
     stop_after: Option<usize>,
+    /// What the sink answers to `progress` (`None`: the default, every chunk is progress).
+    progress: Option<Progress>,
+    deadline: Option<WaitMs>,
 }
 
 impl Seen {
@@ -248,6 +257,14 @@ impl BodySink for Seen {
             Some(n) if self.chunks.len() >= n => ChunkFlow::Stop,
             _ => ChunkFlow::Continue,
         }
+    }
+
+    fn progress(&self) -> Progress {
+        self.progress.unwrap_or(Progress::Made)
+    }
+
+    fn deadline(&self) -> Option<WaitMs> {
+        self.deadline
     }
 }
 
@@ -593,6 +610,39 @@ async fn the_timeouts_are_the_endpoints() {
     let result = run(ep, &post("/chat/completions", Framing::Sse), &mut seen).await;
     assert_eq!(result, Err(HttpError::Timeout));
     assert_eq!(seen.chunks.len(), 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn chunks_that_make_no_progress_do_not_reset_the_idle_timeout() {
+    // A keep-alive comment every 5 ms, forever: each chunk arrives well inside the idle timeout
+    // but carries nothing, so the idle timer runs out all the same.
+    let server = serve(Wire::Unix, vec![sse_head(), Step::Drip(": ping\n\n")]).await;
+    let mut ep = endpoint(server.target.clone());
+    ep.timeouts.idle = WaitMs(150);
+    let mut seen = Seen {
+        progress: Some(Progress::Idle),
+        ..Seen::default()
+    };
+    let result = run(ep, &post("/chat/completions", Framing::Sse), &mut seen).await;
+    assert_eq!(result, Err(HttpError::Timeout));
+    assert!(!seen.chunks.is_empty());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn the_sinks_total_deadline_ends_a_stream_that_keeps_making_progress() {
+    let server = serve(Wire::Unix, vec![sse_head(), Step::Drip("data: x\n\n")]).await;
+    let mut seen = Seen {
+        deadline: Some(WaitMs(200)),
+        ..Seen::default()
+    };
+    let result = run(
+        endpoint(server.target.clone()),
+        &post("/chat/completions", Framing::Sse),
+        &mut seen,
+    )
+    .await;
+    assert_eq!(result, Err(HttpError::Timeout));
+    assert!(!seen.chunks.is_empty());
 }
 
 #[tokio::test(flavor = "current_thread")]

@@ -191,6 +191,7 @@ fn request() -> TurnRequest {
         limits: Limits {
             max_output: Tokens(8),
             stop: vec![],
+            deadline: None,
         },
         sampling: Sampling {
             temperature: Milli(0),

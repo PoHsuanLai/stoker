@@ -309,6 +309,7 @@ pub fn request(model: &str) -> TurnRequest {
         limits: Limits {
             max_output: Tokens(16),
             stop: vec![],
+            deadline: None,
         },
         sampling: Sampling {
             temperature: Milli(0),

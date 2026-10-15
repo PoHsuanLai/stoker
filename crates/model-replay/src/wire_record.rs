@@ -2,7 +2,7 @@
 
 use model_http::{
     BodyKind, BodySink, ChunkFlow, Exchange, Framing, HttpError, HttpStatus, NdjsonDecoder,
-    ResponseHead, SseDecoder, Transport,
+    Progress, ResponseHead, SseDecoder, Transport, WaitMs,
 };
 
 use crate::wire_form::{head_print, request_of, scrub_text};
@@ -62,6 +62,14 @@ impl<K: BodySink> BodySink for Tee<'_, K> {
         self.bytes.extend_from_slice(bytes);
         let flow = self.inner.chunk(bytes);
         self.pass(flow)
+    }
+
+    fn progress(&self) -> Progress {
+        self.inner.progress()
+    }
+
+    fn deadline(&self) -> Option<WaitMs> {
+        self.inner.deadline()
     }
 }
 

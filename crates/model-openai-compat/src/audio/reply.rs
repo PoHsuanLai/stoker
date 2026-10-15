@@ -15,6 +15,17 @@ const ERROR_BODY_MAX: usize = 64 << 10;
 /// A reply read whole (a transcription, a list) is refused above this many bytes.
 const REPLY_BODY_MAX: usize = 4 << 20;
 
+/// A streamed audio reply is cut off above this many raw bytes (about 45 minutes of 24 kHz mono
+/// PCM): a speech endpoint that never stops cannot hold the connection open for ever.
+const AUDIO_STREAM_MAX: usize = 128 << 20;
+
+/// Whether the audio stream stayed within [`AUDIO_STREAM_MAX`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Length {
+    Within,
+    Exceeded,
+}
+
 /// A non-success status, or an HTML page served as 200: what `classify` reads.
 fn is_failure(head: &ResponseHead) -> bool {
     !(200..300).contains(&head.status.0) || head.body == BodyKind::Html
@@ -96,6 +107,8 @@ pub(super) struct Pcm<'a, K> {
     reply: Whole,
     samples: u64,
     stopped: bool,
+    received: usize,
+    length: Length,
 }
 
 impl<'a, K: AudioSink> Pcm<'a, K> {
@@ -107,6 +120,8 @@ impl<'a, K: AudioSink> Pcm<'a, K> {
             reply: Whole::default(),
             samples: 0,
             stopped: false,
+            received: 0,
+            length: Length::Within,
         }
     }
 
@@ -116,6 +131,11 @@ impl<'a, K: AudioSink> Pcm<'a, K> {
         self,
         sent: Result<HttpStatus, HttpError>,
     ) -> Result<AudioMs, ProviderError> {
+        if self.length == Length::Exceeded {
+            return Err(ProviderError::Unreadable(
+                "the audio stream is too long".into(),
+            ));
+        }
         self.reply.verdict(sent)?;
         match (self.samples, self.stopped) {
             (0, false) => Err(ProviderError::Unreadable("the reply held no audio".into())),
@@ -139,6 +159,11 @@ impl<K: AudioSink> BodySink for Pcm<'_, K> {
     fn chunk(&mut self, bytes: &[u8]) -> ChunkFlow {
         if self.reply.failed() {
             return self.reply.keep(bytes);
+        }
+        self.received = self.received.saturating_add(bytes.len());
+        if self.received > AUDIO_STREAM_MAX {
+            self.length = Length::Exceeded;
+            return ChunkFlow::Stop;
         }
         let Some(audio) = self.decoder.feed(bytes) else {
             return ChunkFlow::Continue;

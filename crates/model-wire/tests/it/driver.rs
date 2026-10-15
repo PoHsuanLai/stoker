@@ -440,3 +440,99 @@ fn embed_classifies_a_failing_status() {
         Err(ProviderError::BadRequest("413".into()))
     );
 }
+
+/// A transport that plays a script of raw chunks and records what the sink says about them.
+#[derive(Default)]
+struct Probe {
+    chunks: Vec<Vec<u8>>,
+    /// How many times to send the last chunk again (or until the sink stops).
+    repeat: usize,
+    progress: std::sync::Mutex<Vec<model_http::Progress>>,
+    deadline: std::sync::Mutex<Option<model_http::WaitMs>>,
+    sent: std::sync::Mutex<usize>,
+}
+
+impl model_http::Transport for Probe {
+    fn exchange<K: model_http::BodySink>(
+        &self,
+        _ex: &model_http::Exchange,
+        sink: &mut K,
+    ) -> impl Future<Output = Result<HttpStatus, HttpError>> + Send {
+        *self.deadline.lock().unwrap() = sink.deadline();
+        sink.head(&head(200, BodyKind::EventStream));
+        let last = self.chunks.last().cloned().unwrap_or_default();
+        let all = self
+            .chunks
+            .iter()
+            .chain(std::iter::repeat_n(&last, self.repeat));
+        for chunk in all {
+            *self.sent.lock().unwrap() += 1;
+            let flow = sink.chunk(chunk);
+            self.progress.lock().unwrap().push(sink.progress());
+            if flow == model_http::ChunkFlow::Stop {
+                break;
+            }
+        }
+        std::future::ready(Ok(HttpStatus(200)))
+    }
+}
+
+fn probe_turn(
+    probe: Probe,
+    deadline: Option<model_provider::WaitMs>,
+) -> (Driver<LineCodec, Probe>, Result<TurnEnd, ProviderError>) {
+    let d = Driver::new(
+        LineCodec {
+            framing: Framing::Sse,
+        },
+        probe,
+    );
+    let mut request = request("m");
+    request.limits.deadline = deadline;
+    let result = block_on(d.turn(&request, &mut Keep::default()));
+    (d, result)
+}
+
+#[test]
+fn only_a_chunk_with_a_frame_in_it_is_progress_and_the_request_deadline_reaches_the_transport() {
+    use model_http::Progress::{Idle, Made};
+    let probe = Probe {
+        chunks: vec![
+            b": ping\n\n".to_vec(),
+            b": more\n\n".to_vec(),
+            b"data: text:a\n\n".to_vec(),
+            b"data: text".to_vec(),
+        ],
+        ..Probe::default()
+    };
+    let (d, _) = probe_turn(probe, Some(model_provider::WaitMs(5_000)));
+    let probe = d.transport();
+    assert_eq!(
+        *probe.progress.lock().unwrap(),
+        vec![Idle, Idle, Made, Idle]
+    );
+    assert_eq!(
+        *probe.deadline.lock().unwrap(),
+        Some(model_http::WaitMs(5_000))
+    );
+    let (d, _) = probe_turn(Probe::default(), None);
+    assert_eq!(*d.transport().deadline.lock().unwrap(), None);
+}
+
+#[test]
+fn a_stream_of_comments_ends_at_the_byte_cap() {
+    let probe = Probe {
+        chunks: vec![": ping\n".repeat(150_000).into_bytes()],
+        repeat: 200,
+        ..Probe::default()
+    };
+    let (d, result) = probe_turn(probe, None);
+    assert_eq!(
+        result,
+        Err(ProviderError::Unreadable("the reply is too large".into()))
+    );
+    assert!(
+        *d.transport().sent.lock().unwrap() < 100,
+        "the connection closed at the cap"
+    );
+}
