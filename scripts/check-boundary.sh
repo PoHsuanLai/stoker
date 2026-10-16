@@ -121,9 +121,14 @@ for entry in "${EXCLUDED[@]}"; do
   crate="${entry%%:*}"
   read -r -a allowed <<<"${entry#*:}"
   manifest="crates/$crate/Cargo.toml"
-  # The first line of `cargo tree` is the crate itself, whatever its package is called.
-  found=$(cargo tree --manifest-path "$manifest" --depth 1 -e normal,build --prefix none 2>/dev/null \
-    | tail -n +2 | grep '(/' | awk '{print $1}' | sort -u | tr '\n' ' ')
+  # The direct path dependencies come from the manifest alone (`--no-deps` resolves nothing), so
+  # an upstream that cannot be resolved today (sherpa-onnx-sys asks for a `zip` 2 that crates.io
+  # has yanked whole) cannot hide an edge.
+  found=$(cargo metadata --manifest-path "$manifest" --format-version 1 --no-deps 2>/dev/null \
+    | python3 -c 'import json,sys
+for d in json.load(sys.stdin)["packages"][0]["dependencies"]:
+    if d.get("path") and d["kind"] in (None, "build"): print(d["name"])' \
+    | sort -u | tr '\n' ' ')
   want=$(printf '%s\n' "${allowed[@]}" | grep . | sort -u | tr '\n' ' ')
   if [ "$found" != "$want" ]; then
     echo "EDGE: $crate (excluded) depends on [${found% }], the table allows [${want% }]"
@@ -132,8 +137,21 @@ for entry in "${EXCLUDED[@]}"; do
     echo "edges hold: $crate (excluded) depends on [${found% }]"
   fi
   leaked=0
+  # The whole tree when it resolves. When it does not, say so and check what the manifest names
+  # directly: the path dependencies are workspace members whose own trees the table above checks,
+  # so only the registry dependencies named here are left to look at.
+  if cargo tree --manifest-path "$manifest" --depth 0 >/dev/null 2>&1; then
+    reaches() { cargo tree --manifest-path "$manifest" -i "$1" -e normal,build 2>/dev/null | grep -q .; }
+  else
+    echo "NOTE: $crate (excluded) does not resolve today; its leak check covers its direct dependencies only"
+    direct=$(cargo metadata --manifest-path "$manifest" --format-version 1 --no-deps 2>/dev/null \
+      | python3 -c 'import json,sys
+for d in json.load(sys.stdin)["packages"][0]["dependencies"]:
+    if d["kind"] in (None, "build"): print(d["name"])')
+    reaches() { printf '%s\n' "$direct" | grep -qx "$1"; }
+  fi
   for dep in $PORTER $AUDIO_DEVICES $GPL_TTS; do
-    if cargo tree --manifest-path "$manifest" -i "$dep" -e normal,build 2>/dev/null | grep -q .; then
+    if reaches "$dep"; then
       echo "LEAK: $crate (excluded) depends on $dep"
       leaked=1
       fail=1
