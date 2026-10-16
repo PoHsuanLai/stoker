@@ -12,6 +12,8 @@
 #                                        With --user it moves the programs only: settings, units and
 #                                        shared files go to your own standard folders (~/.config, ~/.local/share)
 #   --destdir DIR                        put everything under DIR, for a package; nothing asks for root
+#   --sysconfdir DIR                     where the machine-wide files go (default /etc): DIR/quire/ and
+#                                        DIR/xdg/quire/; a release stages them elsewhere and places them later
 #   --no-build                           install what is already in target/release
 #   --bin-dir DIR                        install programs already built in DIR instead of building
 #   --dry-run                            print every action; build and write nothing
@@ -61,6 +63,7 @@ ROOT="$(cd "$HERE/.." && pwd)"
 
 PREFIX=""
 DESTDIR=""
+SYSCONFDIR=/etc
 MODE=system
 BUILD=1
 DRY=0
@@ -81,6 +84,8 @@ while [ $# -gt 0 ]; do
     --prefix=*) PREFIX="${1#--prefix=}" ;;
     --destdir) want_arg "$1" $#; DESTDIR="$2"; shift ;;
     --destdir=*) DESTDIR="${1#--destdir=}" ;;
+    --sysconfdir) want_arg "$1" $#; SYSCONFDIR="$2"; shift ;;
+    --sysconfdir=*) SYSCONFDIR="${1#--sysconfdir=}" ;;
     --user) MODE=user ;;
     --no-build) BUILD=0 ;;
     --dry-run) DRY=1 ;;
@@ -144,6 +149,8 @@ fi
 case "$PREFIX" in /*) ;; *) die "the prefix must be an absolute path: $PREFIX" ;; esac
 case "$PREFIX" in *[\|\&\\\ ]*) die "the prefix cannot contain spaces, |, & or \\: $PREFIX" ;; esac
 case "$DESTDIR" in ""|/*) ;; *) die "--destdir must be an absolute path: $DESTDIR" ;; esac
+case "$SYSCONFDIR" in /*) ;; *) die "--sysconfdir must be an absolute path: $SYSCONFDIR" ;; esac
+case "$SYSCONFDIR" in *[\|\&\\\ ]*) die "--sysconfdir cannot contain spaces, |, & or \\: $SYSCONFDIR" ;; esac
 
 LIBEXEC="$PREFIX/libexec/quire"
 BINDIR="$PREFIX/bin"
@@ -154,9 +161,9 @@ if [ "$MODE" = user ]; then
 else
   UNIT_DIR="$PREFIX/lib/systemd/user"
   SHARE="$PREFIX/share"
-  CONF_DIR=/etc/xdg/quire
+  CONF_DIR="$SYSCONFDIR/xdg/quire"
 fi
-SYS_QUIRE=/etc/quire
+SYS_QUIRE="$SYSCONFDIR/quire"
 
 under_home() { case "$PREFIX" in "$HOME"|"$HOME"/*) return 0 ;; *) return 1 ;; esac; }
 
