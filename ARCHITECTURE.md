@@ -404,4 +404,4 @@ machine-wide install). Nothing is built: stoker is libraries and data. Flags: `-
 `--dry-run` (print every action); `--no-build`, `--bin-dir`, `--sandbox` and `--distro` are
 accepted for the same command line as the other repos and do nothing here. Root steps use `$SUDO`,
 else sudo, doas or pkexec, else they are printed. The speech host (`speech-host-sherpa`) is not
-installed: it needs the sherpa libraries that `dev/build-sherpa.sh` fetches.
+installed: it needs the sherpa libraries that `dev/build-sherpa.sh` fetches. If it ever builds, the build is linked by the system's own linker; clang and mold are for working on the code, and an install never needs them.
