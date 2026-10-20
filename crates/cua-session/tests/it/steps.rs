@@ -107,8 +107,10 @@ fn a_tool_dialect_request_declares_the_function_and_the_space() {
     }
 }
 
+/// Holo can ask the person and Qwen cannot; for both, every action and argument is described,
+/// so a model knows a drag exists and which of its points is the press.
 #[test]
-fn holo_declares_ask_and_qwen_does_not() {
+fn holo_declares_ask_and_qwen_does_not_and_every_action_is_described() {
     let schema = |dialect| {
         let s = session(dialect, grid(), 0, 0);
         let request = s.request(&obs(0), &map(grid()), frame("f"));
@@ -119,6 +121,22 @@ fn holo_declares_ask_and_qwen_does_not() {
     };
     assert!(schema(HOLO).contains(r#""ask""#));
     assert!(!schema(QWEN).contains(r#""ask""#));
+    for dialect in [HOLO, QWEN] {
+        let parsed: serde_json::Value = serde_json::from_str(&schema(dialect)).unwrap();
+        let properties = parsed["properties"].as_object().unwrap();
+        let actions = properties["action"]["description"].as_str().unwrap();
+        for verb in properties["action"]["enum"].as_array().unwrap() {
+            let verb = verb.as_str().unwrap();
+            assert!(
+                actions.contains(&format!("* `{verb}`: ")),
+                "{verb} is described"
+            );
+        }
+        assert!(actions.contains("press the left button at `start_coordinate`"));
+        for (name, property) in properties {
+            assert!(property["description"].is_string(), "{name} is described");
+        }
+    }
 }
 
 #[test]
