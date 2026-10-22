@@ -162,7 +162,7 @@ fn a_drag_from_the_cursor_needs_to_know_the_cursor() {
 }
 
 #[test]
-fn a_drag_after_a_move_in_the_same_reply_starts_where_the_move_ended() {
+fn a_drag_after_a_move_in_the_same_reply_is_one_drag_from_where_the_move_ended() {
     // UI-Mate writes "move there, then drag" as one reply: the drag starts at the move, not at
     // the cursor the step began with.
     let context = ToolContext {
@@ -185,8 +185,9 @@ fn a_drag_after_a_move_in_the_same_reply_starts_where_the_move_ended() {
     ];
     let space = ModelSpace::Grid(GridMax(999));
     let p = parse_tool_calls_with(QWEN, context, space, &calls, Default::default()).unwrap();
+    // The move the first drag starts from is part of that drag.
     assert_eq!(
-        grid_actions(&p)[1..],
+        grid_actions(&p)[..],
         [
             CuaAction::Drag {
                 from: gat(500, 450),

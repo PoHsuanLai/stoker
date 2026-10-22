@@ -107,6 +107,16 @@ impl<S: CoordSpace> Batch<S> {
 
     /// Keeps a verb's action while there is room; otherwise records why the verb is gone.
     pub fn push(&mut self, verb: &str, result: Result<CuaAction<S>, DropReason>) {
+        // A drag that starts where the batch's last move ended is the gesture the two calls make
+        // together (a model that drags from the cursor moves there first): the move goes, since
+        // a drag moves to its start itself. A runner that performs one input per look would
+        // otherwise make the move and never the drag.
+        if let (Ok(CuaAction::Drag { from, .. }), Some(CuaAction::MoveTo { at })) =
+            (&result, self.actions.last())
+            && at == from
+        {
+            self.actions.pop();
+        }
         match result {
             Ok(action) if self.actions.len() < self.limit => self.actions.push(action),
             Ok(_) => self.drop(verb, DropReason::OverBatchLimit),
