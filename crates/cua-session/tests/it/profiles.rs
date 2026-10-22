@@ -4,8 +4,8 @@
 use crate::support;
 
 use cua_action::{
-    ActionProfile, CallFormat, Coord, CuaAction, CuaDialect, DragStyle, Point, ScrollAxis,
-    ToolDialect, VerbAlias,
+    ActionProfile, AnswerShape, CallFormat, Coord, CuaAction, CuaDialect, DragStyle, GridMax,
+    ModelSpace, Point, ResolutionWording, ScrollAxis, ToolDialect, VerbAlias,
 };
 use cua_parse::DropReason;
 use cua_session::{CuaSession, StepOutcome, TurnTranscript};
@@ -13,6 +13,7 @@ use model_provider::{ModelName, Part, StopReason, ToolSpec};
 use support::*;
 
 const QWEN: CuaDialect = CuaDialect::Tool(ToolDialect::QwenComputerUse);
+const HOLO: CuaDialect = CuaDialect::Tool(ToolDialect::Holo31);
 
 fn ui_mate() -> ActionProfile {
     ActionProfile {
@@ -323,4 +324,140 @@ fn a_call_in_a_foreign_form_is_not_read_and_the_repair_says_how_to_write_one() {
         panic!("a repair text")
     };
     assert!(!plain_said.contains("<tool_call>"), "{plain_said}");
+}
+
+/// The system text and the declared function's description, for a 0-999 grid.
+fn on_grid_999(actions: ActionProfile) -> (String, String) {
+    let space = ModelSpace::Grid(GridMax(999));
+    let profile = profile(QWEN, space, 0, 0).with_actions(actions);
+    let session = CuaSession::begin(profile, task(), ModelName("ui-mate".into()));
+    let request = session.request(&obs(0), &map(space), frame("f"));
+    let Part::Text(system) = &request.messages[0].parts[0] else {
+        panic!("a system text")
+    };
+    let description = match &request.tools[..] {
+        [ToolSpec::Function { description, .. }] => description.clone(),
+        _ => String::new(),
+    };
+    (system.clone(), description)
+}
+
+#[test]
+fn a_reply_shape_is_stated_in_the_system_message_and_only_when_the_profile_names_it() {
+    let shaped = ActionProfile {
+        answer: AnswerShape::ThinkActionCall,
+        ..ui_mate()
+    };
+    let (system, _) = on_grid_999(shaped);
+    for line in [
+        "Response format for every step:",
+        "<think>...</think>, <action>...</action>, <tool_call>...</tool_call>",
+        "use action=finished in the tool call",
+    ] {
+        assert!(system.contains(line), "{line}\n{system}");
+    }
+    // The verb is the one the model is shown for ending the run; a free reply states no shape.
+    let (system, _) = on_grid_999(ActionProfile::default());
+    assert!(!system.contains("Response format"), "{system}");
+    let (system, _) = on_grid_999(ActionProfile {
+        answer: AnswerShape::ThinkActionCall,
+        ..ActionProfile::default()
+    });
+    assert!(
+        system.contains("use action=terminate in the tool call"),
+        "{system}"
+    );
+}
+
+#[test]
+fn the_step_is_worded_by_the_action_sentence_and_a_missing_wrapper_still_acts() {
+    let shaped = ActionProfile {
+        answer: AnswerShape::ThinkActionCall,
+        ..read_by_us(CallFormat::Qwen3CoderXml)
+    };
+    let at = "<parameter=coordinate>\n[500, 250]\n</parameter>\n";
+    let call = xml_call("left_click", at);
+    let m = map(grid());
+    for (what, reply, words) in [
+        (
+            "think, action, call",
+            format!("first I look.\n</think>\n<action>Click the tab</action>\n{call}"),
+            "Click the tab",
+        ),
+        (
+            "no action: the reasoning",
+            format!("<think>I look at the tab.</think>\n{call}"),
+            "I look at the tab.",
+        ),
+        (
+            "no wrapper at all: the text before the call",
+            format!("Click it.\n{call}"),
+            "Click it.",
+        ),
+    ] {
+        let profile = profile(QWEN, grid(), 0, 0).with_actions(shaped);
+        let mut s = CuaSession::begin(profile, task(), ModelName("ui-mate".into()));
+        let sent = s.request(&obs(0), &m, frame("f"));
+        let StepOutcome::Actions {
+            thought, actions, ..
+        } = s.absorb_for(&sent, said(&reply), &m)
+        else {
+            panic!("{what}: actions")
+        };
+        assert_eq!(thought.as_deref(), Some(words), "{what}");
+        assert!(
+            matches!(&actions[..], [CuaAction::Click { .. }]),
+            "{what}: {actions:?}"
+        );
+    }
+}
+
+#[test]
+fn a_repair_of_a_shaped_reply_restates_the_order() {
+    let shaped = ActionProfile {
+        answer: AnswerShape::ThinkActionCall,
+        ..read_by_us(CallFormat::Qwen3CoderXml)
+    };
+    let profile = profile(QWEN, grid(), 0, 1).with_actions(shaped);
+    let mut s = CuaSession::begin(profile, task(), ModelName("ui-mate".into()));
+    let m = map(grid());
+    let sent = s.request(&obs(0), &m, frame("f"));
+    let StepOutcome::Repair(repair) = s.absorb_for(&sent, said("<think>hmm</think>"), &m) else {
+        panic!("a repair")
+    };
+    let Some(Part::Text(asked)) = repair.messages.last().and_then(|m| m.parts.last()) else {
+        panic!("a repair text")
+    };
+    assert!(asked.contains("Keep the order: <think>"), "{asked}");
+}
+
+#[test]
+fn the_resolution_is_worded_as_the_profile_says() {
+    let cells = ActionProfile {
+        resolution: ResolutionWording::GridCells,
+        ..ActionProfile::default()
+    };
+    // A 0-999 grid: its top by default, its cell count when the profile says so.
+    let (_, description) = on_grid_999(ActionProfile::default());
+    assert!(
+        description.contains("resolution is 999x999."),
+        "{description}"
+    );
+    let (_, description) = on_grid_999(cells);
+    assert!(
+        description.contains("resolution is 1000x1000."),
+        "{description}"
+    );
+    // The points sentence still names the grid's top.
+    let (system, _) = on_grid_999(cells);
+    assert!(system.contains("a grid of 0 to 999"), "{system}");
+    // A 0-1000 grid (Holo) with the default wording is unchanged.
+    let holo = session(HOLO, grid(), 0, 0).request(&obs(0), &map(grid()), frame("f"));
+    let [ToolSpec::Function { description, .. }] = &holo.tools[..] else {
+        panic!("one function")
+    };
+    assert!(
+        description.contains("coordinate range is 1000x1000."),
+        "{description}"
+    );
 }

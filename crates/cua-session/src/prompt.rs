@@ -4,7 +4,9 @@
 use std::borrow::Cow;
 use std::collections::VecDeque;
 
-use cua_action::{ActionProfile, CallFormat, CuaDialect, ModelSpace, TextDialect, ToolDialect};
+use cua_action::{
+    ActionProfile, CuaDialect, ModelSpace, ResolutionWording, TextDialect, ToolDialect,
+};
 use cua_parse::{CursorAt, DropReason, ParseError};
 use cua_vendors::{StepResult, WireCodec, codec};
 use model_provider::{JsonText, SchemaText, ToolName, ToolSpec};
@@ -12,7 +14,7 @@ use vision_prep::FrameMap;
 
 use crate::history::HistoryTurn;
 use crate::{CuaTaskText, MaskedRegions, ObservationIn, StepLines, StepNote};
-use crate::{calls, shown};
+use crate::{answer, calls, shown};
 
 const UI_TARS: &str = include_str!("../prompts/ui_tars_15.txt");
 const QWEN_SYSTEM: &str = include_str!("../prompts/qwen_computer_use.txt");
@@ -45,11 +47,15 @@ pub(crate) fn body(file: &str) -> &str {
     rest.trim_end()
 }
 
-/// `1000x1000` for a grid, the image's size for pixels.
-fn resolution(map: &FrameMap) -> String {
-    match map.space {
-        ModelSpace::Grid(max) => format!("{0}x{0}", max.0),
-        ModelSpace::Image => format!("{}x{}", map.image.w.0, map.image.h.0),
+/// `1000x1000` for a grid of 0 to 1000, the image's size for pixels. A profile can have the
+/// grid worded by its cell count instead (a grid of 0 to 999 is then `1000x1000` too).
+fn resolution(map: &FrameMap, wording: ResolutionWording) -> String {
+    match (map.space, wording) {
+        (ModelSpace::Grid(max), ResolutionWording::GridTop) => format!("{0}x{0}", max.0),
+        (ModelSpace::Grid(max), ResolutionWording::GridCells) => {
+            format!("{0}x{0}", u32::from(max.0) + 1)
+        }
+        (ModelSpace::Image, _) => format!("{}x{}", map.image.w.0, map.image.h.0),
     }
 }
 
@@ -61,7 +67,7 @@ fn points(map: &FrameMap) -> String {
         ),
         ModelSpace::Image => format!(
             "A point is [x, y] in pixels of the screenshot, which is {} pixels.",
-            resolution(map)
+            resolution(map, ResolutionWording::GridTop)
         ),
     }
 }
@@ -94,14 +100,21 @@ pub(crate) fn system_text(
         }
         CuaDialect::Wire(_) => None,
     };
-    // A model whose calls we read from its text is told its tools here, not in the request.
-    let block = matches!(dialect, CuaDialect::Tool(_))
+    // A model whose calls we read from its text is told its tools here, not in the request, and
+    // a model trained on one reply shape is told the shape.
+    let tooled = matches!(dialect, CuaDialect::Tool(_));
+    let tool_block = tooled
         .then(|| calls::tool_block(actions.calls, &tools(dialect, actions, map)))
         .flatten();
-    match (system, block) {
-        (Some(text), Some(block)) => Some(format!("{text}\n\n{block}")),
-        (system, _) => system,
-    }
+    let answer_block = tooled
+        .then(|| answer::block(actions, shown_name(actions, "terminate")))
+        .flatten();
+    let sections: Vec<String> = system
+        .into_iter()
+        .chain(tool_block)
+        .chain(answer_block)
+        .collect();
+    (!sections.is_empty()).then(|| sections.join("\n\n"))
 }
 
 /// Whether the goal is already in the system message (the text dialect's prompt ends with it).
@@ -118,14 +131,19 @@ fn shown_name(actions: ActionProfile, canonical: &'static str) -> &'static str {
         .map_or(canonical, |alias| alias.model_verb())
 }
 
-fn function(description: &str, schema: &str, map: &FrameMap) -> Vec<ToolSpec> {
+fn function(
+    description: &str,
+    schema: &str,
+    map: &FrameMap,
+    wording: ResolutionWording,
+) -> Vec<ToolSpec> {
     let parameters = JsonText::new(schema.trim()).map(SchemaText);
     let name = ToolName::new(FUNCTION);
     match (name, parameters) {
         (Ok(name), Ok(parameters)) => vec![ToolSpec::Function {
             name,
             description: body(description)
-                .replace("{resolution}", &resolution(map))
+                .replace("{resolution}", &resolution(map, wording))
                 .replace("{scroll}", cua_parse::SCROLL_PIXELS_RULE),
             parameters,
         }],
@@ -145,10 +163,15 @@ pub(crate) fn schema_text(dialect: ToolDialect, actions: ActionProfile) -> Cow<'
 pub(crate) fn tools(dialect: CuaDialect, actions: ActionProfile, map: &FrameMap) -> Vec<ToolSpec> {
     match dialect {
         CuaDialect::Text(_) => Vec::new(),
-        CuaDialect::Tool(ToolDialect::QwenComputerUse) => {
-            function(QWEN_TOOL, &shown::schema(QWEN_SCHEMA, actions), map)
+        CuaDialect::Tool(ToolDialect::QwenComputerUse) => function(
+            QWEN_TOOL,
+            &shown::schema(QWEN_SCHEMA, actions),
+            map,
+            actions.resolution,
+        ),
+        CuaDialect::Tool(ToolDialect::Holo31) => {
+            function(HOLO_TOOL, HOLO_SCHEMA, map, actions.resolution)
         }
-        CuaDialect::Tool(ToolDialect::Holo31) => function(HOLO_TOOL, HOLO_SCHEMA, map),
         CuaDialect::Wire(wire) => codec(wire).tools(map.image),
     }
 }
@@ -293,7 +316,7 @@ fn reason_words(reason: DropReason) -> &'static str {
 }
 
 /// The user message of a repair. It names what was wrong and never repeats the reply.
-pub(crate) fn repair_text(dialect: CuaDialect, calls: CallFormat, fault: &Fault) -> String {
+pub(crate) fn repair_text(dialect: CuaDialect, actions: ActionProfile, fault: &Fault) -> String {
     let what = match fault {
         Fault::Unparsed(ParseError::TooLarge) => "Your last reply was too long.".to_owned(),
         Fault::Unparsed(_) => "Your last reply did not hold an action I can run.".to_owned(),
@@ -314,7 +337,11 @@ pub(crate) fn repair_text(dialect: CuaDialect, calls: CallFormat, fault: &Fault)
         CuaDialect::Tool(_) => {
             // A model whose calls we read from its text is told how a call is written.
             let said = "Answer again with one call to the computer_use function.";
-            [Some(said), calls::reminder(calls)]
+            [
+                Some(said),
+                calls::reminder(actions.calls),
+                answer::reminder(actions.answer),
+            ]
                 .into_iter()
                 .flatten()
                 .collect::<Vec<&str>>()

@@ -26,6 +26,7 @@ mod scan;
 mod text_calls;
 mod tools;
 mod ui_tars;
+mod wrappers;
 
 pub use chord::{from_text as chord_from_text, from_words as chord_from_words};
 pub use common::{Batch, bounded};
@@ -35,3 +36,4 @@ pub use parse::{parse_text, parse_tool_calls, parse_tool_calls_with};
 pub use profile::{CursorAt, ToolContext};
 pub use text_calls::{ParamKinds, read_calls};
 pub use tools::SCROLL_PIXELS_RULE;
+pub use wrappers::{AnswerParts, answer_parts};

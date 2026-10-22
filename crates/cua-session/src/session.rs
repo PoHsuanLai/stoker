@@ -10,13 +10,13 @@ use model_provider::{
 };
 use vision_prep::FrameMap;
 
-use crate::calls;
 use crate::history::{self, HistoryTurn};
 use crate::prompt::{self, Fault};
 use crate::{
     CuaProfile, CuaTaskText, MaskedRegions, ObservationIn, RepairBudget, StepIndex, StepOutcome,
     TurnSettings, TurnTranscript, reply, window,
 };
+use crate::{answer, calls};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CuaSession {
@@ -267,7 +267,7 @@ impl CuaSession {
                         .collect::<Vec<DropReason>>();
                     (Fault::Refused(reasons), None)
                 } else {
-                    let thought = thought.or_else(|| thought_of(&reply));
+                    let thought = thought.or_else(|| answer::thought(&reply, self.profile.actions));
                     self.remember(sent, &reply, lines);
                     return StepOutcome::Actions {
                         thought,
@@ -374,11 +374,4 @@ fn step_message(request: &TurnRequest) -> Vec<Part> {
             m.parts.iter().filter(kept).cloned().collect()
         })
         .unwrap_or_default()
-}
-
-fn thought_of(reply: &TurnTranscript) -> Option<String> {
-    [&reply.thought, &reply.text]
-        .into_iter()
-        .find(|text| !text.trim().is_empty())
-        .map(|text| text.trim().to_owned())
 }

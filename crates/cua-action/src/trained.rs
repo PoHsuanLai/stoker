@@ -32,3 +32,28 @@ impl CallFormat {
         !matches!(self, CallFormat::Engine)
     }
 }
+
+/// The shape of a whole reply the model was trained to write.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AnswerShape {
+    /// Whatever the model writes, then its calls (the common convention).
+    #[default]
+    Free,
+    /// A `<think>...</think>` block, then one `<action>...</action>` (a short imperative saying
+    /// what to do in the interface), then the `<tool_call>` blocks, and nothing else. The session
+    /// states this in the system message, and takes the action sentence as the step's words.
+    ThinkActionCall,
+}
+
+/// How the size of a normalised grid is worded when the model is told the screen's resolution.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResolutionWording {
+    /// The grid's top: a grid of 0 to 1000 is "1000x1000" (the common convention).
+    #[default]
+    GridTop,
+    /// The grid's cell count: a grid of 0 to 999 has 1000 cells a side, "1000x1000". For a model
+    /// trained to be told so while its points run 0-999.
+    GridCells,
+}

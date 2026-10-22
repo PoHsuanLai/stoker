@@ -228,3 +228,54 @@ fn a_call_in_a_foreign_form_is_not_read() {
         );
     }
 }
+
+#[test]
+fn the_wrappers_of_a_think_action_call_reply_are_read_when_they_are_there() {
+    use cua_parse::{AnswerParts, answer_parts};
+    let some = |think: Option<&str>, action: Option<&str>| AnswerParts {
+        think: think.map(str::to_owned),
+        action: action.map(str::to_owned),
+    };
+    for (what, text, want) in [
+        (
+            "all three",
+            "<think>\nlook\n</think>\n<action> Click it </action>\n<tool_call></tool_call>",
+            some(Some("look"), Some("Click it")),
+        ),
+        (
+            "a template opened the block: no opening tag",
+            "look</think><action>Click it</action>",
+            some(Some("look"), Some("Click it")),
+        ),
+        (
+            "case does not matter",
+            "<THINK>a</THINK><Action>b</Action>",
+            some(Some("a"), Some("b")),
+        ),
+        ("no wrappers", "just a call", some(None, None)),
+        (
+            "a block that never closes",
+            "<think>a</think><action>b",
+            some(Some("a"), None),
+        ),
+        (
+            "empty wrappers",
+            "<think> </think><action></action>",
+            some(None, None),
+        ),
+        (
+            "an action inside the reasoning is not the step's",
+            "<think>I could write <action>x</action></think><action>y</action>",
+            some(Some("I could write <action>x</action>"), Some("y")),
+        ),
+        (
+            "multibyte text",
+            "<think>日本語</think><action>押す</action>",
+            some(Some("日本語"), Some("押す")),
+        ),
+    ] {
+        assert_eq!(answer_parts(text), want, "{what}");
+    }
+    let long = format!("<think>{}</think>", "a".repeat(10_000));
+    assert_eq!(answer_parts(&long).think.map(|t| t.len()), Some(4096));
+}

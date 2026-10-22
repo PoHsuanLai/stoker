@@ -1,0 +1,14 @@
+# The reply shape of a model trained to think, name one action, then call (AnswerShape::ThinkActionCall).
+# Source: the response format of UI-Mate's reference harness (RESPONSE_FORMAT); `{terminate}` is the verb the model is shown for ending the run.
+# Header lines (starting with `#`) are not sent. Placeholder: {terminate}.
+Response format for every step:
+1) Thought: A single <think>...</think> block containing step by step progress assessment and next action analysis.
+2) Action: A single <action>...</action> block containing a short imperative describing what to do in the UI.
+3) Tool Execution: A single or multiple <tool_call>...</tool_call> blocks.
+
+Rules:
+- Output exactly in the order: <think>...</think>, <action>...</action>, <tool_call>...</tool_call>.
+- From a first-person perspective, systematically assess progress and errors, evaluate potential next steps, and precisely plan text inputs (cursor position and expected outcomes)
+- Be brief for Action: one sentence for action description.
+- Do not output anything else outside those parts.
+- If finishing, use action={terminate} in the tool call. If the task is infeasible, finish with status=failure.

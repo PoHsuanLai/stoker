@@ -30,6 +30,7 @@
 //! assert_eq!(session.repairs_left(), RepairBudget(1));
 //! ```
 
+mod answer;
 mod calls;
 mod history;
 mod model;

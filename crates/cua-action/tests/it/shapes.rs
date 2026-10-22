@@ -390,6 +390,9 @@ fn action_profiles_round_trip_and_the_plain_one_is_empty() {
         (r#"{"aliases":["hotkey"]}"#, false),
         (r#"{"calls":"qwen3_coder_xml"}"#, false),
         (r#"{"calls":"engine"}"#, true),
+        (r#"{"answer":"think_action_call"}"#, false),
+        (r#"{"answer":"free","resolution":"grid_top"}"#, true),
+        (r#"{"resolution":"grid_cells"}"#, false),
     ];
     for (json, plain) in CASES {
         let profile: ActionProfile = serde_json::from_str(json).unwrap();
