@@ -17,10 +17,10 @@ trait), section 6 (copy the recipe).
 
 | Crate | Purpose | I/O |
 | --- | --- | --- |
-| `cua-action` | the provider-neutral action vocabulary: coordinate spaces (`CoordSpace`, `WindowSpace`, `ImageSpace`, `GridSpace`), `Point`/`Size`/`Rect`/`Length`, `Target`, `CuaAction<S>`, `ActionClass`, keys and chords, bounded text, dialect names (`CuaDialect`, `ModelSpace`), `ActionProfile` | none |
+| `cua-action` | the provider-neutral action vocabulary: coordinate spaces (`CoordSpace`, `WindowSpace`, `ImageSpace`, `GridSpace`), `Point`/`Size`/`Rect`/`Length`, `Target`, `CuaAction<S>`, `ActionClass`, keys and chords, bounded text, dialect names (`CuaDialect`, `ModelSpace`), `ActionProfile` and the answer-shape options it carries (`CallFormat`, `AnswerShape`, `HistoryShape`, `ResolutionWording`) | none |
 | `vision-prep` | `ResizeRule`, `fit`, `image_tokens`, `FrameMap`, `RawFrame`, `prepare` (feature `pixels`) | none; `pixels` is CPU only |
 | `model-provider` | `TurnRequest`, `Message`, `Part`, `ToolSpec`, `TurnEvent`, `TurnSink`, `Caps`, the `Provider` trait, `ProviderError`; the controls (`Sampling`, `ToolParallelism`, `EngineExtras`, `ThoughtSeal`, `Knob`); `embed` (`Embedder`, `EmbedTurn`, `EmbedRole`, `plan_batches`); `shape` (`Shape`, `Extract`, the schema, GBNF and regex conversions); `retry` (`RetryClass`, `next_wait`, `Retrying`); `logprobs` (`ChoiceScores`, `FirstTokenLogprobs`, `Logprob`, the `option_permille` helper); `sequence` (`check`); feature `testing`: `ScriptedProvider` | none |
-| `cua-parse` | `parse_text`, `parse_tool_calls`, `parse_tool_calls_with` (`ToolContext`, `CursorAt`), `Parsed`, `Dropped`, `ParseLimits` | none |
+| `cua-parse` | `parse_text`, `parse_tool_calls`, `parse_tool_calls_with` (`ToolContext`, `CursorAt`), `read_calls` (calls read from the reply text, `ParamKinds`), `answer_parts` (the `<think>` and `<action>` of a reply), `Parsed`, `Dropped`, `ParseLimits` | none |
 | `cua-vendors` | the `WireCodec` trait and one codec per `WireDialect` (formerly `cua-wire`): tool declarations, decoders and result encoders for the Anthropic, OpenAI and Gemini computer-use tools | none |
 | `cua-session` | `CuaSession`: history window, prompt assembly (`prompts/`), parse with one repair, mapping to window space; `TurnSettings`, `TranscriptSink` | none |
 | `model-replay` | cassette format, `ReplayProvider`, `RecordingProvider` over a `CassetteSink`; `wire`: wire cassettes recorded and replayed at the `Transport` seam (`RecordingTransport`, `ReplayTransport`, `ChunkPlan`); `check_sequence`; `speech`: speech cassettes (audio as digests), `SpeechReplay`, `RecordingSpeech` | an injected sink |
@@ -310,6 +310,26 @@ an argument. State the differences in the entry's `actions_out` as `profile = { 
 drag = .., scroll = .. }` (see `ui-mate-27b.toml`); the parser reads through it and the session
 shows the model its own verbs. A difference the profile cannot say (a verb that holds a key
 down) is a new `VerbAlias` or `CuaAction` variant, which is code.
+
+**Add a model trained on its own answer shape**: no code. A fine-tuned model does best when it is
+shown the shape it was trained on, and its reference harness is the source (read what it puts in the
+system message, how it reads the reply and what it replays as history). Each difference is one
+typed option in the entry, and an entry that names none behaves as before:
+`text_out.tools = "client_parsed"` with the profile's `calls = "qwen3_coder_xml"` (or `hermes_json`)
+when the reference reads the calls out of the raw reply text (the request then declares no tools, the
+system message carries the tool block generated from the same schema, `cua-parse::read_calls` reads
+the `<tool_call>` blocks from the reply and from the reasoning, and the engine line must carry no
+`--tool-call-parser`, `--reasoning-parser` or `--enable-auto-tool-choice`: a server parser strips the
+text the model reasons and calls in; `parse_entry` refuses the one without the other);
+`answer = "think_action_call"` for a reply of `<think>`, one `<action>` sentence and the calls (stated
+in the system message, restated in a repair, the action sentence is the step's words);
+`resolution = "grid_cells"` when the reference tells a 0-999 grid it is 1000x1000;
+`history = "own_replies"` when the reference replays the model's own replies as its turns, with the
+frames `image_in.per_prompt` allows (older frames become a collapsed placeholder). Pin each choice
+in the entry's header comment with the reference line it copies, and add the entry's row to the
+`shipped.rs` test for it. A wording the reference uses that none of these says is a new variant of
+the enum in `cua-action::trained`, never a prompt file for one model. When a model fails under the
+harness, turn the options on one at a time to learn which one matters.
 
 **Add a catalog entry**: a file `catalog/<id>.toml` with every field written (copy
 `holo-3.1-4b.toml`), the `id` equal to the file stem. It declares `inputs` and `outputs`

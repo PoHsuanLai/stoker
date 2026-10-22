@@ -4,6 +4,12 @@
 //! `absorb` takes the model's reply, parses it (one repair is allowed), maps its points into
 //! window space and pushes the step into the history. Nothing here waits or does I/O.
 //!
+//! How the model was trained to answer is data in its `ActionProfile` (`calls`, `answer`,
+//! `history`, `resolution`): a model whose calls are read from its text is told its tools in the
+//! system message and declares none to the server, a reply shape is stated and restated in a
+//! repair, and its own replies can be replayed as history. A profile that names none of them
+//! prompts and reads exactly as it did before.
+//!
 //! ```
 //! use cua_action::{ActionProfile, CuaDialect, GridMax, ModelSpace, ToolDialect};
 //! use cua_session::{CuaProfile, CuaSession, CuaTaskText, FrameBudget, RepairBudget};

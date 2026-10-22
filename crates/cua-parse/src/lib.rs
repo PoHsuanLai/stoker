@@ -1,4 +1,5 @@
-//! Parsers for the action dialects of local computer-use models.
+//! Parsers for the action dialects of local computer-use models, and the reading of tool calls
+//! out of reply text for a model whose server does not parse them (`read_calls`).
 //!
 //! Strict and total: no `eval`, no panic on any input, verbs on an allow-list, numbers parsed as
 //! `u32` within bounds. An unknown verb is dropped and reported, never guessed.
