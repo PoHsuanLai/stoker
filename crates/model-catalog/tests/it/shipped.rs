@@ -731,7 +731,7 @@ fn the_attached_35b_planner_is_a_qwen_moe_served_elsewhere() {
         attached.served_name,
         ServedName("qwen3.5-35b-a3b-fp8".into())
     );
-    assert_eq!(attached.tool_parser, ParserName("qwen3_coder".into()));
+    assert_eq!(attached.tool_parser, Some(ParserName("qwen3_coder".into())));
     assert_eq!(attached.reasoning_parser, Some(ParserName("qwen3".into())));
     assert_eq!(entry.licence, Licence::Open(Spdx("Apache-2.0".into())));
     let WeightSource::HuggingFace { repo, revision } = &entry.source else {

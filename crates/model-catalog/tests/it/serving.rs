@@ -55,5 +55,8 @@ fn the_parsers_are_required_but_the_reasoning_parser_is_optional() {
         e
     });
     let no_tool = ATTACHED.replace("tool_parser = \"qwen3_coder\", ", "");
-    assert!(matches!(parse_entry(&no_tool), Err(CatalogError::Toml(_))));
+    assert!(matches!(
+        parse_entry(&no_tool),
+        Err(CatalogError::AttachedToolParser)
+    ));
 }

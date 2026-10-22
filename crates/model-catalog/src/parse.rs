@@ -73,6 +73,10 @@ pub enum CatalogError {
         "`tools = \"client_parsed\"` and a computer-use `calls` format in the action profile go together"
     )]
     ClientParsedWithoutCallFormat,
+    #[error(
+        "an attached engine names its tool parser unless the entry's calls are read from the text (`tools = \"client_parsed\"`), and then it names none"
+    )]
+    AttachedToolParser,
     #[error("engine {engine} passes more inputs or outputs than its model has")]
     EngineWidensModel { engine: usize },
 }
@@ -121,6 +125,7 @@ fn parse_new(text: &str) -> Result<ModelEntry, CatalogError> {
     }
     let capabilities = file.capabilities();
     check::capabilities(&capabilities, &file.locality)?;
+    check::attached_parser(&capabilities, &file.serving)?;
     check::narrowing(&capabilities, &file.engines)?;
     Ok(file.into_entry())
 }

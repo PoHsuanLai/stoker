@@ -4,7 +4,9 @@ use speech_provider::SpeechDir;
 
 use model_provider::{CuaSupport, Tokens, ToolSupport};
 
-use crate::{Capabilities, CatalogError, DetailTable, EngineProfile, Locality, Modality, TextOut};
+use crate::{
+    Capabilities, CatalogError, DetailTable, EngineProfile, Locality, Modality, Serving, TextOut,
+};
 
 /// Every table, in the order the checks run.
 const TABLES: [DetailTable; 6] = [
@@ -92,6 +94,23 @@ fn client_parsed(c: &Capabilities, text: &TextOut) -> Result<(), CatalogError> {
         Ok(())
     } else {
         Err(CatalogError::ClientParsedWithoutCallFormat)
+    }
+}
+
+/// An attached server parses tool calls unless the entry reads them from the text itself, so the
+/// tool parser is there exactly when the calls are not client-parsed.
+pub fn attached_parser(c: &Capabilities, serving: &Serving) -> Result<(), CatalogError> {
+    let Serving::Attached(attached) = serving else {
+        return Ok(());
+    };
+    let client = c
+        .text_out
+        .as_ref()
+        .is_some_and(|text| text.tools == ToolSupport::ClientParsed);
+    if attached.tool_parser.is_some() != client {
+        Ok(())
+    } else {
+        Err(CatalogError::AttachedToolParser)
     }
 }
 
