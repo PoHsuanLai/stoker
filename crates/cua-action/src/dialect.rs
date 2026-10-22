@@ -1,5 +1,10 @@
 //! Dialect names, so that capability records and the catalog can refer to a model's action
 //! language without depending on the code that speaks it.
+//!
+//! A dialect is the convention a model's calls follow. A model that follows it with small
+//! differences (a renamed verb, a drag from the cursor) does not get a dialect of its own: its
+//! catalogue entry carries an [`ActionProfile`](crate::ActionProfile) next to the dialect, so
+//! `ToolDialect` and `CuaDialect` stay plain, `Copy` names.
 
 use serde::{Deserialize, Serialize};
 
@@ -26,7 +31,8 @@ pub enum TextDialect {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolDialect {
-    /// Qwen's `computer_use` function with an `action` argument.
+    /// Qwen's `computer_use` function with an `action` argument: the de-facto convention, after
+    /// Anthropic's computer-use tool, that most open screen models follow or vary.
     QwenComputerUse,
     /// Holo 3.1: the engine parses the Qwen3-coder XML call format into tool calls, and the
     /// action schema is the one the session's prompt declares (its chat template names no

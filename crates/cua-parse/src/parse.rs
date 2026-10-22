@@ -4,6 +4,7 @@ use cua_action::{ModelSpace, TextDialect, ToolDialect};
 use model_provider::ToolCall;
 
 use crate::common::in_space;
+use crate::profile::ToolContext;
 use crate::tools::Tools;
 use crate::ui_tars::UiTars;
 use crate::{ParseError, ParseLimits, Parsed};
@@ -27,12 +28,26 @@ pub fn parse_text(
     }
 }
 
-/// Parses the tool calls an engine extracted from a reply. Never panics.
+/// Parses the tool calls an engine extracted from a reply, by the common convention of the
+/// dialect and with no known cursor. Never panics.
 ///
 /// No calls is `NoAction`; the calls' names and arguments together over `limits.max_input` is
 /// `TooLarge`.
 pub fn parse_tool_calls(
     dialect: ToolDialect,
+    space: ModelSpace,
+    calls: &[ToolCall],
+    limits: ParseLimits,
+) -> Result<Parsed, ParseError> {
+    parse_tool_calls_with(dialect, ToolContext::default(), space, calls, limits)
+}
+
+/// [`parse_tool_calls`] for a model with an action profile and, when the step knows it, a
+/// cursor: the profile says how the model's calls differ from the convention, and a drag from
+/// the cursor is dropped as `MissingArgument` when there is none.
+pub fn parse_tool_calls_with(
+    dialect: ToolDialect,
+    context: ToolContext,
     space: ModelSpace,
     calls: &[ToolCall],
     limits: ParseLimits,
@@ -44,5 +59,13 @@ pub fn parse_tool_calls(
     if size > limits.max_input.0 as usize {
         return Err(ParseError::TooLarge);
     }
-    in_space(&Tools { dialect, calls }, space, limits)
+    in_space(
+        &Tools {
+            dialect,
+            context,
+            calls,
+        },
+        space,
+        limits,
+    )
 }

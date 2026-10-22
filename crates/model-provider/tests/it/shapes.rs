@@ -1,4 +1,4 @@
-use cua_action::{CuaDialect, GridMax, ModelSpace, ToolDialect, WireDialect};
+use cua_action::{ActionProfile, CuaDialect, GridMax, ModelSpace, ToolDialect, WireDialect};
 use model_provider::{
     Batching, CallIndex, Caps, Constraint, CuaSupport, Effort, Flow, ImageBytes, ImageCount,
     ImageDetail, ImageInput, ImageLimits, InputKind, JsonText, Limits, Message, Milli, ModelInfo,
@@ -186,6 +186,7 @@ fn caps_round_trip() {
             dialect: CuaDialect::Tool(ToolDialect::Holo31),
             batching: Batching::One,
             zoom: Zoom::Absent,
+            profile: ActionProfile::default(),
         },
     };
     let json = serde_json::to_string(&caps).unwrap();

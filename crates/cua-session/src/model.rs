@@ -1,6 +1,6 @@
 //! The state and the values that go in and out of a session (data only).
 
-use cua_action::{CuaAction, CuaDialect, ModelSpace, Point, WindowSpace};
+use cua_action::{ActionProfile, CuaAction, CuaDialect, ModelSpace, Point, WindowSpace};
 use cua_parse::{Dropped, ParseError};
 use cua_vendors::StepResult;
 use model_provider::{
@@ -88,6 +88,9 @@ impl Default for TurnSettings {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CuaProfile {
     pub dialect: CuaDialect,
+    /// How the model's calls differ from the dialect's common convention (the catalogue entry's
+    /// action profile); the default states no difference.
+    pub actions: ActionProfile,
     pub rule: ResizeRule,
     pub space: ModelSpace,
     pub history: FrameBudget,
@@ -108,12 +111,18 @@ impl CuaProfile {
     ) -> CuaProfile {
         CuaProfile {
             dialect,
+            actions: ActionProfile::default(),
             rule: images.rule,
             space: images.space,
             history: wanted.at_most(images.per_prompt),
             repair,
             encoding,
         }
+    }
+
+    /// The same profile for a model whose catalog entry states an action profile.
+    pub fn with_actions(self, actions: ActionProfile) -> CuaProfile {
+        CuaProfile { actions, ..self }
     }
 }
 

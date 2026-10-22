@@ -3,13 +3,14 @@
 
 use std::collections::VecDeque;
 
-use cua_action::{CuaDialect, ModelSpace, TextDialect, ToolDialect};
-use cua_parse::{DropReason, ParseError};
+use cua_action::{ActionProfile, CuaDialect, ModelSpace, TextDialect, ToolDialect};
+use cua_parse::{CursorAt, DropReason, ParseError};
 use cua_vendors::{StepResult, WireCodec, codec};
 use model_provider::{JsonText, SchemaText, ToolName, ToolSpec};
 use vision_prep::FrameMap;
 
 use crate::history::HistoryTurn;
+use crate::shown;
 use crate::{CuaTaskText, MaskedRegions, ObservationIn, StepLines, StepNote};
 
 const UI_TARS: &str = include_str!("../prompts/ui_tars_15.txt");
@@ -72,6 +73,7 @@ fn instruction(task: &CuaTaskText) -> String {
 /// The system message, or `None` for a vendor wire (its tool declaration carries the prompt).
 pub(crate) fn system_text(
     dialect: CuaDialect,
+    actions: ActionProfile,
     map: &FrameMap,
     task: &CuaTaskText,
 ) -> Option<String> {
@@ -81,9 +83,11 @@ pub(crate) fn system_text(
                 .replace("{language}", THOUGHT_LANGUAGE)
                 .replace("{instruction}", &instruction(task)),
         ),
-        CuaDialect::Tool(ToolDialect::QwenComputerUse) => {
-            Some(body(QWEN_SYSTEM).replace("{points}", &points(map)))
-        }
+        CuaDialect::Tool(ToolDialect::QwenComputerUse) => Some(
+            body(QWEN_SYSTEM)
+                .replace("{points}", &points(map))
+                .replace("{terminate}", shown_name(actions, "terminate")),
+        ),
         CuaDialect::Tool(ToolDialect::Holo31) => {
             Some(body(HOLO_SYSTEM).replace("{points}", &points(map)))
         }
@@ -94,6 +98,15 @@ pub(crate) fn system_text(
 /// Whether the goal is already in the system message (the text dialect's prompt ends with it).
 pub(crate) fn goal_in_system(dialect: CuaDialect) -> bool {
     matches!(dialect, CuaDialect::Text(_))
+}
+
+/// The name a model is shown for a verb of the common convention: its alias, or the verb.
+fn shown_name(actions: ActionProfile, canonical: &'static str) -> &'static str {
+    actions
+        .aliases
+        .of(canonical)
+        .next()
+        .map_or(canonical, |alias| alias.model_verb())
 }
 
 fn function(description: &str, schema: &str, map: &FrameMap) -> Vec<ToolSpec> {
@@ -112,10 +125,12 @@ fn function(description: &str, schema: &str, map: &FrameMap) -> Vec<ToolSpec> {
 }
 
 /// The tools a request declares.
-pub(crate) fn tools(dialect: CuaDialect, map: &FrameMap) -> Vec<ToolSpec> {
+pub(crate) fn tools(dialect: CuaDialect, actions: ActionProfile, map: &FrameMap) -> Vec<ToolSpec> {
     match dialect {
         CuaDialect::Text(_) => Vec::new(),
-        CuaDialect::Tool(ToolDialect::QwenComputerUse) => function(QWEN_TOOL, QWEN_SCHEMA, map),
+        CuaDialect::Tool(ToolDialect::QwenComputerUse) => {
+            function(QWEN_TOOL, &shown::schema(QWEN_SCHEMA, actions), map)
+        }
         CuaDialect::Tool(ToolDialect::Holo31) => function(HOLO_TOOL, HOLO_SCHEMA, map),
         CuaDialect::Wire(wire) => codec(wire).tools(map.image),
     }
@@ -137,7 +152,10 @@ fn result_text(result: &StepResult) -> String {
 }
 
 /// Where the cursor is, in the model's own coordinates.
-fn cursor_text(map: &FrameMap, at: cua_action::Point<cua_action::WindowSpace>) -> String {
+pub(crate) fn cursor_in_model(
+    map: &FrameMap,
+    at: cua_action::Point<cua_action::WindowSpace>,
+) -> CursorAt {
     let (x, y) = match map.space {
         ModelSpace::Image => {
             let p = map.window_to_image(at);
@@ -153,6 +171,11 @@ fn cursor_text(map: &FrameMap, at: cua_action::Point<cua_action::WindowSpace>) -
             (axis(at.x.0, map.window.w.0), axis(at.y.0, map.window.h.0))
         }
     };
+    CursorAt { x, y }
+}
+
+fn cursor_text(map: &FrameMap, at: cua_action::Point<cua_action::WindowSpace>) -> String {
+    let CursorAt { x, y } = cursor_in_model(map, at);
     format!("The cursor is at [{x}, {y}].")
 }
 

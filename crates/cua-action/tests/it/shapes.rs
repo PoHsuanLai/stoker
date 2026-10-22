@@ -363,3 +363,55 @@ fn gate_vocabulary_round_trips_by_snake_case_name() {
         (WindowClass::Banking, "banking"),
     ]);
 }
+
+#[test]
+fn action_profiles_round_trip_and_the_plain_one_is_empty() {
+    use cua_action::{ActionProfile, DragStyle, ScrollAxis, VerbAlias, VerbAliases};
+    let ui_mate = ActionProfile {
+        aliases: vec![
+            VerbAlias::Drag,
+            VerbAlias::Finished,
+            VerbAlias::Hotkey,
+            VerbAlias::Press,
+            VerbAlias::CallUser,
+        ]
+        .into(),
+        drag: DragStyle::FromCursor,
+        scroll: ScrollAxis::ByDirection,
+    };
+    const CASES: &[(&str, bool)] = &[
+        ("{}", true),
+        (
+            r#"{"drag":"from_start","scroll":"by_verb","aliases":[]}"#,
+            true,
+        ),
+        (r#"{"drag":"from_cursor"}"#, false),
+        (r#"{"aliases":["hotkey"]}"#, false),
+    ];
+    for (json, plain) in CASES {
+        let profile: ActionProfile = serde_json::from_str(json).unwrap();
+        assert_eq!(profile.is_plain(), *plain, "{json}");
+        let back = serde_json::to_string(&profile).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ActionProfile>(&back).unwrap(),
+            profile
+        );
+    }
+    let json = serde_json::to_string(&ui_mate).unwrap();
+    assert_eq!(
+        json,
+        r#"{"aliases":["drag","finished","hotkey","press","call_user"],"drag":"from_cursor","scroll":"by_direction"}"#
+    );
+    // A verb slug is the verb the model writes, and a set resolves only what it holds.
+    for alias in ui_mate.aliases.iter() {
+        let slug = serde_json::to_string(&alias).unwrap();
+        assert_eq!(slug, format!("\"{}\"", alias.model_verb()));
+        assert_eq!(ui_mate.aliases.resolve(alias.model_verb()), Some(alias));
+    }
+    assert_eq!(VerbAliases::default().resolve("drag"), None);
+    assert_eq!(
+        ui_mate.aliases.of("key").collect::<Vec<_>>(),
+        [VerbAlias::Hotkey, VerbAlias::Press]
+    );
+    assert!(serde_json::from_str::<ActionProfile>(r#"{"drags":"x"}"#).is_err());
+}

@@ -1,4 +1,4 @@
-use cua_action::{CuaDialect, GridMax, ModelSpace, ToolDialect};
+use cua_action::{ActionProfile, CuaDialect, GridMax, ModelSpace, ToolDialect};
 use cua_session::{CuaProfile, CuaSession, CuaTaskText, FrameBudget, RepairBudget};
 use model_provider::ModelName;
 use vision_prep::{Encoding, PatchFactor, PixelCount, ResizeRule};
@@ -6,6 +6,7 @@ use vision_prep::{Encoding, PatchFactor, PixelCount, ResizeRule};
 fn profile() -> CuaProfile {
     CuaProfile {
         dialect: CuaDialect::Tool(ToolDialect::Holo31),
+        actions: ActionProfile::default(),
         rule: ResizeRule::SmartResize {
             factor: PatchFactor(32),
             min_pixels: PixelCount(65_536),

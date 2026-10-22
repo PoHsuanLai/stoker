@@ -2,8 +2,8 @@
 
 use std::collections::VecDeque;
 
-use cua_action::{CuaDialect, TextDialect};
-use cua_parse::{DropReason, ParseLimits, Parsed};
+use cua_action::{CuaDialect, Point, TextDialect, WindowSpace};
+use cua_parse::{DropReason, ParseLimits, Parsed, ToolContext};
 use cua_vendors::{WireCodec, codec};
 use model_provider::{
     ImageInput, Message, ModelName, OutputShape, Part, Role, ToolChoice, TurnRequest,
@@ -77,13 +77,14 @@ impl CuaSession {
         if let CuaDialect::Wire(wire) = dialect {
             return self.build_wire(wire, obs, map, image);
         }
-        let mut messages: Vec<Message> = prompt::system_text(dialect, map, &self.task)
-            .map(|text| Message {
-                role: Role::System,
-                parts: vec![Part::Text(text)],
-            })
-            .into_iter()
-            .collect();
+        let mut messages: Vec<Message> =
+            prompt::system_text(dialect, self.profile.actions, map, &self.task)
+                .map(|text| Message {
+                    role: Role::System,
+                    parts: vec![Part::Text(text)],
+                })
+                .into_iter()
+                .collect();
         let text_dialect = matches!(dialect, CuaDialect::Text(TextDialect::UiTars15));
         let mut lead = prompt::observation_lines(
             dialect,
@@ -126,7 +127,7 @@ impl CuaSession {
         TurnRequest {
             model: self.model.clone(),
             messages,
-            tools: prompt::tools(dialect, map),
+            tools: prompt::tools(dialect, self.profile.actions, map),
             tool_choice: ToolChoice::Auto,
             tool_calls: self.settings.tool_calls,
             output: OutputShape::Free,
@@ -190,7 +191,7 @@ impl CuaSession {
         TurnRequest {
             model: self.model.clone(),
             messages,
-            tools: prompt::tools(self.profile.dialect, map),
+            tools: prompt::tools(self.profile.dialect, self.profile.actions, map),
             tool_choice: ToolChoice::Auto,
             tool_calls: self.settings.tool_calls,
             output: OutputShape::Free,
@@ -226,8 +227,25 @@ impl CuaSession {
         reply: TurnTranscript,
         map: &FrameMap,
     ) -> StepOutcome {
+        self.absorb_at(sent, reply, map, None)
+    }
+
+    /// [`absorb_for`](Self::absorb_for) for a step that knows where the cursor was (the
+    /// observation's `cursor`). A model whose action profile drags from the cursor needs it: with
+    /// `None`, such a drag is refused as a missing argument.
+    pub fn absorb_at(
+        &mut self,
+        sent: &TurnRequest,
+        reply: TurnTranscript,
+        map: &FrameMap,
+        cursor: Option<Point<WindowSpace>>,
+    ) -> StepOutcome {
         let dialect = self.profile.dialect;
-        let parsed = reply::parse(dialect, map.space, &reply, ParseLimits::default());
+        let context = ToolContext {
+            profile: self.profile.actions,
+            cursor: cursor.map(|at| prompt::cursor_in_model(map, at)),
+        };
+        let parsed = reply::parse(dialect, map.space, context, &reply, ParseLimits::default());
         let (fault, spent) = match parsed {
             Ok(Parsed {
                 thought,

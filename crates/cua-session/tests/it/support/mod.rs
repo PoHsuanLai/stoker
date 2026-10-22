@@ -1,7 +1,9 @@
 //! Builders shared by the session tests. Each test file uses a subset.
 #![allow(dead_code)]
 
-use cua_action::{Coord, CuaDialect, GridMax, ModelSpace, Scale120, Size, WindowSpace};
+use cua_action::{
+    ActionProfile, Coord, CuaDialect, GridMax, ModelSpace, Scale120, Size, WindowSpace,
+};
 use cua_session::{
     CuaProfile, CuaSession, CuaTaskText, FrameBudget, MaskedRegions, ObservationIn, RepairBudget,
     StepIndex, TurnTranscript,
@@ -37,6 +39,7 @@ pub fn grid() -> ModelSpace {
 pub fn profile(dialect: CuaDialect, space: ModelSpace, history: u8, repair: u8) -> CuaProfile {
     CuaProfile {
         dialect,
+        actions: ActionProfile::default(),
         rule: rule(),
         space,
         history: FrameBudget(history),

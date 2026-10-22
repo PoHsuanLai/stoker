@@ -5,6 +5,11 @@
 //! argument (`left_click`, `type`, `key`, `scroll`, `terminate`, ...), a point as
 //! `coordinate: [x, y]`.
 //!
+//! A model's `ActionProfile` (from its catalogue entry) is read first, through `profile`: verbs
+//! it writes under other names, a drag from the cursor, a scroll whose axis is an argument. A
+//! verb the profile does not claim is read as above, so an entry without a profile parses as it
+//! always did.
+//!
 //! `Holo31` reads the same schema and adds a few verbs the session's prompt declares: the verb
 //! may also be the function's own name, a point may be `x` and `y`, and `click`, `drag`, `move`,
 //! `finish`, `ask` and `observe` exist. The chat template of Holo 3.1 names no computer-use
@@ -19,6 +24,7 @@ use model_provider::ToolCall;
 use serde_json::{Map, Value};
 
 use crate::common::{Batch, Collected, Ctx, Dialect, bounded, click, scroll_length};
+use crate::profile::{self, ToolContext};
 use crate::{DropReason, ParseError, ParseLimits, chord};
 
 /// Qwen's function name.
@@ -32,11 +38,12 @@ const MS_PER_SECOND: f64 = 1000.0;
 
 pub(crate) struct Tools<'a> {
     pub dialect: cua_action::ToolDialect,
+    pub context: ToolContext,
     pub calls: &'a [ToolCall],
 }
 
-type Args = Map<String, Value>;
-type Verdict<T> = Result<T, DropReason>;
+pub(crate) type Args = Map<String, Value>;
+pub(crate) type Verdict<T> = Result<T, DropReason>;
 
 impl Dialect for Tools<'_> {
     fn collect<S: CoordSpace>(
@@ -72,12 +79,13 @@ impl Tools<'_> {
         } else {
             name.to_owned()
         };
-        let result = verb_action(self.dialect, ctx, &verb, &args);
+        let result = profile::action(&self.context, self.dialect, ctx, &verb, &args)
+            .unwrap_or_else(|| verb_action(self.dialect, ctx, &verb, &args));
         (verb, result)
     }
 }
 
-fn verb_action<S: CoordSpace>(
+pub(crate) fn verb_action<S: CoordSpace>(
     dialect: ToolDialect,
     ctx: &Ctx,
     verb: &str,
@@ -148,7 +156,7 @@ fn whole(value: &Value) -> Verdict<u32> {
 
 /// A point by one prefix after another: `{prefix}coordinate: [x, y]`, else `{prefix}x` and
 /// `{prefix}y`. The first prefix that names anything decides.
-fn point<S: CoordSpace>(
+pub(crate) fn point<S: CoordSpace>(
     ctx: &Ctx,
     args: &Args,
     prefixes: &[&str],
@@ -183,7 +191,7 @@ fn names_a_point(args: &Args, prefix: &str) -> bool {
         .any(|key| args.contains_key(&format!("{prefix}{key}")))
 }
 
-fn string<'a>(args: &'a Args, name: &str) -> Verdict<&'a str> {
+pub(crate) fn string<'a>(args: &'a Args, name: &str) -> Verdict<&'a str> {
     match args.get(name) {
         None => Err(DropReason::MissingArgument),
         Some(value) => value.as_str().ok_or(DropReason::BadArgument),
@@ -218,7 +226,7 @@ fn keys(args: &Args) -> Verdict<cua_action::Chord> {
 }
 
 #[derive(Clone, Copy)]
-enum Axis {
+pub(crate) enum Axis {
     Vertical,
     Horizontal,
 }
@@ -227,7 +235,7 @@ enum Axis {
 /// way. Holo may instead give a `direction` and scroll by a fixed number of notches. A scroll
 /// that names no point acts at the centre of the frame (Qwen's schema makes the coordinate
 /// optional); a half-given point is still refused.
-fn scroll<S: CoordSpace>(
+pub(crate) fn scroll<S: CoordSpace>(
     dialect: ToolDialect,
     ctx: &Ctx,
     args: &Args,

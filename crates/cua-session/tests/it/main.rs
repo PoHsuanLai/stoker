@@ -2,6 +2,7 @@
 
 mod cassette;
 mod context;
+mod profiles;
 mod shapes;
 mod steps;
 mod support;

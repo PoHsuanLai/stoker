@@ -2,7 +2,8 @@
 
 use cua_action::{CuaAction, CuaDialect, FinishOutcome, ModelSpace, Summary};
 use cua_parse::{
-    ByteOffset, InSpace, ParseError, ParseLimits, Parsed, parse_text, parse_tool_calls,
+    ByteOffset, InSpace, ParseError, ParseLimits, Parsed, ToolContext, parse_text,
+    parse_tool_calls_with,
 };
 use cua_vendors::{WireCodec, codec};
 
@@ -11,12 +12,13 @@ use crate::TurnTranscript;
 pub(crate) fn parse(
     dialect: CuaDialect,
     space: ModelSpace,
+    context: ToolContext,
     reply: &TurnTranscript,
     limits: ParseLimits,
 ) -> Result<Parsed, ParseError> {
     match dialect {
         CuaDialect::Text(text) => parse_text(text, space, &reply.text, limits),
-        CuaDialect::Tool(tool) => parse_tool_calls(tool, space, &reply.calls, limits),
+        CuaDialect::Tool(tool) => parse_tool_calls_with(tool, context, space, &reply.calls, limits),
         CuaDialect::Wire(_) if reply.calls.is_empty() => finished_by_talking(&reply.text),
         CuaDialect::Wire(wire) => codec(wire)
             .decode(&reply.calls, &reply.safety)

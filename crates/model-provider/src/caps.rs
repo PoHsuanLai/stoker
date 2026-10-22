@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use cua_action::{CuaDialect, ModelSpace};
+use cua_action::{ActionProfile, CuaDialect, ModelSpace};
 use serde::{Deserialize, Serialize};
 use vision_prep::ResizeRule;
 
@@ -95,6 +95,9 @@ pub enum CuaSupport {
         dialect: CuaDialect,
         batching: Batching,
         zoom: Zoom,
+        /// How this model's calls differ from the common convention; absent means none.
+        #[serde(default, skip_serializing_if = "ActionProfile::is_plain")]
+        profile: ActionProfile,
     },
 }
 

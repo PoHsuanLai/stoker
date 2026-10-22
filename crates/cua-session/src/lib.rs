@@ -5,13 +5,14 @@
 //! window space and pushes the step into the history. Nothing here waits or does I/O.
 //!
 //! ```
-//! use cua_action::{CuaDialect, GridMax, ModelSpace, ToolDialect};
+//! use cua_action::{ActionProfile, CuaDialect, GridMax, ModelSpace, ToolDialect};
 //! use cua_session::{CuaProfile, CuaSession, CuaTaskText, FrameBudget, RepairBudget};
 //! use model_provider::ModelName;
 //! use vision_prep::{Encoding, PatchFactor, PixelCount, ResizeRule};
 //!
 //! let profile = CuaProfile {
 //!     dialect: CuaDialect::Tool(ToolDialect::Holo31),
+//!     actions: ActionProfile::default(),
 //!     rule: ResizeRule::SmartResize {
 //!         factor: PatchFactor(32),
 //!         min_pixels: PixelCount(65_536),
@@ -34,6 +35,7 @@ mod model;
 mod prompt;
 mod reply;
 mod session;
+mod shown;
 mod transcript;
 mod window;
 

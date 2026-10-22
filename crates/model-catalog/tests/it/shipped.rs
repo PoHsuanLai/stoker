@@ -50,6 +50,9 @@ const MORE_HOSTED: [&str; 2] = ["deepseek-v4-pro", "muse-spark-1.3-contributor"]
 /// The Holo ladder above 4B: local computer-use entries with estimated vram, checked on their own.
 const HOLO_LADDER: [&str; 2] = ["holo-3.1-9b", "holo4-35b-a3b-fp8"];
 
+/// Local computer-use entries that speak the Qwen tool dialect through an action profile.
+const PROFILED: [&str; 1] = ["ui-mate-27b"];
+
 fn read(dir: &str, id: &str) -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join(dir)
@@ -86,6 +89,7 @@ fn every_shipped_file_is_listed_here_and_has_its_id_as_stem() {
         .chain(&REMOTE)
         .chain(&MORE_HOSTED)
         .chain(&HOLO_LADDER)
+        .chain(&PROFILED)
         .map(|s| (*s).to_owned())
         .collect();
     listed.sort();
@@ -95,6 +99,7 @@ fn every_shipped_file_is_listed_here_and_has_its_id_as_stem() {
         .chain(&REMOTE)
         .chain(&MORE_HOSTED)
         .chain(&HOLO_LADDER)
+        .chain(&PROFILED)
     {
         assert_eq!(&shipped(id).id.0, id);
     }
@@ -250,7 +255,12 @@ fn the_catalog_ranks_nothing() {
         "premium",
         "default tier",
     ];
-    for id in IDS.iter().chain(&REMOTE).chain(&HOLO_LADDER) {
+    for id in IDS
+        .iter()
+        .chain(&REMOTE)
+        .chain(&HOLO_LADDER)
+        .chain(&PROFILED)
+    {
         let text = read("../../catalog", id).to_lowercase();
         for word in WORDS {
             assert!(!text.contains(word), "{id} says {word:?}");
@@ -377,6 +387,58 @@ fn the_holo_ladder_copies_the_4b_shape_with_estimated_vram() {
             "{id}: says its vram is an estimate"
         );
     }
+}
+
+#[test]
+fn ui_mate_states_its_differences_as_an_action_profile() {
+    use cua_action::{
+        ActionProfile, CuaDialect, DragStyle, GridMax, ModelSpace, ScrollAxis, ToolDialect,
+        VerbAlias,
+    };
+    use model_catalog::{Locality, MiB, Serving};
+    use model_provider::{Batching, CuaSupport, Tokens, Zoom};
+    let entry = shipped("ui-mate-27b");
+    // A 0-999 grid: the top is 999.
+    let images = entry.capabilities.image_in.unwrap();
+    assert_eq!(images.space, ModelSpace::Grid(GridMax(999)));
+    assert_eq!(
+        entry.capabilities.actions_out,
+        Some(CuaSupport::Dialect {
+            dialect: CuaDialect::Tool(ToolDialect::QwenComputerUse),
+            batching: Batching::One,
+            zoom: Zoom::Absent,
+            profile: ActionProfile {
+                aliases: vec![
+                    VerbAlias::Drag,
+                    VerbAlias::Finished,
+                    VerbAlias::Hotkey,
+                    VerbAlias::Press,
+                    VerbAlias::CallUser,
+                ]
+                .into(),
+                drag: DragStyle::FromCursor,
+                scroll: ScrollAxis::ByDirection,
+            },
+        })
+    );
+    assert_eq!(entry.locality, Locality::OnDevice);
+    assert_eq!(entry.serving, Serving::Launched);
+    assert_eq!(entry.engines[0].kind, EngineKind::Vllm);
+    let text = entry.capabilities.text_out.as_ref().unwrap();
+    assert_eq!(text.context, Tokens(16384));
+    assert_eq!(arg_after(&entry, "--max-model-len"), "16384");
+    assert_eq!(entry.vram.need(text.context), MiB(65249));
+    assert!(read("../../catalog", "ui-mate-27b").contains("estimate"));
+    // The profile survives a write and a read; an entry without one still has the plain one.
+    assert_eq!(
+        parse_entry(&toml::to_string(&entry).unwrap()).unwrap(),
+        entry
+    );
+    let Some(CuaSupport::Dialect { profile, .. }) = shipped("holo-3.1-4b").capabilities.actions_out
+    else {
+        panic!("holo-3.1-4b has a dialect")
+    };
+    assert!(profile.is_plain());
 }
 
 #[test]

@@ -17,10 +17,10 @@ trait), section 6 (copy the recipe).
 
 | Crate | Purpose | I/O |
 | --- | --- | --- |
-| `cua-action` | the provider-neutral action vocabulary: coordinate spaces (`CoordSpace`, `WindowSpace`, `ImageSpace`, `GridSpace`), `Point`/`Size`/`Rect`/`Length`, `Target`, `CuaAction<S>`, `ActionClass`, keys and chords, bounded text, dialect names (`CuaDialect`, `ModelSpace`) | none |
+| `cua-action` | the provider-neutral action vocabulary: coordinate spaces (`CoordSpace`, `WindowSpace`, `ImageSpace`, `GridSpace`), `Point`/`Size`/`Rect`/`Length`, `Target`, `CuaAction<S>`, `ActionClass`, keys and chords, bounded text, dialect names (`CuaDialect`, `ModelSpace`), `ActionProfile` | none |
 | `vision-prep` | `ResizeRule`, `fit`, `image_tokens`, `FrameMap`, `RawFrame`, `prepare` (feature `pixels`) | none; `pixels` is CPU only |
 | `model-provider` | `TurnRequest`, `Message`, `Part`, `ToolSpec`, `TurnEvent`, `TurnSink`, `Caps`, the `Provider` trait, `ProviderError`; the controls (`Sampling`, `ToolParallelism`, `EngineExtras`, `ThoughtSeal`, `Knob`); `embed` (`Embedder`, `EmbedTurn`, `EmbedRole`, `plan_batches`); `shape` (`Shape`, `Extract`, the schema, GBNF and regex conversions); `retry` (`RetryClass`, `next_wait`, `Retrying`); `logprobs` (`ChoiceScores`, `FirstTokenLogprobs`, `Logprob`, the `option_permille` helper); `sequence` (`check`); feature `testing`: `ScriptedProvider` | none |
-| `cua-parse` | `parse_text`, `parse_tool_calls`, `Parsed`, `Dropped`, `ParseLimits` | none |
+| `cua-parse` | `parse_text`, `parse_tool_calls`, `parse_tool_calls_with` (`ToolContext`, `CursorAt`), `Parsed`, `Dropped`, `ParseLimits` | none |
 | `cua-vendors` | the `WireCodec` trait and one codec per `WireDialect` (formerly `cua-wire`): tool declarations, decoders and result encoders for the Anthropic, OpenAI and Gemini computer-use tools | none |
 | `cua-session` | `CuaSession`: history window, prompt assembly (`prompts/`), parse with one repair, mapping to window space; `TurnSettings`, `TranscriptSink` | none |
 | `model-replay` | cassette format, `ReplayProvider`, `RecordingProvider` over a `CassetteSink`; `wire`: wire cassettes recorded and replayed at the `Transport` seam (`RecordingTransport`, `ReplayTransport`, `ChunkPlan`); `check_sequence`; `speech`: speech cassettes (audio as digests), `SpeechReplay`, `RecordingSpeech` | an injected sink |
@@ -85,12 +85,12 @@ stoker.
 
 | Crate | Modules |
 | --- | --- |
-| `cua-action` | `space` < `geometry`, `target`, `text`, `keys` < `dialect`, `action` |
+| `cua-action` | `space` < `geometry`, `target`, `text`, `keys` < `dialect`, `profile`, `action` |
 | `vision-prep` | `rule` < `frame_map` < `pixels` |
 | `model-provider` | `units`, `ids` < `control`, `request` < `caps`, `event` < `provider` < `embed`, `shape` (`check`, `gbnf`, `pattern`, `schema`, `from_schema`), `sequence` < `retry` < `scripted` (feature `testing`) |
-| `cua-parse` | `limits` < `outcome` < `common`, `scan`, `chord` < `ui_tars`, `tools` < `parse` |
+| `cua-parse` | `limits` < `outcome` < `common`, `scan`, `chord` < `ui_tars`, `profile` < `tools` < `parse` |
 | `cua-vendors` | `step_result`, `args`, `safety`, `results` < `anthropic`, `openai`, `gemini` < `codec` |
-| `cua-session` | `model`, `history`, `prompt`, `reply`, `window`, `transcript` < `session` |
+| `cua-session` | `model`, `history`, `shown`, `prompt`, `reply`, `window`, `transcript` < `session` |
 | `model-replay` | `print` < `cassette` < `sequence` < `provider`, `speech`, `wire` |
 | `model-catalog` | `modality`, `engine` < `capabilities` < `slot`, `view` < `entry` < `reach`, `file`, `check`, `legacy` < `parse` |
 | `engine-supervisor` | `state` < `unit`, `budget` < `step` < `host` < `fakes` (feature `testing`) |
@@ -112,6 +112,7 @@ stoker.
 | the action enum, its class, its space mapping | `cua-action::action` (`CuaAction::class`, `map_points`) |
 | limits on model-supplied text, numbers | `cua-action::text`, `keys` (checked at construction and on deserialisation) |
 | dialect names | `cua-action::dialect` |
+| how one model's calls differ from its dialect's convention | `cua-action::profile` (`ActionProfile`, in the catalogue entry's `actions_out`); read by `cua-parse::profile`, shown by `cua-session::shown` |
 | device size, scale, pixel format | `cua-action::geometry` |
 | resize rules, token estimate | `vision-prep::rule` (`fit` mirrors Qwen's `smart_resize`) |
 | window, image and grid coordinate mapping | `vision-prep::FrameMap` (the only place; refuses outside the frame, never clamps) |
@@ -300,6 +301,15 @@ on; a change is an edit of SPEC.md first. Every `todo!()` is listed in `FINDINGS
 `WireDialect`); its parser arm in `cua-parse` (or its codec in `cua-vendors`) with a fixture
 recorded by `dev/record-engine.sh`; its prompt in `cua-session/prompts/`; a row in the
 dialect slug test of `cua-action/tests/shapes.rs`.
+
+**Add a model that speaks a variant of a tool dialect**: no code. There is no standard for a
+screen model's actions; the convention is Anthropic's computer-use tool as Qwen copied it
+(`ToolDialect::QwenComputerUse`: an `action` verb and a `coordinate`), and most open screen
+models are Qwen fine-tunes that rename a verb, drag from the cursor or take a scroll axis as
+an argument. State the differences in the entry's `actions_out` as `profile = { aliases = [..],
+drag = .., scroll = .. }` (see `ui-mate-27b.toml`); the parser reads through it and the session
+shows the model its own verbs. A difference the profile cannot say (a verb that holds a key
+down) is a new `VerbAlias` or `CuaAction` variant, which is code.
 
 **Add a catalog entry**: a file `catalog/<id>.toml` with every field written (copy
 `holo-3.1-4b.toml`), the `id` equal to the file stem. It declares `inputs` and `outputs`

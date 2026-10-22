@@ -23,6 +23,7 @@ mod dialect;
 mod gate;
 mod geometry;
 mod keys;
+mod profile;
 mod space;
 mod target;
 mod text;
@@ -35,6 +36,7 @@ pub use keys::{
     Button, Chord, ChordError, ClickCount, Modifier, Notches, Repeat, RepeatError, ScrollDir,
     WaitError, WaitMs,
 };
+pub use profile::{ActionProfile, DragStyle, ScrollAxis, VerbAlias, VerbAliases};
 pub use space::{CoordSpace, GridSpace, ImageSpace, WindowSpace};
 pub use target::{NodeId, Target};
 pub use text::{Choice, ExtractedText, FieldName, Summary, TextError, TypedText};

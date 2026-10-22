@@ -2,6 +2,7 @@
 
 mod common;
 mod limits;
+mod profile;
 mod shapes;
 mod tools;
 mod total;
