@@ -52,8 +52,12 @@ impl Dialect for Tools<'_> {
         limits: ParseLimits,
     ) -> Result<Collected<S>, ParseError> {
         let mut batch = Batch::new(limits);
+        let mut context = self.context;
         for call in self.calls {
-            let (verb, result) = self.one(ctx, call);
+            let (verb, result) = self.one(&context, ctx, call);
+            if let Ok(action) = &result {
+                context.cursor = profile::cursor_after(context.cursor, action);
+            }
             batch.push(&verb, result);
         }
         batch.finish(None)
@@ -61,8 +65,14 @@ impl Dialect for Tools<'_> {
 }
 
 impl Tools<'_> {
-    /// The verb of one call, and its action or the reason it is not one.
-    fn one<S: CoordSpace>(&self, ctx: &Ctx, call: &ToolCall) -> (String, Verdict<CuaAction<S>>) {
+    /// The verb of one call, and its action or the reason it is not one. `context` carries the
+    /// cursor as the reply's earlier calls left it.
+    fn one<S: CoordSpace>(
+        &self,
+        context: &ToolContext,
+        ctx: &Ctx,
+        call: &ToolCall,
+    ) -> (String, Verdict<CuaAction<S>>) {
         let name = call.name.as_str();
         let Ok(Value::Object(args)) = serde_json::from_str::<Value>(call.input.as_str()) else {
             return (name.to_owned(), Err(DropReason::MissingArgument));
@@ -79,7 +89,7 @@ impl Tools<'_> {
         } else {
             name.to_owned()
         };
-        let result = profile::action(&self.context, self.dialect, ctx, &verb, &args)
+        let result = profile::action(context, self.dialect, ctx, &verb, &args)
             .unwrap_or_else(|| verb_action(self.dialect, ctx, &verb, &args));
         (verb, result)
     }

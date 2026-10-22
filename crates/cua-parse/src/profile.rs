@@ -53,6 +53,27 @@ pub(crate) fn action<S: CoordSpace>(
     }
 }
 
+/// Where the cursor is once `action` has run: a click, move, scroll or drag leaves it at its
+/// point; anything else leaves it where it was. A reply that moves and then drags from the cursor
+/// drags from where it moved, as the model meant.
+pub(crate) fn cursor_after<S: CoordSpace>(
+    cursor: Option<CursorAt>,
+    action: &CuaAction<S>,
+) -> Option<CursorAt> {
+    let target = match action {
+        CuaAction::Click { at, .. } | CuaAction::MoveTo { at } | CuaAction::Scroll { at, .. } => at,
+        CuaAction::Drag { to, .. } => to,
+        _ => return cursor,
+    };
+    match target {
+        Target::Point(at) => Some(CursorAt {
+            x: at.x.0,
+            y: at.y.0,
+        }),
+        Target::Node(_) | Target::Centre => cursor,
+    }
+}
+
 /// `call_user` with `text`: the model asks the person.
 fn call_user<S: CoordSpace>(args: &Args) -> Verdict<CuaAction<S>> {
     Ok(CuaAction::Ask {

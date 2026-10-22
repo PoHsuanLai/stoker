@@ -162,6 +162,47 @@ fn a_drag_from_the_cursor_needs_to_know_the_cursor() {
 }
 
 #[test]
+fn a_drag_after_a_move_in_the_same_reply_starts_where_the_move_ended() {
+    // UI-Mate writes "move there, then drag" as one reply: the drag starts at the move, not at
+    // the cursor the step began with.
+    let context = ToolContext {
+        profile: ui_mate(),
+        cursor: Some(CURSOR),
+    };
+    let calls = [
+        call(
+            "computer_use",
+            r#"{"action":"mouse_move","coordinate":[500,450]}"#,
+        ),
+        call(
+            "computer_use",
+            r#"{"action":"drag","coordinate":[700,600]}"#,
+        ),
+        call(
+            "computer_use",
+            r#"{"action":"drag","coordinate":[800,650]}"#,
+        ),
+    ];
+    let space = ModelSpace::Grid(GridMax(999));
+    let p = parse_tool_calls_with(QWEN, context, space, &calls, Default::default()).unwrap();
+    assert_eq!(
+        grid_actions(&p)[1..],
+        [
+            CuaAction::Drag {
+                from: gat(500, 450),
+                to: gat(700, 600),
+                button: Button::Left,
+            },
+            CuaAction::Drag {
+                from: gat(700, 600),
+                to: gat(800, 650),
+                button: Button::Left,
+            },
+        ]
+    );
+}
+
+#[test]
 fn what_the_profile_does_not_state_is_refused_as_before() {
     for (arguments, verb, reason) in [
         // Holding a key down cannot be said in an action: dropped, not guessed.
