@@ -8,6 +8,7 @@
 # - Meta's direct Model API is not written: its model id and base URL were not confirmed on the pages read.
 # - image_in: the pages give no per-request image limits, so this claims one image, no resizing and the image's own pixels as its space: a floor, not a limit.
 # - every field below is from those pages; prices are micro-USD per million tokens. structured is json_schema because OpenRouter lists structured_outputs. Sampling is not written (the provider's defaults apply). licence: hosted only, the provider's terms.
+# - limits: context_max is the vendor's documented limit quoted above; the only reply figure is OpenRouter's, which max_output already holds, so max_output_max is unset.
 id = "muse-spark-1.3-contributor"
 label = "Muse Spark 1.3 (contributor)"
 licence = { kind = "proprietary" }
@@ -20,5 +21,5 @@ locality = { kind = "remote", v = { reach = [
 ] } }
 inputs = ["text", "image"]
 outputs = ["text"]
-text_out = { tools = "native", structured = ["json_schema"], reasoning = "present", streaming = "present", context = 1048576, max_output = 943718 }
+text_out = { tools = "native", structured = ["json_schema"], reasoning = "present", streaming = "present", context = 1048576, max_output = 943718, context_max = 1048576 }
 image_in = { per_prompt = 1, rule = { kind = "identity" }, space = { kind = "image" } }

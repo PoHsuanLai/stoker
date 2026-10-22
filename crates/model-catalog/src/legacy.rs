@@ -96,6 +96,9 @@ impl LegacyFile {
                 streaming: caps.streaming,
                 context: caps.context,
                 max_output: caps.max_output,
+                context_max: None,
+                max_output_max: None,
+                context_min: None,
                 sampling: self.sampling,
             });
             for kind in &caps.inputs {
@@ -150,6 +153,9 @@ fn transcriber_text(speech: &SpeechCaps) -> TextOut {
         streaming: speech.streaming,
         context: Tokens(0),
         max_output: Tokens(0),
+        context_max: None,
+        max_output_max: None,
+        context_min: None,
         sampling: None,
     }
 }

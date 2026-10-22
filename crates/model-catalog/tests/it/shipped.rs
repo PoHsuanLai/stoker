@@ -5,7 +5,8 @@ use crate::support;
 use std::path::PathBuf;
 
 use model_catalog::{
-    CatalogKind, EngineKind, Family, Modality, ModelEntry, Slot, parse_entry, slot_members,
+    CatalogKind, ContextArg, EngineKind, Family, Modality, ModelEntry, Slot, parse_entry,
+    slot_members,
 };
 
 const IDS: [&str; 10] = [
@@ -112,7 +113,7 @@ fn migrated_entries_keep_every_older_field() {
         .iter()
         .filter(|id| !LOCAL_TEXT.contains(id) && !ATTACHED.contains(id))
     {
-        let (new, old) = (shipped(id), before(id));
+        let (new, old) = (without_limits(shipped(id)), before(id));
         assert_eq!(new.roles, old.roles, "{id}: the derived kinds");
         assert_eq!(new.caps, old.caps, "{id}");
         assert_eq!(new.sampling, old.sampling, "{id}");
@@ -360,11 +361,7 @@ fn the_holo_ladder_copies_the_4b_shape_with_estimated_vram() {
         );
         assert_eq!(text.tools, theirs.text_out.as_ref().unwrap().tools, "{id}");
         assert_eq!(text.context, Tokens(context), "{id}");
-        assert_eq!(
-            arg_after(&entry, "--max-model-len"),
-            context.to_string(),
-            "{id}"
-        );
+        assert_eq!(context_arg(&entry), "--max-model-len", "{id}");
         assert_eq!(entry.roles, four.roles, "{id}");
         assert_eq!(entry.locality, Locality::OnDevice, "{id}");
         assert_eq!(entry.serving, Serving::Launched, "{id}");
@@ -426,7 +423,8 @@ fn ui_mate_states_its_differences_as_an_action_profile() {
     assert_eq!(entry.engines[0].kind, EngineKind::Vllm);
     let text = entry.capabilities.text_out.as_ref().unwrap();
     assert_eq!(text.context, Tokens(16384));
-    assert_eq!(arg_after(&entry, "--max-model-len"), "16384");
+    assert_eq!(context_arg(&entry), "--max-model-len");
+    assert_eq!(text.context_max, Some(Tokens(262144)));
     assert_eq!(entry.vram.need(text.context), MiB(65249));
     assert!(read("../../catalog", "ui-mate-27b").contains("estimate"));
     // The profile survives a write and a read; an entry without one still has the plain one.
@@ -543,6 +541,62 @@ fn arg_after(entry: &ModelEntry, flag: &str) -> String {
     args[at + 1].0.clone()
 }
 
+/// The argument the entry's first engine line takes its window through.
+fn context_arg(entry: &ModelEntry) -> String {
+    match &entry.engines[0].context_arg {
+        Some(ContextArg::Flag(flag)) => flag.0.clone(),
+        other => panic!("{}: {other:?}", entry.id.0),
+    }
+}
+
+/// The entry with the model limits the older fixtures never stated cleared.
+fn without_limits(mut entry: ModelEntry) -> ModelEntry {
+    if let Some(text) = entry.capabilities.text_out.as_mut() {
+        (text.context_max, text.max_output_max, text.context_min) = (None, None, None);
+    }
+    entry
+}
+
+#[test]
+fn every_vllm_line_names_its_context_arg_and_the_limits_agree() {
+    let ids: Vec<String> = std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/../../catalog"))
+        .unwrap()
+        .map(|f| {
+            let name = f.unwrap().file_name().to_string_lossy().into_owned();
+            name.trim_end_matches(".toml").to_owned()
+        })
+        .collect();
+    for id in ids {
+        let entry = shipped(&id);
+        let Some(text) = entry.capabilities.text_out.as_ref() else {
+            continue;
+        };
+        // A model that transcribes has no chat window to serve or to state limits for.
+        if text.context.0 > 0 {
+            for engine in entry.engines.iter().filter(|e| e.kind == EngineKind::Vllm) {
+                assert!(
+                    matches!(&engine.context_arg, Some(ContextArg::Flag(_))),
+                    "{id}: a vLLM line names its context arg"
+                );
+                assert!(
+                    engine.args.iter().all(|a| a.0 != "--max-model-len"),
+                    "{id}: the window is not hard-coded in the args"
+                );
+            }
+            assert!(text.context_max.is_some(), "{id}: states context_max");
+        }
+        if let Some(max) = text.context_max {
+            assert!(max >= text.context, "{id}: context_max >= context");
+        }
+        if let Some(max) = text.max_output_max {
+            assert!(max >= text.max_output, "{id}: max_output_max >= max_output");
+        }
+        if let (Some(min), Some(max)) = (text.context_min, text.context_max) {
+            assert!(min <= max, "{id}: context_min <= context_max");
+        }
+    }
+}
+
 #[test]
 fn the_local_text_entries_are_vllm_models_with_server_parsed_tools() {
     use model_provider::{Support, ToolSupport};
@@ -565,12 +619,8 @@ fn the_local_text_entries_are_vllm_models_with_server_parsed_tools() {
                 .any(|a| a.0 == "--enable-auto-tool-choice"),
             "{id}"
         );
-        // The served window is the entry's context.
-        assert_eq!(
-            arg_after(&entry, "--max-model-len"),
-            text.context.0.to_string(),
-            "{id}"
-        );
+        // The window is the supervisor's to append, from the entry's context.
+        assert_eq!(context_arg(&entry), "--max-model-len", "{id}");
     }
 }
 

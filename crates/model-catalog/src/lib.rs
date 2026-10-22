@@ -2,7 +2,9 @@
 //!
 //! `catalog/<id>.toml` is installed at `/usr/share/stoker/catalog/` and
 //! `$XDG_DATA_HOME/stoker/catalog/`; a user file replaces the system file of the same id. Every
-//! field is written and nothing defaults: a file with a missing field is refused.
+//! field is written and nothing defaults, except the optional ones (the model's own limits
+//! `context_max`, `max_output_max`, `context_min` in `[text_out]`, an engine's `context_arg`):
+//! a file with any other field missing is refused.
 //!
 //! ```
 //! use model_catalog::parse_entry;
@@ -28,8 +30,8 @@ mod view;
 
 pub use capabilities::{Capabilities, DetailTable, Side, TextOut};
 pub use engine::{
-    AttachedEngine, EngineArg, EngineKind, EngineProfile, FileName, ParserName, ServedName,
-    Serving, WeightFiles,
+    AttachedEngine, ContextArg, EngineArg, EngineKind, EngineProfile, FileName, ParserName,
+    ServedName, Serving, WeightFiles,
 };
 pub use entry::{
     CatalogId, CatalogKind, ColdStartEstimateS, Family, GitRevision, GpuNeed, HfRepo, Licence,
@@ -38,6 +40,7 @@ pub use entry::{
 };
 pub use file::EntryFile;
 pub use modality::{Modalities, Modality};
+pub use model_provider::Tokens;
 pub use parse::{CatalogError, merge_catalogs, parse_entry};
 pub use reach::reachable;
 pub use slot::{Signature, Slot, ToolNeed, fits, slot_members};

@@ -31,6 +31,7 @@
 # graphs, no torch.compile: a start of tens of seconds instead of minutes, slower decode) starts
 # and serves. The overhead is recomputed so `need(12288)` is the 0.45 share (7336 MiB):
 # 7336 - 4393 - 144 x 12.288 = 1174. The desktop at about 2.5 GB still leaves about 6.4 GB free.
+# - limits: context_max 262144 is max_position_embeddings in the pinned config.json and the card's "262,144 natively"; the card recommends replies of 16384 but states no limit.
 id = "qwen3-4b-instruct-2507-fp8"
 label = "Qwen3 4B Instruct 2507 FP8"
 licence = { kind = "open", v = "Apache-2.0" }
@@ -48,12 +49,13 @@ reasoning = "absent"
 streaming = "present"
 context = 12288
 max_output = 2048
+context_max = 262144
 sampling = { reasoning_on = { temperature = 700, top_p = { kind = "set", v = 800 }, top_k = { kind = "set", v = 20 }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_off = { temperature = 700, top_p = { kind = "set", v = 800 }, top_k = { kind = "set", v = 20 }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_default = "off" }
 
 [[engine]]
 kind = "vllm"
+context_arg = { kind = "flag", v = "--max-model-len" }
 args = [
-  "--max-model-len", "12288",
   "--max-num-seqs", "8",
   "--max-num-batched-tokens", "2048",
   "--enable-auto-tool-choice",

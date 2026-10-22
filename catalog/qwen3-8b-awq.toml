@@ -27,6 +27,7 @@
 # - cold start: 72 s to ready with --enforce-eager (no CUDA graphs, no torch.compile).
 # - decode: about 130 tokens/s one stream, eager.
 # - engine args: --max-num-seqs 8 and --max-num-batched-tokens 2048 shrink the profiling peak.
+# - limits: context_max 40960 is max_position_embeddings in the pinned config.json, which is what vLLM serves without a rope-scaling override; the card says 32,768 natively and 131,072 with YaRN (a config change we do not ship). It states no reply limit (32768 is its advice for thinking).
 id = "qwen3-8b-awq"
 label = "Qwen3 8B AWQ"
 licence = { kind = "open", v = "Apache-2.0" }
@@ -44,12 +45,13 @@ reasoning = "present"
 streaming = "present"
 context = 12288
 max_output = 4096
+context_max = 40960
 sampling = { reasoning_on = { temperature = 600, top_p = { kind = "set", v = 950 }, top_k = { kind = "set", v = 20 }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_off = { temperature = 700, top_p = { kind = "set", v = 800 }, top_k = { kind = "set", v = 20 }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_default = "on" }
 
 [[engine]]
 kind = "vllm"
+context_arg = { kind = "flag", v = "--max-model-len" }
 args = [
-  "--max-model-len", "12288",
   "--max-num-seqs", "8",
   "--max-num-batched-tokens", "2048",
   "--enable-auto-tool-choice",

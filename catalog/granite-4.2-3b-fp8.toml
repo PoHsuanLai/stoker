@@ -27,6 +27,7 @@
 # 2026-10-07: context raised to 12288 with Qwen (the planner asks for 12000) and --enforce-eager
 # added. NOT yet measured at 12288: 0.40 left 12976 tokens of KV at 8192, so 12288 should fit;
 # the overhead is recomputed so `need(12288)` stays the 0.40 share (6521 - 4014 - 80 x 12.288 = 1524).
+# - limits: context_max 131072 is max_position_embeddings in the pinned config.json (no reply limit stated).
 id = "granite-4.2-3b-fp8"
 label = "Granite 4.2 3B FP8"
 licence = { kind = "open", v = "Apache-2.0" }
@@ -44,12 +45,13 @@ reasoning = "present"
 streaming = "present"
 context = 12288
 max_output = 4096
+context_max = 131072
 sampling = { reasoning_on = { temperature = 1000, top_p = { kind = "set", v = 950 }, top_k = { kind = "off" }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_off = { temperature = 0, top_p = { kind = "off" }, top_k = { kind = "off" }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_default = "on" }
 
 [[engine]]
 kind = "vllm"
+context_arg = { kind = "flag", v = "--max-model-len" }
 args = [
-  "--max-model-len", "12288",
   "--max-num-seqs", "8",
   "--max-num-batched-tokens", "2048",
   "--enable-auto-tool-choice",

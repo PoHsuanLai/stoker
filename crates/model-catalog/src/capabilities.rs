@@ -15,6 +15,13 @@ use crate::{EngineProfile, Modalities, Modality, SamplingDefaults};
 ///
 /// A model that only transcribes (Whisper) still outputs text; it has no chat window, so its
 /// `context` and `max_output` are zero and its audio limits sit in `audio_in`.
+///
+/// `context` and `max_output` are what the entry's engine line serves today (the window it
+/// starts with, the reply it allows). The model's own limits are separate and optional: the
+/// largest window it supports (`context_max`), the largest reply (`max_output_max`), and the
+/// window below which it is not useful (`context_min`). A reader that picks the window itself
+/// (inferd, from the free GPU memory) stays between `context_min` and `context_max`; a file that
+/// states none of them reads and writes as it always did.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TextOut {
     pub tools: ToolSupport,
@@ -24,6 +31,15 @@ pub struct TextOut {
     pub streaming: Support,
     pub context: Tokens,
     pub max_output: Tokens,
+    /// The largest window the model supports (its card or `config.json`), not what one line serves.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_max: Option<Tokens>,
+    /// The largest reply the model supports, where its card states one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_output_max: Option<Tokens>,
+    /// The window below which the model is not useful (what its reference harness needs).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_min: Option<Tokens>,
     /// Written exactly when text is also an input (a chat model); `parse_entry` checks it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sampling: Option<SamplingDefaults>,

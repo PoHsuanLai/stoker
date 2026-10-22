@@ -35,6 +35,7 @@
 #   overhead 2996 MiB is the share minus those, ASSUMING a 97887 MiB card (0.6 x 97887 = 58732) and
 #   NOT measured.
 # - cold start: 66 s of loading; the estimate adds start-up and warm-up.
+# - limits: context_max 262144 is text_config.max_position_embeddings in the pinned config.json (the card's native window); no reply limit is stated, so max_output_max is unset.
 id = "qwen3.5-35b-a3b-fp8"
 label = "Qwen3.5 35B-A3B FP8"
 licence = { kind = "open", v = "Apache-2.0" }
@@ -53,4 +54,5 @@ reasoning = "present"
 streaming = "present"
 context = 65536
 max_output = 8192
+context_max = 262144
 sampling = { reasoning_on = { temperature = 600, top_p = { kind = "set", v = 950 }, top_k = { kind = "set", v = 20 }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_off = { temperature = 700, top_p = { kind = "set", v = 800 }, top_k = { kind = "set", v = 20 }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_default = "on" }

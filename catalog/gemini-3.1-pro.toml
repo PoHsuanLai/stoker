@@ -6,6 +6,7 @@
 # - image_in: the pages give no per-request image limits, so this claims one image, no resizing and the
 #   image's own pixels as its space: a floor, not a limit. text_out: reasoning is on by default or selectable;
 #   no sampling is written (the provider's defaults apply). licence: hosted only, the provider's terms.
+# - limits: context_max and max_output_max are the vendor's documented limits quoted above.
 id = "gemini-3.1-pro"
 label = "Gemini 3.1 Pro"
 licence = { kind = "proprietary" }
@@ -19,5 +20,5 @@ locality = { kind = "remote", v = { reach = [
 ] } }
 inputs = ["text", "image"]
 outputs = ["text"]
-text_out = { tools = "native", structured = ["json_schema"], reasoning = "present", streaming = "present", context = 1048576, max_output = 65536 }
+text_out = { tools = "native", structured = ["json_schema"], reasoning = "present", streaming = "present", context = 1048576, max_output = 65536, context_max = 1048576, max_output_max = 65536 }
 image_in = { per_prompt = 1, rule = { kind = "identity" }, space = { kind = "image" } }

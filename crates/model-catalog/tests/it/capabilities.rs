@@ -270,3 +270,73 @@ fn modalities_are_a_set_of_slugs() {
     assert_eq!(serde_json::to_string(&m).unwrap(), r#"["text","audio"]"#);
     assert!(Modality::Audio.is_input() && !Modality::Vector.is_input());
 }
+
+#[test]
+fn the_models_own_limits_are_optional_and_checked_against_what_the_line_serves() {
+    use model_catalog::Tokens;
+    // The served window is 8192 and the served reply 1024 (`text_out`).
+    let limits = |extra: &str| {
+        let text =
+            text_only("x").replace("max_output = 1024", &format!("max_output = 1024{extra}"));
+        parse_entry(&text).map(|e| {
+            let t = e.capabilities.text_out.clone().unwrap();
+            // A file written back reads back the same, and an unstated limit is not written.
+            let written = toml::to_string(&e).unwrap();
+            assert_eq!(parse_entry(&written).unwrap(), e, "{extra}");
+            assert_eq!(written.contains("context_max"), t.context_max.is_some());
+            (t.context_max, t.max_output_max, t.context_min)
+        })
+    };
+    let some = |n| Some(Tokens(n));
+    for (extra, want) in [
+        ("", Ok((None, None, None))),
+        (
+            ", context_max = 32768, max_output_max = 2048, context_min = 4096",
+            Ok((some(32768), some(2048), some(4096))),
+        ),
+        // The minimum may sit above what an older line serves.
+        (
+            ", context_max = 32768, context_min = 16384",
+            Ok((some(32768), None, some(16384))),
+        ),
+        (
+            ", context_max = 4096",
+            Err(CatalogError::ContextExceedsModelMax),
+        ),
+        (
+            ", max_output_max = 512",
+            Err(CatalogError::OutputExceedsModelMax),
+        ),
+        (
+            ", context_max = 8192, context_min = 9000",
+            Err(CatalogError::MinimumExceedsModelMax),
+        ),
+    ] {
+        assert_eq!(limits(extra), want, "{extra}");
+    }
+}
+
+#[test]
+fn an_engine_names_how_it_takes_the_window_or_nothing() {
+    use model_catalog::{ContextArg, EngineArg};
+    for (line, want) in [
+        ("", None),
+        (
+            "context_arg = { kind = \"flag\", v = \"--max-model-len\" }\n",
+            Some(ContextArg::Flag(EngineArg("--max-model-len".into()))),
+        ),
+        (
+            "context_arg = { kind = \"per_request\" }\n",
+            Some(ContextArg::PerRequest),
+        ),
+    ] {
+        let block = ENGINE.replace("args = []", &format!("{line}args = []"));
+        let entry = parse_entry(&text_only("x").replace(ENGINE, &block)).unwrap();
+        assert_eq!(entry.engines[0].context_arg, want, "{line}");
+        assert_eq!(
+            parse_entry(&toml::to_string(&entry).unwrap()).unwrap(),
+            entry,
+            "{line}"
+        );
+    }
+}

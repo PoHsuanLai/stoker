@@ -2,7 +2,9 @@
 
 use speech_provider::SpeechDir;
 
-use crate::{Capabilities, CatalogError, DetailTable, EngineProfile, Locality, Modality};
+use model_provider::Tokens;
+
+use crate::{Capabilities, CatalogError, DetailTable, EngineProfile, Locality, Modality, TextOut};
 
 /// Every table, in the order the checks run.
 const TABLES: [DetailTable; 6] = [
@@ -17,7 +19,10 @@ const TABLES: [DetailTable; 6] = [
 /// A model takes and gives something; `vector` and `actions` are never inputs; a detail table is
 /// written exactly when its modality is declared; the speech tables run in their own direction;
 /// computer-use output comes with the text and image sides it is driven through; sampling is
-/// written exactly when text is also an input; the context holds the output.
+/// written exactly when text is also an input; the context holds the output; where stated, the
+/// served window and reply stay within the model's own maxima and its minimum stays within its
+/// maximum (the served window may sit below the minimum: an older line that serves less than the
+/// model is useful at is data, not an error).
 pub fn capabilities(c: &Capabilities, locality: &Locality) -> Result<(), CatalogError> {
     if c.inputs.is_empty() {
         return Err(CatalogError::NoInputs);
@@ -65,11 +70,26 @@ fn chat(c: &Capabilities, locality: &Locality) -> Result<(), CatalogError> {
     if text.max_output > text.context {
         return Err(CatalogError::OutputExceedsContext);
     }
+    limits(text)?;
     match (text_in, &text.sampling) {
         // A hosted model takes the provider's defaults: nothing to write.
         (true, None) if !locality.is_on_device() => Ok(()),
         (true, None) => Err(CatalogError::ChatRoleWithoutSampling),
         (false, Some(_)) => Err(CatalogError::SamplingWithoutChatRole),
+        _ => Ok(()),
+    }
+}
+
+fn limits(text: &TextOut) -> Result<(), CatalogError> {
+    let past = |value: Tokens, bound: Option<Tokens>| bound.is_some_and(|b| value > b);
+    if past(text.context, text.context_max) {
+        return Err(CatalogError::ContextExceedsModelMax);
+    }
+    if past(text.max_output, text.max_output_max) {
+        return Err(CatalogError::OutputExceedsModelMax);
+    }
+    match text.context_min {
+        Some(min) if past(min, text.context_max) => Err(CatalogError::MinimumExceedsModelMax),
         _ => Ok(()),
     }
 }

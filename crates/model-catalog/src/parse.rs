@@ -19,6 +19,12 @@ pub enum CatalogError {
     NoEngine,
     #[error("the entry's context window is larger than its maximum output allows for")]
     OutputExceedsContext,
+    #[error("the entry's served context window is larger than the model's maximum")]
+    ContextExceedsModelMax,
+    #[error("the entry's served maximum output is larger than the model's maximum output")]
+    OutputExceedsModelMax,
+    #[error("the entry's minimum context is larger than the model's maximum")]
+    MinimumExceedsModelMax,
     #[error("the entry lists no role")]
     NoRoles,
     #[error("the entry lists both speech_in and speech_out; a speech table has one direction")]

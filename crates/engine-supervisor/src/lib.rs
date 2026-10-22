@@ -2,7 +2,10 @@
 //!
 //! `step` is a pure machine: time is an input and effects are returned as values. The daemon
 //! carries the effects out through three seams: [`EngineHost`] starts and stops, [`ReadyProbe`]
-//! asks whether an engine answers, [`GpuProbe`] reads free memory.
+//! asks whether an engine answers, [`GpuProbe`] reads free memory. [`command`] builds the unit an
+//! engine starts with; [`command_with_window`] takes the context window as a [`Window`] (the
+//! entry's served one, or one the caller chose) and appends it through the profile's
+//! `context_arg`.
 //!
 //! ```
 //! use std::path::PathBuf;
@@ -55,5 +58,6 @@ pub use host::{EngineHost, GpuError, GpuProbe, HostError, ReadyProbe};
 pub use state::{Attempt, EngineFailure, EngineId, EngineState, ExitCode, MonoMs, Probe};
 pub use step::{Supervisor, SupervisorConfig, SupervisorIn, SupervisorOut, step};
 pub use unit::{
-    EnginePaths, EnvPair, GpuAccess, Network, ProgramPath, Sandbox, SocketPath, UnitSpec, command,
+    EnginePaths, EnvPair, GpuAccess, Network, ProgramPath, Sandbox, SocketPath, UnitSpec, Window,
+    command, command_with_window,
 };

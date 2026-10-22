@@ -86,10 +86,28 @@ impl Serving {
     }
 }
 
+/// How an engine is told the context window it serves.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "v", rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum ContextArg {
+    /// The window is the value of this command-line argument (`--max-model-len` for vLLM,
+    /// `--ctx-size` for llama-server); the supervisor appends it, so the profile's `args` do not
+    /// write the window.
+    Flag(EngineArg),
+    /// The window is set on each request (Ollama's `num_ctx`), not when the engine starts:
+    /// nothing is passed at start.
+    PerRequest,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EngineProfile {
     pub kind: EngineKind,
     pub args: Vec<EngineArg>,
+    /// How this engine takes the context window; `None` for an engine with no window (speech,
+    /// or a line that still writes its window in `args`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_arg: Option<ContextArg>,
     pub weights: WeightFiles,
     /// The inputs of the model this engine passes through, when it passes fewer than the model
     /// takes (an engine build with no audio path). `None` passes all of them. Never wider than

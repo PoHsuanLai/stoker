@@ -6,6 +6,7 @@
 # - image_in: none. The DeepSeek page says image input is not supported for this model, and the OpenRouter listing is text to text.
 # - every field below is from those pages; prices are micro-USD per million tokens.
 # - text_out: streaming is listed on DeepSeek's chat completion page ("stream"). structured is json_object: DeepSeek lists json_object, not json_schema, so a caller sends the schema in the prompt and checks the reply itself (model-extract does both). Sampling is not written (the provider's defaults apply). licence: hosted only, the provider's terms.
+# - limits: context_max and max_output_max are the vendor's documented limits quoted above.
 id = "deepseek-v4-pro"
 label = "DeepSeek V4 Pro"
 licence = { kind = "proprietary" }
@@ -19,4 +20,4 @@ locality = { kind = "remote", v = { reach = [
 ] } }
 inputs = ["text"]
 outputs = ["text"]
-text_out = { tools = "native", structured = ["json_object"], reasoning = "present", streaming = "present", context = 1000000, max_output = 384000 }
+text_out = { tools = "native", structured = ["json_object"], reasoning = "present", streaming = "present", context = 1000000, max_output = 384000, context_max = 1000000, max_output_max = 384000 }

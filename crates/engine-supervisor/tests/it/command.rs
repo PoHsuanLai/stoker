@@ -3,10 +3,12 @@
 use std::path::PathBuf;
 
 use engine_supervisor::{
-    EnginePaths, EnvPair, GpuAccess, Network, ProgramPath, Sandbox, SocketPath, UnitSpec, command,
+    EnginePaths, EnvPair, GpuAccess, Network, ProgramPath, Sandbox, SocketPath, UnitSpec, Window,
+    command, command_with_window,
 };
 use model_catalog::{
-    EngineArg, EngineKind, EngineProfile, FileName, MiB, ModelEntry, WeightFiles, parse_entry,
+    ContextArg, EngineArg, EngineKind, EngineProfile, FileName, MiB, ModelEntry, Tokens,
+    WeightFiles, parse_entry,
 };
 
 const HOLO: &str = include_str!("../../../../catalog/holo-3.1-4b.toml");
@@ -55,8 +57,6 @@ fn holo_under_vllm_is_the_pinned_unit() {
                 "holo-3.1-4b",
                 "--uds",
                 "/run/user/1000/inferd/vllm-holo.sock",
-                "--max-model-len",
-                "32768",
                 "--limit-mm-per-prompt",
                 "{\"image\":3,\"video\":0}",
                 "--enable-auto-tool-choice",
@@ -66,6 +66,8 @@ fn holo_under_vllm_is_the_pinned_unit() {
                 "qwen3",
                 "--gpu-memory-utilization",
                 "0.80",
+                "--max-model-len",
+                "32768",
             ]
             .map(|a| EngineArg(a.into()))
             .to_vec(),
@@ -89,6 +91,7 @@ fn llama_server_gets_the_gguf_files_and_the_socket_as_its_host() {
     let holo = entry(HOLO);
     let profile = EngineProfile {
         kind: EngineKind::LlamaServer,
+        context_arg: None,
         inputs: None,
         outputs: None,
         args: vec![
@@ -191,6 +194,7 @@ fn the_socket_placeholder_is_replaced_wherever_it_appears() {
     let holo = entry(HOLO);
     let profile = EngineProfile {
         kind: EngineKind::SpeechHost,
+        context_arg: None,
         inputs: None,
         outputs: None,
         args: vec![
@@ -262,6 +266,7 @@ fn a_text_only_gguf_gets_no_projector() {
     let holo = entry(HOLO);
     let weights = |mmproj: Option<&str>| EngineProfile {
         kind: EngineKind::LlamaServer,
+        context_arg: None,
         inputs: None,
         outputs: None,
         args: vec![],
@@ -287,6 +292,7 @@ fn a_gguf_file_name_with_a_directory_part_stays_in_the_snapshot() {
     let holo = entry(HOLO);
     let profile = EngineProfile {
         kind: EngineKind::LlamaServer,
+        context_arg: None,
         inputs: None,
         outputs: None,
         args: vec![],
@@ -305,6 +311,7 @@ fn llama_server_with_weights_that_are_not_gguf_gets_no_model_and_no_panic() {
     let holo = entry(HOLO);
     let profile = EngineProfile {
         kind: EngineKind::LlamaServer,
+        context_arg: None,
         inputs: None,
         outputs: None,
         args: vec![],
@@ -335,6 +342,7 @@ fn command_is_pure_and_total_over_arbitrary_text() {
                 v.0 = revision;
                 let profile = EngineProfile {
                     kind: EngineKind::LlamaServer,
+                    context_arg: None,
                     inputs: None,
                     outputs: None,
                     args: vec![EngineArg(arg)],
@@ -356,4 +364,99 @@ fn command_is_pure_and_total_over_arbitrary_text() {
             },
         )
         .unwrap();
+}
+
+/// The window arguments of a unit: every `--max-model-len` or `--ctx-size` and its value.
+fn window_args<'a>(unit: &'a UnitSpec, flag: &str) -> Vec<&'a str> {
+    let all = args(unit);
+    all.iter()
+        .enumerate()
+        .filter(|(_, a)| **a == flag)
+        .map(|(at, _)| all[at + 1])
+        .collect()
+}
+
+#[test]
+fn the_window_is_the_chosen_one_or_the_entrys_served_one() {
+    let holo = entry(HOLO);
+    let llama = |context_arg| EngineProfile {
+        kind: EngineKind::LlamaServer,
+        context_arg,
+        inputs: None,
+        outputs: None,
+        args: vec![EngineArg("--jinja".into())],
+        weights: WeightFiles::Gguf {
+            model: FileName("holo.gguf".into()),
+            mmproj: None,
+        },
+    };
+    let flag = |name: &str| Some(ContextArg::Flag(EngineArg(name.into())));
+    let unit = |profile: &EngineProfile, window| {
+        command_with_window(&holo, profile, &paths(), &socket("w"), window)
+    };
+    // (profile, window, the values of the window flag, what the line ends with)
+    for (profile, window, flag_name, want) in [
+        (
+            &holo.engines[0],
+            Window::Serve,
+            "--max-model-len",
+            vec!["32768"],
+        ),
+        (
+            &holo.engines[0],
+            Window::Chosen(Tokens(65536)),
+            "--max-model-len",
+            vec!["65536"],
+        ),
+        (&llama(flag("-c")), Window::Serve, "-c", vec!["32768"]),
+        (
+            &llama(flag("-c")),
+            Window::Chosen(Tokens(8192)),
+            "-c",
+            vec!["8192"],
+        ),
+        // Set per request, or not at all: nothing is passed at start.
+        (
+            &llama(Some(ContextArg::PerRequest)),
+            Window::Chosen(Tokens(8192)),
+            "-c",
+            vec![],
+        ),
+        (&llama(None), Window::Chosen(Tokens(8192)), "-c", vec![]),
+    ] {
+        let unit = unit(profile, window);
+        assert_eq!(
+            window_args(&unit, flag_name),
+            want,
+            "{window:?} {flag_name}"
+        );
+    }
+    // `command` is the served window.
+    assert_eq!(
+        command(&holo, &holo.engines[0], &paths(), &socket("w")),
+        command_with_window(
+            &holo,
+            &holo.engines[0],
+            &paths(),
+            &socket("w"),
+            Window::Serve
+        )
+    );
+    // The window comes last, after the listed args, so it is the one the engine reads.
+    let last = unit(&holo.engines[0], Window::Chosen(Tokens(4096)));
+    assert_eq!(
+        args(&last)[args(&last).len() - 2..],
+        ["--max-model-len", "4096"]
+    );
+}
+
+#[test]
+fn an_entry_with_no_window_to_serve_passes_none() {
+    let nemotron = entry(NEMOTRON);
+    let profile = EngineProfile {
+        context_arg: Some(ContextArg::Flag(EngineArg("--max-model-len".into()))),
+        ..nemotron.engines[0].clone()
+    };
+    let unit = command(&nemotron, &profile, &paths(), &socket("s"));
+    assert!(window_args(&unit, "--max-model-len").is_empty());
 }

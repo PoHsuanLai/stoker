@@ -37,8 +37,8 @@ computer_use = { kind = "dialect", v = { dialect = { kind = "tool", v = "holo31"
 
 [[engine]]
 kind = "vllm"
+context_arg = { kind = "flag", v = "--max-model-len" }
 args = [
-  "--max-model-len", "32768",
   "--limit-mm-per-prompt", "{\"image\":3,\"video\":0}",
   "--enable-auto-tool-choice",
   "--tool-call-parser", "qwen3_coder",

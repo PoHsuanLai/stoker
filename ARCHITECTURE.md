@@ -24,8 +24,8 @@ trait), section 6 (copy the recipe).
 | `cua-vendors` | the `WireCodec` trait and one codec per `WireDialect` (formerly `cua-wire`): tool declarations, decoders and result encoders for the Anthropic, OpenAI and Gemini computer-use tools | none |
 | `cua-session` | `CuaSession`: history window, prompt assembly (`prompts/`), parse with one repair, mapping to window space; `TurnSettings`, `TranscriptSink` | none |
 | `model-replay` | cassette format, `ReplayProvider`, `RecordingProvider` over a `CassetteSink`; `wire`: wire cassettes recorded and replayed at the `Transport` seam (`RecordingTransport`, `ReplayTransport`, `ChunkPlan`); `check_sequence`; `speech`: speech cassettes (audio as digests), `SpeechReplay`, `RecordingSpeech` | an injected sink |
-| `model-catalog` | `ModelEntry` (`family`, `cold_start_estimate_s`, `Capabilities`: `Modality` inputs and outputs with the detail tables `text_out`, `image_in`, `audio_in`, `audio_out`, `vector_out`, `actions_out`), `EngineProfile` (may narrow inputs and outputs), `Locality` (`OnDevice`, or `Remote { reach }` with `Reach { provider, model, price, wire }`), `Slot`, `fits`, `slot_members`, `reachable`, `parse_entry`, `merge_catalogs`; the shipped `catalog/*.toml`. The older view (`roles`, `caps`, `sampling`, `speech`, `embed`) is derived and deprecated: use `Slot` | none |
-| `engine-supervisor` | the pure `step` and `budget`; `command` (catalog entry to `UnitSpec`); the seams `EngineHost`, `ReadyProbe`, `GpuProbe`; feature `testing`: fakes | none; the daemon fills the seams |
+| `model-catalog` | `ModelEntry` (`family`, `cold_start_estimate_s`, `Capabilities`: `Modality` inputs and outputs with the detail tables `text_out`, `image_in`, `audio_in`, `audio_out`, `vector_out`, `actions_out`), `EngineProfile` (may narrow inputs and outputs; `context_arg: ContextArg` says how the engine takes its window), `TextOut` (`context`/`max_output` are what one engine line serves; `context_max`, `max_output_max`, `context_min` are the model's own limits, all optional), `Locality` (`OnDevice`, or `Remote { reach }` with `Reach { provider, model, price, wire }`), `Slot`, `fits`, `slot_members`, `reachable`, `parse_entry`, `merge_catalogs`; the shipped `catalog/*.toml`. The older view (`roles`, `caps`, `sampling`, `speech`, `embed`) is derived and deprecated: use `Slot` | none |
+| `engine-supervisor` | the pure `step` and `budget`; `command` and `command_with_window` (catalog entry and a `Window`, the served one or a chosen one, to `UnitSpec`); the seams `EngineHost`, `ReadyProbe`, `GpuProbe`; feature `testing`: fakes | none; the daemon fills the seams |
 | `model-http` | `HttpEndpoint` (with `Timeouts` and `ExtraHeader`s), `HttpTarget` (Tcp, Unix, Tls), `AuthHeader`, the pure `SseDecoder` and `NdjsonDecoder`, `ResponseHead`, `BodySink` (head, then chunks), `Exchange`, the `Transport` seam, `Upload` and `UploadTransport` (a POST of bytes), and `HttpClient: Transport + UploadTransport` (hyper over TCP and Unix sockets, behind the `hyper` feature; TLS to a `Tls` target behind `tls`, with `TlsRoots` choosing the roots) | yes (the transport) |
 | `model-wire` | the wire half of an endpoint: `ChatCodec`, `ChatDecoder`, `EmbedCodec`, `ErrorWire`, `CodecError`, and `Driver<C, T>`, the `Provider` (and `Embedder`) made of a codec and a transport | none (pure over the `Transport` trait) |
 | `model-extract` | structured extraction as a pure machine: `choose` (native constraint, synthetic tool call or prompted), `ExtractSession`, `Extracted`, `ExtractFailure` | none |
@@ -125,7 +125,7 @@ stoker.
 | cassette format and request fingerprints | `model-replay` |
 | the model table and its file format | `model-catalog` |
 | GPU memory in `MiB` | `model-catalog::MiB` (the supervisor uses it) |
-| turning a catalog entry into a unit to run | `engine-supervisor::command` |
+| turning a catalog entry into a unit to run, with the context window as an input | `engine-supervisor::command_with_window` (`Window::{Serve, Chosen}`) |
 | engine lifecycle and the VRAM budget | `engine-supervisor::step`, `budget` (the only place) |
 | the SSE framing | `model-http::SseDecoder` |
 | the NDJSON framing | `model-http::NdjsonDecoder` |
@@ -322,8 +322,20 @@ declared for them. Check each claim against the model card; add the id to `IDS` 
 `tests/shipped.rs`. No code unless it needs a new engine kind, weight layout or dialect.
 Files in the older shape (`roles`, `speech`, `embed`) still load.
 
+A text entry states two kinds of length. `context` and `max_output` are what its engine line
+serves today. The model's own limits are separate and optional: `context_max` (from the card or
+the pinned `config.json`'s `max_position_embeddings`, or `text_config.` for a multimodal one),
+`max_output_max` (only where the card states one) and `context_min` (below it the model is not
+useful); the header comment names each number's source. The parser refuses a served window or
+reply above its maximum and a minimum above the maximum; a served window under `context_min` is
+allowed, it is an old line. A vLLM line does not write `--max-model-len`: it names
+`context_arg = { kind = "flag", v = "--max-model-len" }` and `engine-supervisor` appends the
+flag and the window (`Window::Serve` is the entry's `context`, `Window::Chosen` the caller's, as
+inferd picks from the limits and the free GPU memory). An engine that sets the window per request
+says `context_arg = { kind = "per_request" }` and gets nothing at start.
+
 **Add an engine kind**: its `EngineKind` variant; the arm in `engine-supervisor::command`
-(program, flags, socket flag, sandbox) with a row in the `command_is_pure` table; its
+(program, flags, socket flag, sandbox, and its `ContextArg` if it takes a window at start) with a row in the `command_is_pure` table; its
 `EnginePaths` field and the settings key that fills it (`SpeechHost`: `ai.engine.speech_host.path`;
 `KokoroFastApi`: `ai.engine.kokoro.python`).
 

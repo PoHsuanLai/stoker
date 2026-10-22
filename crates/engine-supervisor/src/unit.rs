@@ -3,7 +3,8 @@
 use std::path::{Path, PathBuf};
 
 use model_catalog::{
-    EngineArg, EngineKind, EngineProfile, GpuNeed, MiB, ModelEntry, WeightFiles, WeightSource,
+    ContextArg, EngineArg, EngineKind, EngineProfile, GpuNeed, MiB, ModelEntry, Tokens,
+    WeightFiles, WeightSource,
 };
 use serde::{Deserialize, Serialize};
 
@@ -76,7 +77,49 @@ pub struct EnginePaths {
 /// the staging buffers of a load. A proposal, measured by spike S1 (FINDINGS).
 const HOST_MEMORY_BASE: MiB = MiB(4096);
 
-/// Pure: the unit that runs `profile` for `entry`, listening on `socket`.
+/// The context window an engine is started with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "v", rename_all = "snake_case")]
+pub enum Window {
+    /// The entry's `text_out.context`, the window its engine line has always served.
+    #[default]
+    Serve,
+    /// A window the caller chose (from the model's limits and the free GPU memory).
+    Chosen(Tokens),
+}
+
+impl Window {
+    /// The tokens to start with: the chosen window, or the entry's served one. `None` when the
+    /// entry has no chat window to serve (a transcriber's is zero).
+    fn tokens(self, entry: &ModelEntry) -> Option<Tokens> {
+        match self {
+            Window::Chosen(tokens) => Some(tokens),
+            Window::Serve => entry
+                .capabilities
+                .text_out
+                .as_ref()
+                .map(|text| text.context)
+                .filter(|context| context.0 > 0),
+        }
+    }
+}
+
+/// Pure: the unit that runs `profile` for `entry`, listening on `socket`, with the window the
+/// entry serves. See [`command_with_window`].
+pub fn command(
+    entry: &ModelEntry,
+    profile: &EngineProfile,
+    paths: &EnginePaths,
+    socket: &SocketPath,
+) -> UnitSpec {
+    command_with_window(entry, profile, paths, socket, Window::Serve)
+}
+
+/// Pure: the unit that runs `profile` for `entry`, listening on `socket`, with `window`.
+///
+/// A profile that names a [`ContextArg::Flag`] gets that argument and the window's tokens after
+/// its listed args (a later flag wins for the engines that repeat one); `PerRequest` and no
+/// `context_arg` add nothing, and neither does an entry with no window to serve.
 ///
 /// `{socket}` in a profile's args is replaced by the socket path wherever it appears. The weights
 /// are the entry's snapshot under `paths.hf_cache` (`models--<org>--<name>/snapshots/<revision>`):
@@ -91,11 +134,12 @@ const HOST_MEMORY_BASE: MiB = MiB(4096);
 ///
 /// `memory_max` is host memory, not VRAM: the weights and overhead figures plus
 /// [`HOST_MEMORY_BASE`], which a CPU-only entry (all-zero figures) still gets.
-pub fn command(
+pub fn command_with_window(
     entry: &ModelEntry,
     profile: &EngineProfile,
     paths: &EnginePaths,
     socket: &SocketPath,
+    window: Window,
 ) -> UnitSpec {
     let repo_dir = repo_dir(&paths.hf_cache, &entry.source);
     let snapshot = snapshot_dir(&repo_dir, &entry.source);
@@ -167,9 +211,20 @@ pub fn command(
             Vec::new(),
         ),
     };
+    let sized = match (&profile.context_arg, window.tokens(entry)) {
+        (Some(ContextArg::Flag(flag)), Some(tokens)) => {
+            vec![flag.clone(), EngineArg(tokens.0.to_string())]
+        }
+        _ => Vec::new(),
+    };
     UnitSpec {
         program,
-        args: front.into_iter().chain(back).chain(listed).collect(),
+        args: front
+            .into_iter()
+            .chain(back)
+            .chain(listed)
+            .chain(sized)
+            .collect(),
         env: vec![EnvPair {
             name: "HF_HUB_OFFLINE".into(),
             value: "1".into(),
