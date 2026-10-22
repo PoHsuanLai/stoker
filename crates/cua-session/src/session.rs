@@ -317,7 +317,7 @@ impl CuaSession {
             role: Role::User,
             parts: vec![Part::Text(prompt::repair_text(
                 dialect,
-                self.profile.actions.calls,
+                self.profile.actions,
                 fault,
             ))],
         });

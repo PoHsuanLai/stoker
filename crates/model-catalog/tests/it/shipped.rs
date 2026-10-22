@@ -469,6 +469,7 @@ fn every_client_parsed_entry_serves_without_a_server_parser() {
     use model_provider::ToolSupport;
     let client: Vec<&str> = IDS
         .iter()
+        .chain(PROFILED.iter())
         .copied()
         .filter(|id| {
             let text = shipped(id).capabilities.text_out;
