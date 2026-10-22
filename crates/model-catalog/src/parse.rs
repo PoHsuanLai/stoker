@@ -69,6 +69,8 @@ pub enum CatalogError {
     AudioTableDirection { table: DetailTable },
     #[error("computer-use output needs text and image input and the `text_out` table")]
     ActionsNeedTextAndImage,
+    #[error("`tools = \"client_parsed\"` and a computer-use `calls` format in the action profile go together")]
+    ClientParsedWithoutCallFormat,
     #[error("engine {engine} passes more inputs or outputs than its model has")]
     EngineWidensModel { engine: usize },
 }

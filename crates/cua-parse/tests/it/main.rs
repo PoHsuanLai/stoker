@@ -4,6 +4,7 @@ mod common;
 mod limits;
 mod profile;
 mod shapes;
+mod text_calls;
 mod tools;
 mod total;
 mod ui_tars;

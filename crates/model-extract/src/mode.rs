@@ -53,6 +53,9 @@ pub fn choose(
             tool: ToolName::new(FINAL_RESULT_TOOL)
                 .unwrap_or_else(|_| unreachable!("the synthetic tool name is valid")),
         },
+        // A model whose calls are read from its text is not given the synthetic result tool: the
+        // reading is the computer-use session's, and a reply is validated as prompted text.
+        ToolSupport::ClientParsed => ExtractMode::Prompted,
         // Tool support this build does not know is not relied on.
         _ => ExtractMode::Prompted,
     })

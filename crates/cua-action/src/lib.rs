@@ -27,6 +27,7 @@ mod profile;
 mod space;
 mod target;
 mod text;
+mod trained;
 
 pub use action::{ActionClass, CuaAction, Extracted, FinishOutcome, ScrollBy};
 pub use dialect::{CuaDialect, ModelSpace, TextDialect, ToolDialect, WireDialect};
@@ -40,3 +41,4 @@ pub use profile::{ActionProfile, DragStyle, ScrollAxis, VerbAlias, VerbAliases};
 pub use space::{CoordSpace, GridSpace, ImageSpace, WindowSpace};
 pub use target::{NodeId, Target};
 pub use text::{Choice, ExtractedText, FieldName, Summary, TextError, TypedText};
+pub use trained::CallFormat;

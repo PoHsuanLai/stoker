@@ -10,6 +10,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::CallFormat;
+
 /// Where a drag starts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -133,11 +135,27 @@ pub struct ActionProfile {
     pub drag: DragStyle,
     #[serde(default)]
     pub scroll: ScrollAxis,
+    /// Who reads the calls out of the reply text, and in which format.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub calls: CallFormat,
+}
+
+fn is_default<T: Default + PartialEq>(value: &T) -> bool {
+    *value == T::default()
 }
 
 impl ActionProfile {
     /// Whether this is the common convention, stating no difference.
     pub fn is_plain(&self) -> bool {
         *self == ActionProfile::default()
+    }
+
+    /// Whether the verbs, the drag and the scroll are the common convention: the tool schema a
+    /// model is shown is then the shipped file itself. The other options of the profile (how the
+    /// calls are read, the shape of the answer) leave the schema alone.
+    pub fn verbs_plain(&self) -> bool {
+        self.aliases == VerbAliases::default()
+            && self.drag == DragStyle::default()
+            && self.scroll == ScrollAxis::default()
     }
 }

@@ -378,6 +378,7 @@ fn action_profiles_round_trip_and_the_plain_one_is_empty() {
         .into(),
         drag: DragStyle::FromCursor,
         scroll: ScrollAxis::ByDirection,
+        ..ActionProfile::default()
     };
     const CASES: &[(&str, bool)] = &[
         ("{}", true),
@@ -387,6 +388,8 @@ fn action_profiles_round_trip_and_the_plain_one_is_empty() {
         ),
         (r#"{"drag":"from_cursor"}"#, false),
         (r#"{"aliases":["hotkey"]}"#, false),
+        (r#"{"calls":"qwen3_coder_xml"}"#, false),
+        (r#"{"calls":"engine"}"#, true),
     ];
     for (json, plain) in CASES {
         let profile: ActionProfile = serde_json::from_str(json).unwrap();

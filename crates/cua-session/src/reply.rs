@@ -1,13 +1,18 @@
 //! Reading a reply by dialect.
 
-use cua_action::{CuaAction, CuaDialect, FinishOutcome, ModelSpace, Summary};
+use std::borrow::Cow;
+
+use cua_action::{
+    CallFormat, CuaAction, CuaDialect, FinishOutcome, ModelSpace, Summary, ToolDialect,
+};
 use cua_parse::{
-    ByteOffset, InSpace, ParseError, ParseLimits, Parsed, ToolContext, parse_text,
-    parse_tool_calls_with,
+    ByteOffset, InSpace, ParamKinds, ParseError, ParseLimits, Parsed, ToolContext, parse_text,
+    parse_tool_calls_with, read_calls,
 };
 use cua_vendors::{WireCodec, codec};
+use model_provider::ToolCall;
 
-use crate::TurnTranscript;
+use crate::{TurnTranscript, prompt};
 
 pub(crate) fn parse(
     dialect: CuaDialect,
@@ -18,11 +23,32 @@ pub(crate) fn parse(
 ) -> Result<Parsed, ParseError> {
     match dialect {
         CuaDialect::Text(text) => parse_text(text, space, &reply.text, limits),
-        CuaDialect::Tool(tool) => parse_tool_calls_with(tool, context, space, &reply.calls, limits),
+        CuaDialect::Tool(tool) => {
+            let calls = calls_of(tool, &context, reply, limits)?;
+            parse_tool_calls_with(tool, context, space, &calls, limits)
+        }
         CuaDialect::Wire(_) if reply.calls.is_empty() => finished_by_talking(&reply.text),
         CuaDialect::Wire(wire) => codec(wire)
             .decode(&reply.calls, &reply.safety)
             .map_err(|_| ParseError::Malformed { at: ByteOffset(0) }),
+    }
+}
+
+/// The calls of a reply: the engine's, or, for a model whose profile says we read them, those
+/// written in its text (calls the engine did parse anyway are used as they are).
+fn calls_of<'a>(
+    dialect: ToolDialect,
+    context: &ToolContext,
+    reply: &'a TurnTranscript,
+    limits: ParseLimits,
+) -> Result<Cow<'a, [ToolCall]>, ParseError> {
+    match context.profile.calls {
+        CallFormat::Engine => Ok(Cow::Borrowed(&reply.calls)),
+        _ if !reply.calls.is_empty() => Ok(Cow::Borrowed(&reply.calls)),
+        format => {
+            let kinds = ParamKinds::from_schema(&prompt::schema_text(dialect, context.profile));
+            read_calls(format, &reply.text, &reply.thought, &kinds, limits).map(Cow::Owned)
+        }
     }
 }
 

@@ -10,6 +10,7 @@ use model_provider::{
 };
 use vision_prep::FrameMap;
 
+use crate::calls;
 use crate::history::{self, HistoryTurn};
 use crate::prompt::{self, Fault};
 use crate::{
@@ -127,7 +128,10 @@ impl CuaSession {
         TurnRequest {
             model: self.model.clone(),
             messages,
-            tools: prompt::tools(dialect, self.profile.actions, map),
+            tools: calls::declared(
+                self.profile.actions,
+                prompt::tools(dialect, self.profile.actions, map),
+            ),
             tool_choice: ToolChoice::Auto,
             tool_calls: self.settings.tool_calls,
             output: OutputShape::Free,
@@ -301,7 +305,11 @@ impl CuaSession {
         }
         request.messages.push(Message {
             role: Role::User,
-            parts: vec![Part::Text(prompt::repair_text(dialect, fault))],
+            parts: vec![Part::Text(prompt::repair_text(
+                dialect,
+                self.profile.actions.calls,
+                fault,
+            ))],
         });
         request
     }

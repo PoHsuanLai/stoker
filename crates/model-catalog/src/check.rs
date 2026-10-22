@@ -2,7 +2,7 @@
 
 use speech_provider::SpeechDir;
 
-use model_provider::Tokens;
+use model_provider::{CuaSupport, Tokens, ToolSupport};
 
 use crate::{Capabilities, CatalogError, DetailTable, EngineProfile, Locality, Modality, TextOut};
 
@@ -71,12 +71,27 @@ fn chat(c: &Capabilities, locality: &Locality) -> Result<(), CatalogError> {
         return Err(CatalogError::OutputExceedsContext);
     }
     limits(text)?;
+    client_parsed(c, text)?;
     match (text_in, &text.sampling) {
         // A hosted model takes the provider's defaults: nothing to write.
         (true, None) if !locality.is_on_device() => Ok(()),
         (true, None) => Err(CatalogError::ChatRoleWithoutSampling),
         (false, Some(_)) => Err(CatalogError::SamplingWithoutChatRole),
         _ => Ok(()),
+    }
+}
+
+/// Calls read from the reply text need a format to be read in, and a format needs the entry to say
+/// that the engine does not parse: otherwise both a server parser and ours would act on one reply.
+fn client_parsed(c: &Capabilities, text: &TextOut) -> Result<(), CatalogError> {
+    let format_read = matches!(
+        c.actions_out,
+        Some(CuaSupport::Dialect { profile, .. }) if profile.calls.is_read_by_us()
+    );
+    if (text.tools == ToolSupport::ClientParsed) == format_read {
+        Ok(())
+    } else {
+        Err(CatalogError::ClientParsedWithoutCallFormat)
     }
 }
 

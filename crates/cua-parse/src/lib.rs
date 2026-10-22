@@ -23,6 +23,7 @@ mod outcome;
 mod parse;
 mod profile;
 mod scan;
+mod text_calls;
 mod tools;
 mod ui_tars;
 
@@ -32,4 +33,5 @@ pub use limits::{ActionCount, ByteLen, ByteOffset, ParseLimits};
 pub use outcome::{DropReason, Dropped, InSpace, ParseError, Parsed, VerbText, VerbTextError};
 pub use parse::{parse_text, parse_tool_calls, parse_tool_calls_with};
 pub use profile::{CursorAt, ToolContext};
+pub use text_calls::{ParamKinds, read_calls};
 pub use tools::SCROLL_PIXELS_RULE;

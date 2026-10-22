@@ -37,6 +37,11 @@ pub enum ToolSupport {
     Native,
     /// The engine parses tool calls out of the model's text.
     ServerParsed,
+    /// The engine does not parse them: the request declares no tools, and the caller reads the
+    /// calls from the reply text in the format the entry's action profile names
+    /// (`cua_action::CallFormat`). For a model whose reasoning is written in that same format,
+    /// which a server-side parser would strip.
+    ClientParsed,
 }
 
 /// Output constraints an engine can enforce.

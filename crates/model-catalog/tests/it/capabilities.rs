@@ -162,6 +162,50 @@ fn a_speech_table_runs_in_its_own_direction() {
 }
 
 #[test]
+fn client_parsed_tools_and_a_call_format_go_together() {
+    let client = |text: String| text.replace(r#"tools = "native""#, r#"tools = "client_parsed""#);
+    let reads = ACTIONS_OUT.replace(
+        r#"zoom = "absent""#,
+        r#"zoom = "absent", profile = { calls = "qwen3_coder_xml" }"#,
+    );
+    for (what, text_line, actions, parses) in [
+        (
+            "client_parsed with the calls read",
+            client(text_out(true)),
+            reads.clone(),
+            true,
+        ),
+        (
+            "client_parsed without a format",
+            client(text_out(true)),
+            ACTIONS_OUT.to_owned(),
+            false,
+        ),
+        (
+            "a format with the engine's tools",
+            text_out(true),
+            reads.clone(),
+            false,
+        ),
+        ("neither", text_out(true), ACTIONS_OUT.to_owned(), true),
+    ] {
+        let text = file(
+            "x",
+            r#"["text", "image"]"#,
+            r#"["text", "actions"]"#,
+            &[text_line, IMAGE_IN.into(), actions],
+            ENGINE,
+        );
+        let want = if parses {
+            None
+        } else {
+            Some(CatalogError::ClientParsedWithoutCallFormat)
+        };
+        assert_eq!(parse_entry(&text).err(), want, "{what}");
+    }
+}
+
+#[test]
 fn computer_use_output_needs_text_and_image_input() {
     let no_image = file(
         "x",

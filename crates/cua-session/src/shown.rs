@@ -20,7 +20,7 @@ const PIXELS_BY_DIRECTION: &str = "How far `scroll` scrolls; positive is up or r
 
 /// The schema text to declare for a model: `base` with the profile's verbs.
 pub(crate) fn schema(base: &str, profile: ActionProfile) -> Cow<'_, str> {
-    if profile.is_plain() {
+    if profile.verbs_plain() {
         return Cow::Borrowed(base);
     }
     match serde_json::from_str::<Value>(base) {

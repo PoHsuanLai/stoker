@@ -30,6 +30,7 @@ fn ui_mate() -> ActionProfile {
         .into(),
         drag: DragStyle::FromCursor,
         scroll: ScrollAxis::ByDirection,
+        ..ActionProfile::default()
     }
 }
 
