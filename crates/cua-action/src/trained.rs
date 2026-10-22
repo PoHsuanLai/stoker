@@ -57,3 +57,18 @@ pub enum ResolutionWording {
     /// trained to be told so while its points run 0-999.
     GridCells,
 }
+
+/// How the earlier steps are shown to the model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HistoryShape {
+    /// A list of one line per earlier step, and the last few frames labelled by step (the common
+    /// convention).
+    #[default]
+    ActionList,
+    /// The model's own earlier replies, replayed as its turns: each earlier step is the frame it
+    /// was shown (a placeholder where the frame is no longer kept) and the reply it gave. For a
+    /// model trained on its own transcript, whose replies carry the call blocks as text, so it
+    /// goes with calls the session reads itself (`CallFormat`).
+    OwnReplies,
+}

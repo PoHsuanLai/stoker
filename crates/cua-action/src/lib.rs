@@ -41,4 +41,4 @@ pub use profile::{ActionProfile, DragStyle, ScrollAxis, VerbAlias, VerbAliases};
 pub use space::{CoordSpace, GridSpace, ImageSpace, WindowSpace};
 pub use target::{NodeId, Target};
 pub use text::{Choice, ExtractedText, FieldName, Summary, TextError, TypedText};
-pub use trained::{AnswerShape, CallFormat, ResolutionWording};
+pub use trained::{AnswerShape, CallFormat, HistoryShape, ResolutionWording};

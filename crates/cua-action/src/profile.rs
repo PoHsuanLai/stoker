@@ -10,7 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{AnswerShape, CallFormat, ResolutionWording};
+use crate::{AnswerShape, CallFormat, HistoryShape, ResolutionWording};
 
 /// Where a drag starts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
@@ -144,6 +144,9 @@ pub struct ActionProfile {
     /// How the grid's size is worded when the model is told the screen's resolution.
     #[serde(default, skip_serializing_if = "is_default")]
     pub resolution: ResolutionWording,
+    /// How the earlier steps are shown to the model.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub history: HistoryShape,
 }
 
 fn is_default<T: Default + PartialEq>(value: &T) -> bool {

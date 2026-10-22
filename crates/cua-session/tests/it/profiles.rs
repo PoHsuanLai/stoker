@@ -5,11 +5,11 @@ use crate::support;
 
 use cua_action::{
     ActionProfile, AnswerShape, CallFormat, Coord, CuaAction, CuaDialect, DragStyle, GridMax,
-    ModelSpace, Point, ResolutionWording, ScrollAxis, ToolDialect, VerbAlias,
+    HistoryShape, ModelSpace, Point, ResolutionWording, ScrollAxis, ToolDialect, VerbAlias,
 };
 use cua_parse::DropReason;
 use cua_session::{CuaSession, StepOutcome, TurnTranscript};
-use model_provider::{ModelName, Part, StopReason, ToolSpec};
+use model_provider::{ModelName, Part, Role, StopReason, ToolSpec};
 use support::*;
 
 const QWEN: CuaDialect = CuaDialect::Tool(ToolDialect::QwenComputerUse);
@@ -459,5 +459,108 @@ fn the_resolution_is_worded_as_the_profile_says() {
     assert!(
         description.contains("coordinate range is 1000x1000."),
         "{description}"
+    );
+}
+
+fn replaying(history: u8) -> CuaSession {
+    let actions = ActionProfile {
+        history: HistoryShape::OwnReplies,
+        ..read_by_us(CallFormat::Qwen3CoderXml)
+    };
+    let profile = profile(QWEN, grid(), history, 0).with_actions(actions);
+    CuaSession::begin(profile, task(), ModelName("ui-mate".into()))
+}
+
+/// Takes `replies` as the first steps, each answering a frame `f0`, `f1`, ..., and returns the
+/// request for the next step.
+fn after(mut s: CuaSession, replies: &[String]) -> model_provider::TurnRequest {
+    let m = map(grid());
+    for (n, reply) in replies.iter().enumerate() {
+        let sent = s.request(&obs(n as u32), &m, frame(&format!("f{n}")));
+        let outcome = s.absorb_for(&sent, said(reply), &m);
+        assert!(
+            matches!(outcome, StepOutcome::Actions { .. }),
+            "{outcome:?}"
+        );
+    }
+    let next = replies.len() as u32;
+    s.request(&obs(next), &m, frame(&format!("f{next}")))
+}
+
+#[test]
+fn own_replies_are_replayed_as_the_models_turns_with_the_frames_it_kept() {
+    let at = "<parameter=coordinate>\n[500, 250]\n</parameter>\n";
+    let click = xml_call("left_click", at);
+    let first = format!("<think>a</think>\n<action>one</action>\n{click}");
+    let second = format!("a preamble <think>b</think>\n<action>two</action>\n{click}");
+    let request = after(replaying(1), &[first.clone(), second]);
+    let roles: Vec<Role> = request.messages.iter().map(|m| m.role).collect();
+    assert_eq!(
+        roles,
+        [
+            Role::System,
+            Role::User,
+            Role::Assistant,
+            Role::User,
+            Role::Assistant,
+            Role::User
+        ]
+    );
+    let m = &request.messages;
+    // The goal is in the first user message, with the frame that is no longer kept replaced.
+    assert_eq!(
+        m[1].parts,
+        [
+            Part::Text("Goal: save the file\nHint: it is in the File menu".into()),
+            Part::Text("This screenshot has been collapsed.".into()),
+        ]
+    );
+    assert_eq!(m[2].parts, [Part::Text(first)]);
+    // The frame it kept, and its reply from the start of its reasoning.
+    assert_eq!(m[3].parts, [Part::Image(frame("f1"))]);
+    let Part::Text(said) = &m[4].parts[0] else {
+        panic!("a reply")
+    };
+    assert!(said.starts_with("<think>b</think>"), "{said}");
+    // The last message says nothing of the goal or of a list of earlier steps.
+    let Part::Text(lead) = &m[5].parts[0] else {
+        panic!("the lead")
+    };
+    assert!(
+        !lead.contains("Goal:") && !lead.contains("Earlier"),
+        "{lead}"
+    );
+    assert!(lead.contains("Step 2. Screenshot:"), "{lead}");
+    assert_eq!(m[5].parts[1], Part::Image(frame("f2")));
+}
+
+#[test]
+fn an_action_list_history_is_unchanged_by_the_option_existing() {
+    let click = xml_call(
+        "left_click",
+        "<parameter=coordinate>\n[500, 250]\n</parameter>\n",
+    );
+    let listed = |history: HistoryShape| {
+        let actions = ActionProfile {
+            history,
+            ..read_by_us(CallFormat::Qwen3CoderXml)
+        };
+        let profile = profile(QWEN, grid(), 1, 0).with_actions(actions);
+        let s = CuaSession::begin(profile, task(), ModelName("ui-mate".into()));
+        after(s, &[click.clone(), click.clone()])
+    };
+    let request = listed(HistoryShape::ActionList);
+    let roles: Vec<Role> = request.messages.iter().map(|m| m.role).collect();
+    assert_eq!(roles, [Role::System, Role::User]);
+    let Part::Text(lead) = &request.messages[1].parts[0] else {
+        panic!("the lead")
+    };
+    assert!(
+        lead.contains("Goal: save the file") && lead.contains("Earlier actions:"),
+        "{lead}"
+    );
+    assert_ne!(
+        listed(HistoryShape::OwnReplies).messages.len(),
+        request.messages.len()
     );
 }

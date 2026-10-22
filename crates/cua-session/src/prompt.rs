@@ -12,7 +12,7 @@ use cua_vendors::{StepResult, WireCodec, codec};
 use model_provider::{JsonText, SchemaText, ToolName, ToolSpec};
 use vision_prep::FrameMap;
 
-use crate::history::HistoryTurn;
+use crate::history::{self, HistoryTurn};
 use crate::{CuaTaskText, MaskedRegions, ObservationIn, StepLines, StepNote};
 use crate::{answer, calls, shown};
 
@@ -228,11 +228,19 @@ fn earlier_line(turn: &HistoryTurn) -> String {
     format!("- step {}: {said}", turn.number)
 }
 
+/// The goal and the hints, one line each.
+pub(crate) fn goal_lines(task: &CuaTaskText) -> Vec<String> {
+    std::iter::once(format!("Goal: {}", task.goal))
+        .chain(task.hints.iter().map(|hint| format!("Hint: {hint}")))
+        .collect()
+}
+
 /// The lines before the screenshot: goal and hints (unless the system message holds them), the
 /// earlier steps that have no frame of their own, what happened to the last actions, the masked
 /// regions and the cursor.
 pub(crate) fn observation_lines(
     dialect: CuaDialect,
+    actions: ActionProfile,
     task: &CuaTaskText,
     history: &VecDeque<HistoryTurn>,
     lines: StepLines,
@@ -242,9 +250,10 @@ pub(crate) fn observation_lines(
     let mut out = Vec::new();
     // A vendor wire says the goal once, in the first message; its history is real messages.
     let wire = matches!(dialect, CuaDialect::Wire(_));
-    if !goal_in_system(dialect) && !(wire && !history.is_empty()) {
-        out.push(format!("Goal: {}", task.goal));
-        out.extend(task.hints.iter().map(|hint| format!("Hint: {hint}")));
+    // A model whose own replies are replayed has the goal in the first replayed message.
+    let replayed = history::replays_own(dialect, actions) && !history.is_empty();
+    if !goal_in_system(dialect) && !(wire && !history.is_empty()) && !replayed {
+        out.extend(goal_lines(task));
     }
     // The text dialect replays steps that have a frame as turns; the others list them all.
     let shown: Vec<&HistoryTurn> = history
@@ -252,7 +261,7 @@ pub(crate) fn observation_lines(
         .skip(history.len().saturating_sub(usize::from(lines.0)))
         .filter(|turn| !(goal_in_system(dialect) && turn.frame.is_some()))
         .collect();
-    if !shown.is_empty() && !wire {
+    if !shown.is_empty() && !wire && !replayed {
         out.push("Earlier actions:".to_owned());
         out.extend(shown.into_iter().map(earlier_line));
     }

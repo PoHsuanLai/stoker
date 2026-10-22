@@ -87,8 +87,10 @@ impl CuaSession {
                 .into_iter()
                 .collect();
         let text_dialect = matches!(dialect, CuaDialect::Text(TextDialect::UiTars15));
+        let own = history::replays_own(dialect, self.profile.actions);
         let mut lead = prompt::observation_lines(
             dialect,
+            self.profile.actions,
             &self.task,
             &self.history,
             self.settings.lines,
@@ -96,7 +98,14 @@ impl CuaSession {
             map,
         );
         let mut parts = Vec::new();
-        for turn in self.history.iter().filter(|t| t.frame.is_some()) {
+        if own {
+            // The model's own transcript: each earlier step is its frame and the reply it gave.
+            messages.extend(history::replay(
+                &self.history,
+                &prompt::goal_lines(&self.task),
+            ));
+        }
+        for turn in self.history.iter().filter(|t| t.frame.is_some() && !own) {
             let Some(frame) = &turn.frame else { continue };
             if text_dialect {
                 // The dialect's own shape: a frame, then what the model answered to it.
@@ -172,6 +181,7 @@ impl CuaSession {
         }
         let lead = prompt::observation_lines(
             self.profile.dialect,
+            self.profile.actions,
             &self.task,
             &self.history,
             self.settings.lines,
@@ -319,7 +329,7 @@ impl CuaSession {
         let turn = HistoryTurn {
             number: self.taken,
             actions,
-            reply: history::cut(&reply.text),
+            reply: history::kept_reply(self.profile.dialect, self.profile.actions, &reply.text),
             frame: last_image(sent),
             user: if wire { step_message(sent) } else { Vec::new() },
             calls: if wire {

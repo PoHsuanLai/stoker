@@ -2,14 +2,18 @@
 
 use std::collections::VecDeque;
 
-use cua_action::{CoordSpace, CuaAction, Target};
+use cua_action::{ActionProfile, CoordSpace, CuaAction, CuaDialect, HistoryShape, Target};
 use cua_parse::InSpace;
-use model_provider::{ImageInput, Part, ToolCall, ToolResult};
+use model_provider::{ImageInput, Message, Part, Role, ToolCall, ToolResult};
 
 use crate::{FrameBudget, StepLines};
 
 /// The longest reply text kept for the text dialect's native alternation.
 const KEPT_REPLY_CHARS: usize = 2048;
+/// The longest reply kept for a model whose own replies are replayed: its reasoning is part of it.
+const KEPT_OWN_REPLY_CHARS: usize = 8192;
+/// What stands in the turn of an earlier frame that is no longer kept.
+const COLLAPSED_FRAME: &str = "This screenshot has been collapsed.";
 
 /// One past step the prompt may replay.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,6 +68,62 @@ pub(crate) fn push(
 
 pub(crate) fn cut(reply: &str) -> String {
     reply.chars().take(KEPT_REPLY_CHARS).collect()
+}
+
+/// Whether the earlier steps are replayed as the model's own turns: a tool dialect whose profile
+/// says so. The text dialect always alternates, and a vendor wire keeps real messages.
+pub(crate) fn replays_own(dialect: CuaDialect, actions: ActionProfile) -> bool {
+    matches!(dialect, CuaDialect::Tool(_)) && actions.history == HistoryShape::OwnReplies
+}
+
+/// The reply text a turn keeps. A model whose own replies are replayed keeps them from the start
+/// of its reasoning (what comes before an opening `<think>` is dropped) and longer.
+pub(crate) fn kept_reply(dialect: CuaDialect, actions: ActionProfile, reply: &str) -> String {
+    if !replays_own(dialect, actions) {
+        return cut(reply);
+    }
+    let from = reply.to_ascii_lowercase().find("<think").unwrap_or(0);
+    reply[from..]
+        .trim()
+        .chars()
+        .take(KEPT_OWN_REPLY_CHARS)
+        .collect()
+}
+
+/// The earlier steps as the model's own turns: the frame it was shown (a placeholder when the
+/// frame is no longer kept), then the reply it gave. The first message also holds the goal.
+pub(crate) fn replay(history: &VecDeque<HistoryTurn>, goal: &[String]) -> Vec<Message> {
+    history
+        .iter()
+        .enumerate()
+        .flat_map(|(n, turn)| {
+            let shown = match &turn.frame {
+                Some(frame) => Part::Image(frame.clone()),
+                None => Part::Text(COLLAPSED_FRAME.to_owned()),
+            };
+            let said = if turn.reply.is_empty() {
+                // A reply without text (the engine parsed its calls) still has to be a turn.
+                if turn.actions.is_empty() {
+                    "(no valid action)".to_owned()
+                } else {
+                    turn.actions.join("; ")
+                }
+            } else {
+                turn.reply.clone()
+            };
+            let lead = (n == 0 && !goal.is_empty()).then(|| Part::Text(goal.join("\n")));
+            [
+                Message {
+                    role: Role::User,
+                    parts: lead.into_iter().chain([shown]).collect(),
+                },
+                Message {
+                    role: Role::Assistant,
+                    parts: vec![Part::Text(said)],
+                },
+            ]
+        })
+        .collect()
 }
 
 /// A phrase per action. Typed text and key names are not repeated: what the person typed is
