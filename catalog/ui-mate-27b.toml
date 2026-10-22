@@ -6,9 +6,16 @@
 # `finished` (a `status` of success or failure), and a `scroll` whose `direction` is vertical or horizontal.
 # The `profile` below states exactly those differences, so the qwen_computer_use dialect reads and shows them.
 # `key_down` and `key_up` (holding a key) are not in the profile: an action cannot say a hold, so they drop.
-# - space: a 0-999 grid, so the top is 999 (the reference scales by 999). The prompt then says 999x999 where
-#   the reference says 1000x1000.
-# - image: smart_resize with factor 32, 56*56 to 16*16*4*12800 pixels, as the reference agent sizes it.
+# - space: a 0-999 grid, so the top is 999 (the reference scales by 999). The profile's `resolution = "grid_cells"`
+#   has the prompt say 1000x1000, as the reference does.
+# - tools: `client_parsed` with the profile's `calls = "qwen3_coder_xml"`: the reference parses the raw reply text
+#   itself and writes the tool block into the system message, so we do the same and the engine line below has
+#   no tool parser and no reasoning parser (a server parser strips the `<think>` and `<tool_call>` text, which
+#   also broke the reference harness when pointed at such a server).
+# - answer: `think_action_call`, the reference's RESPONSE_FORMAT: `<think>`, one `<action>` sentence, the call.
+# - history: `own_replies`, the reference replays the model's earlier replies as its turns, not a list of actions.
+# - image: per_prompt 5, the reference keeps 5 screenshots (older ones collapsed). smart_resize with factor 32,
+#   56*56 to 16*16*4*12800 pixels, as the reference agent sizes it.
 # - sampling: temperature 1.0 and top_p 0.95, the reference agent's, with reasoning on.
 # - vram: an estimate, not a measurement. The checkpoint is about 55 GB; the engine line below takes three
 #   quarters of a 96 GB card, so weights 52500 + 64 per 1k of the 16384 context (an assumed 16 full attention
@@ -27,7 +34,7 @@ inputs = ["text", "image"]
 outputs = ["text", "actions"]
 
 [text_out]
-tools = "server_parsed"
+tools = "client_parsed"
 structured = ["json_schema"]
 reasoning = "present"
 streaming = "present"
@@ -37,13 +44,13 @@ context_max = 262144
 sampling = { reasoning_on = { temperature = 1000, top_p = { kind = "set", v = 950 }, top_k = { kind = "off" }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_off = { temperature = 0, top_p = { kind = "off" }, top_k = { kind = "off" }, min_p = { kind = "off" }, repeat_penalty = { kind = "off" }, seed = { kind = "off" } }, reasoning_default = "on" }
 
 [image_in]
-per_prompt = 3
+per_prompt = 5
 rule = { kind = "smart_resize", v = { factor = 32, min_pixels = 3136, max_pixels = 13107200 } }
 space = { kind = "grid", v = 999 }
 
 [actions_out]
 kind = "dialect"
-v = { dialect = { kind = "tool", v = "qwen_computer_use" }, batching = "one", zoom = "absent", profile = { aliases = ["drag", "finished", "hotkey", "press", "call_user"], drag = "from_cursor", scroll = "by_direction" } }
+v = { dialect = { kind = "tool", v = "qwen_computer_use" }, batching = "one", zoom = "absent", profile = { aliases = ["drag", "finished", "hotkey", "press", "call_user"], drag = "from_cursor", scroll = "by_direction", calls = "qwen3_coder_xml", answer = "think_action_call", resolution = "grid_cells", history = "own_replies" } }
 
 
 # The line for fatcat GPU 1 (96 GB, shared); weights are the checkpoint's own BF16.
@@ -52,10 +59,7 @@ kind = "vllm"
 context_arg = { kind = "flag", v = "--max-model-len" }
 args = [
   "--max-num-seqs", "4",
-  "--limit-mm-per-prompt", "{\"image\":3,\"video\":0}",
-  "--enable-auto-tool-choice",
-  "--tool-call-parser", "qwen3_coder",
-  "--reasoning-parser", "qwen3",
+  "--limit-mm-per-prompt", "{\"image\":5,\"video\":0}",
   "--gpu-memory-utilization", "0.75",
 ]
 weights = { kind = "hf_snapshot" }

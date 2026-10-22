@@ -389,11 +389,11 @@ fn the_holo_ladder_copies_the_4b_shape_with_estimated_vram() {
 #[test]
 fn ui_mate_states_its_differences_as_an_action_profile() {
     use cua_action::{
-        ActionProfile, CuaDialect, DragStyle, GridMax, ModelSpace, ScrollAxis, ToolDialect,
-        VerbAlias,
+        ActionProfile, AnswerShape, CallFormat, CuaDialect, DragStyle, GridMax, HistoryShape,
+        ModelSpace, ResolutionWording, ScrollAxis, ToolDialect, VerbAlias,
     };
     use model_catalog::{Locality, MiB, Serving};
-    use model_provider::{Batching, CuaSupport, Tokens, Zoom};
+    use model_provider::{Batching, CuaSupport, ImageCount, Tokens, ToolSupport, Zoom};
     let entry = shipped("ui-mate-27b");
     // A 0-999 grid: the top is 999.
     let images = entry.capabilities.image_in.unwrap();
@@ -415,9 +415,34 @@ fn ui_mate_states_its_differences_as_an_action_profile() {
                 .into(),
                 drag: DragStyle::FromCursor,
                 scroll: ScrollAxis::ByDirection,
+                // The reference harness reads the calls itself, answers think, action, call,
+                // is told 1000x1000 and replays its own replies.
+                calls: CallFormat::Qwen3CoderXml,
+                answer: AnswerShape::ThinkActionCall,
+                resolution: ResolutionWording::GridCells,
+                history: HistoryShape::OwnReplies,
             },
         })
     );
+    // It keeps five screenshots, and the engine line allows five.
+    assert_eq!(images.per_prompt, ImageCount(5));
+    assert_eq!(
+        arg_after(&entry, "--limit-mm-per-prompt"),
+        r#"{"image":5,"video":0}"#
+    );
+    // The calls are read by us: the entry says so, and its engine line has no parser of the
+    // server's (which would strip the text the calls and the reasoning are read from).
+    let text_out = entry.capabilities.text_out.as_ref().unwrap();
+    assert_eq!(text_out.tools, ToolSupport::ClientParsed);
+    for arg in &entry.engines[0].args {
+        for flag in [
+            "--enable-auto-tool-choice",
+            "--tool-call-parser",
+            "--reasoning-parser",
+        ] {
+            assert_ne!(arg.0, flag, "a client-parsed entry's engine parses nothing");
+        }
+    }
     assert_eq!(entry.locality, Locality::OnDevice);
     assert_eq!(entry.serving, Serving::Launched);
     assert_eq!(entry.engines[0].kind, EngineKind::Vllm);
@@ -437,6 +462,26 @@ fn ui_mate_states_its_differences_as_an_action_profile() {
         panic!("holo-3.1-4b has a dialect")
     };
     assert!(profile.is_plain());
+}
+
+#[test]
+fn every_client_parsed_entry_serves_without_a_server_parser() {
+    use model_provider::ToolSupport;
+    let client: Vec<&str> = IDS
+        .iter()
+        .copied()
+        .filter(|id| {
+            let text = shipped(id).capabilities.text_out;
+            text.is_some_and(|text| text.tools == ToolSupport::ClientParsed)
+        })
+        .collect();
+    assert_eq!(client, ["ui-mate-27b"]);
+    for id in client {
+        for engine in &shipped(id).engines {
+            let parsers = engine.args.iter().filter(|a| a.0.contains("parser"));
+            assert_eq!(parsers.count(), 0, "{id}");
+        }
+    }
 }
 
 #[test]
