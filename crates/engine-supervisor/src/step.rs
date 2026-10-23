@@ -17,6 +17,8 @@ pub enum SupervisorIn {
     Want(EngineId),
     /// A turn used this engine just now.
     Used(EngineId),
+    /// The person stopped this engine.
+    Release(EngineId),
     Exited {
         id: EngineId,
         code: ExitCode,
@@ -119,6 +121,7 @@ pub fn step(
     match input {
         SupervisorIn::Want(id) => s.want(&id, cfg, &mut out),
         SupervisorIn::Used(id) => s.used(&id),
+        SupervisorIn::Release(id) => s.release(&id, &mut out),
         SupervisorIn::Exited { id, code } => s.exited(&id, code, cfg, &mut out),
         SupervisorIn::Probed { id, probe } => s.probed(&id, probe, cfg, &mut out),
         SupervisorIn::Gpu(mem) => s.gpu = mem,
@@ -196,6 +199,23 @@ impl Supervisor {
         let now = self.now;
         if let Some(EngineState::Ready { last_used, .. }) = self.slot(id) {
             *last_used = now;
+        }
+    }
+
+    /// The person stopped the engine: a running or starting one is stopped (its exit, or a late
+    /// probe, finds it `Stopping`); one waiting to retry or given up on has no process and rests.
+    fn release(&mut self, id: &EngineId, out: &mut Vec<SupervisorOut>) {
+        match self.state(id).copied() {
+            Some(EngineState::Starting { .. } | EngineState::Ready { .. }) => {
+                self.unwant(id);
+                out.push(SupervisorOut::Stop(id.clone()));
+                self.set(id, EngineState::Stopping { since: self.now }, out);
+            }
+            Some(EngineState::Backoff { .. } | EngineState::Failed(_)) => {
+                self.unwant(id);
+                self.set(id, EngineState::Stopped, out);
+            }
+            _ => {}
         }
     }
 

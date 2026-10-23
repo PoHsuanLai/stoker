@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::testutil::{id, spec};
-use SupervisorIn::{Exited, Gpu, Probed, Tick, Used, Want};
+use SupervisorIn::{Exited, Gpu, Probed, Release, Tick, Used, Want};
 use SupervisorOut::{Changed, Probe as ProbeOut, Spawn, Stop, WakeAt};
 
 const GPU: GpuMemory = GpuMemory {
@@ -303,6 +303,76 @@ fn ready_exit_backs_off() {
     };
     assert_eq!(state(&s, "c"), backoff);
     assert_eq!(out, vec![WakeAt(MonoMs(12_000)), Changed(id("c"), backoff)]);
+}
+
+#[test]
+fn release_stops_a_starting_or_ready_engine_and_rests_the_rest() {
+    let stopping = EngineState::Stopping {
+        since: MonoMs(7000),
+    };
+    // Starting: a stop, then a late probe is ignored and the exit rests it for good.
+    let (s, _) = run(sup(), vec![Tick(MonoMs(7000)), Want(id("c"))]);
+    let (s, out) = run(s, vec![Release(id("c"))]);
+    assert_eq!(out, vec![Stop(id("c")), Changed(id("c"), stopping)]);
+    let (s, out) = run(
+        s,
+        vec![
+            Probed {
+                id: id("c"),
+                probe: Probe::Ready,
+            },
+            Exited {
+                id: id("c"),
+                code: ExitCode(0),
+            },
+            Tick(MonoMs(900_000)),
+        ],
+    );
+    assert_eq!(state(&s, "c"), EngineState::Stopped);
+    assert_eq!(out, vec![Changed(id("c"), EngineState::Stopped)]);
+    // A later Want starts it again as usual.
+    let (s, _) = run(s, vec![Want(id("c"))]);
+    assert!(matches!(state(&s, "c"), EngineState::Starting { .. }));
+
+    // Ready: the same stop.
+    let s = up(sup(), "c", 0);
+    let (s, _) = run(s, vec![Tick(MonoMs(7000))]);
+    let (s, out) = run(s, vec![Release(id("c"))]);
+    assert_eq!(state(&s, "c"), stopping);
+    assert_eq!(out, vec![Stop(id("c")), Changed(id("c"), stopping)]);
+    // Stopping: nothing more.
+    let (s, out) = run(s, vec![Release(id("c"))]);
+    assert_eq!(state(&s, "c"), stopping);
+    assert!(out.is_empty());
+
+    // Backoff: no process to stop, and the retry no longer comes.
+    let s = up(sup(), "c", 0);
+    let (s, _) = run(
+        s,
+        vec![
+            Tick(MonoMs(10_000)),
+            Exited {
+                id: id("c"),
+                code: ExitCode(1),
+            },
+        ],
+    );
+    let (s, out) = run(s, vec![Release(id("c")), Tick(MonoMs(20_000))]);
+    assert_eq!(state(&s, "c"), EngineState::Stopped);
+    assert_eq!(out, vec![Changed(id("c"), EngineState::Stopped)]);
+
+    // Failed: rests. Stopped: nothing.
+    let gpu = GpuMemory {
+        total: MiB(1000),
+        used_by_others: MiB(0),
+    };
+    let s = Supervisor::new(vec![spec("a", 9000)], gpu);
+    let (s, _) = run(s, vec![Want(id("a"))]);
+    let (s, out) = run(s, vec![Release(id("a"))]);
+    assert_eq!(state(&s, "a"), EngineState::Stopped);
+    assert_eq!(out, vec![Changed(id("a"), EngineState::Stopped)]);
+    let (_, out) = run(s, vec![Release(id("a")), Release(id("nope"))]);
+    assert!(out.is_empty());
 }
 
 #[test]

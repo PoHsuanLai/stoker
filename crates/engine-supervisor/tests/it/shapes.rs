@@ -73,6 +73,10 @@ fn inputs_and_verdicts_round_trip() {
         r#"{"kind":"want","v":"vllm:holo-3.1-4b"}"#,
     );
     round_trip(
+        &SupervisorIn::Release(EngineId("vllm:holo-3.1-4b".into())),
+        r#"{"kind":"release","v":"vllm:holo-3.1-4b"}"#,
+    );
+    round_trip(
         &SupervisorIn::Probed {
             id: EngineId("e".into()),
             probe: Probe::Loading,
