@@ -37,7 +37,15 @@ trait), section 6 (copy the recipe).
 | `speech-vad-silero` | `SileroVad: VoiceActivity` over `ort`; **excluded from the workspace** | the runtime |
 | `speech-host` | the STT engine binary: sherpa-onnx (built without TTS) behind a Unix socket; **excluded from the workspace**, runs only as a confined engine unit | the runtime and the socket |
 
-Allowed direct edges (checked by `scripts/check-boundary.sh`; dev-dependencies are outside it):
+`scripts/check-boundary.sh` holds a LAYERS table: every crate is **P** (pure: no `std::fs`/`env`/`process`/`net`,
+no clock reads, no sleeps, no `tokio`, `hyper`, `reqwest`, `zbus` or `rustix`, no UI words), **C** (client/IO: may
+do IO, no `Label`, `Help`, `Sheet` or `SettingRow`) or **A** (wiring). A crate depends on its own tier or below.
+Today every crate is P except `speech-host-client`, `speech-host` and `speech-vad-silero` (C) and
+`speech-host-sherpa` (A). `model-http` is P with KNOWN rows: its feature-gated hyper client is the one
+violation, removed by the reqwest swap (plan lane U0.6). `--self-test` seeds a `std::fs` call in a P crate and
+checks the script fails; `--long-files` reports source files over 500 lines.
+
+The direct edges in use (documentation; dev-dependencies are outside it):
 
 | Crate | May depend on |
 | --- | --- |
@@ -294,7 +302,7 @@ on; a change is an edit of SPEC.md first. Every `todo!()` is listed in `FINDINGS
 `model-provider`; a pure codec (`ChatCodec` and its `ChatDecoder`, `ErrorWire::classify`, and
 `EmbedCodec` if it embeds) tested against wire fixtures in `fixtures/<name>/` recorded at the
 `Transport` by a dev script; the provider is `Driver<YourCodec, HttpClient>`; its row in
-`scripts/check-boundary.sh` (RULES and EDGES) and in section 1; its variant in porter's
+`scripts/check-boundary.sh` (RULES and LAYERS) and in section 1; its variant in porter's
 `inferd::AdapterModel`.
 
 **Add a dialect**: the variant in `cua-action::dialect` (`TextDialect`, `ToolDialect` or
