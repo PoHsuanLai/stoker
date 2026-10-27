@@ -387,12 +387,12 @@ fn an_oversize_frame_ends_the_connection_before_its_body_is_read() {
 fn the_socket_is_owner_only_and_a_stale_one_is_replaced() {
     let dir = scratch("bind");
     let path = dir.join("host.sock");
-    let first = crate::bind(&path).expect("binds");
+    let first = crate::bind_private(&path).expect("binds");
     let mode = std::fs::metadata(&path).expect("stat").permissions().mode() & 0o777;
     assert_eq!(mode, 0o600);
     drop(first);
     // The file is left behind by the dropped listener: a stale socket.
-    let second = crate::bind(&path).expect("a stale socket is replaced");
+    let second = crate::bind_private(&path).expect("a stale socket is replaced");
 
     let host = std::thread::spawn(move || {
         let (mut stream, _) = second.accept().expect("accept");
@@ -418,7 +418,7 @@ fn a_regular_file_at_the_socket_path_is_never_removed() {
     let dir = scratch("file");
     let path = dir.join("precious");
     std::fs::write(&path, b"mine").expect("write");
-    assert_eq!(crate::bind(&path).err(), Some(HostError::Bind));
+    assert_eq!(crate::bind_private(&path).err(), Some(HostError::Bind));
     assert_eq!(std::fs::read(&path).expect("read"), b"mine");
     std::fs::remove_dir_all(dir).expect("cleanup");
 }

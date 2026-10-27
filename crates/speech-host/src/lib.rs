@@ -21,7 +21,7 @@ mod tests;
 
 pub use args::{ArgsError, HostArgs, ThreadCount, parse_args};
 pub use recognizer::{Finished, Recognizer};
-pub use serve::{bind, serve_connection, serve_listener, serve_with};
+pub use serve::{bind_private, serve_connection, serve_listener, serve_with};
 pub use session::Session;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
