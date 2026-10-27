@@ -110,23 +110,21 @@ fn secure(
 /// reach the host.
 #[cfg(feature = "tls")]
 pub fn is_tls_failure(error: &(dyn std::error::Error + 'static)) -> bool {
-    use std::error::Error;
     use std::io::ErrorKind;
     let mut next = Some(error);
     while let Some(err) = next {
         if err.is::<rustls::Error>() {
             return true;
         }
-        if let Some(io) = err.downcast_ref::<std::io::Error>() {
-            // `io::Error::source` skips the error it wraps, so look inside it here.
-            let wrapped = io
+        next = match err.downcast_ref::<std::io::Error>() {
+            Some(io) if io.kind() == ErrorKind::UnexpectedEof => return true,
+            // `io::Error::source` skips the error it wraps (often another `io::Error` around the
+            // rustls one), so step into it here.
+            Some(io) => io
                 .get_ref()
-                .is_some_and(|inner| inner.is::<rustls::Error>());
-            if wrapped || io.kind() == ErrorKind::UnexpectedEof {
-                return true;
-            }
-        }
-        next = err.source();
+                .map(|inner| inner as &(dyn std::error::Error + 'static)),
+            None => err.source(),
+        };
     }
     false
 }
