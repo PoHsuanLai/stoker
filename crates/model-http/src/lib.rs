@@ -2,9 +2,10 @@
 //! cloud host over TLS, possibly through the egress proxy.
 //!
 //! The decoders of server-sent events and of NDJSON are pure; the transport is the only part
-//! that does I/O, and it sits behind the `hyper` feature that only a daemon turns on, so the
-//! crates that need only the seam types reach no HTTP stack and no runtime. A codec (`model-wire`) builds an `Exchange` and reads the response from a
-//! `BodySink`, which sees the `ResponseHead` before the first byte of the body.
+//! that does I/O (reqwest), and it sits behind the `client` feature that only a daemon turns on,
+//! so the crates that need only the seam types reach no HTTP stack and no runtime. A codec
+//! (`model-wire`) builds an `Exchange` and reads the response from a `BodySink`, which sees the
+//! `ResponseHead` before the first byte of the body.
 //!
 //! ```
 //! use model_http::{
@@ -27,15 +28,17 @@
 
 mod auth;
 mod client;
+#[cfg(feature = "client")]
+mod connect;
 mod exchange;
 mod head;
-#[cfg(feature = "hyper")]
-mod hyper_client;
 mod ndjson;
+#[cfg(feature = "client")]
+mod request;
 mod sse;
 mod target;
-#[cfg(feature = "tls")]
-mod tls;
+#[cfg(feature = "client")]
+mod transport;
 
 pub use auth::{AuthHeader, ExtraHeader, HeaderName, Secret};
 pub use client::{

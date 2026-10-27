@@ -63,13 +63,14 @@ pub struct UnitSpec {
 
 /// Where the engines' programs and the weights cache are, from settings
 /// (`ai.engine.vllm.python`, `ai.engine.llama_server.path`, `ai.engine.speech_host.path`,
-/// `ai.engine.kokoro.python`); never from the environment.
+/// `ai.engine.kokoro.python`, `ai.engine.strata.python`); never from the environment.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EnginePaths {
     pub vllm_python: ProgramPath,
     pub llama_server: ProgramPath,
     pub speech_host: ProgramPath,
     pub kokoro_python: ProgramPath,
+    pub strata_python: ProgramPath,
     pub hf_cache: PathBuf,
 }
 
@@ -127,10 +128,11 @@ pub fn command(
 /// `--model-dir`; the whole `models--<org>--<name>` directory (the snapshot's files are links into
 /// its `blobs/`) is the sandbox's only read-only bind, and the socket's directory its only
 /// writable one. An entry whose `vram.gpu_need()` is `Absent` gets `GpuAccess::Absent` in its
-/// sandbox; `SpeechHost` runs `paths.speech_host` and `KokoroFastApi` runs `paths.kokoro_python`
-/// (a uv environment's interpreter, like vLLM's). Every engine starts offline
-/// (`HF_HUB_OFFLINE=1`) and serves the model under the catalog id, so a request's model name does
-/// not depend on the repository it came from.
+/// sandbox; `SpeechHost` runs `paths.speech_host`, `KokoroFastApi` runs `paths.kokoro_python`
+/// (a uv environment's interpreter, like vLLM's) and `Strata` runs `paths.strata_python` (the
+/// interpreter in Strata's own folder; the profile's args name its server script and flags).
+/// Every engine starts offline (`HF_HUB_OFFLINE=1`) and serves the model under the catalog id, so
+/// a request's model name does not depend on the repository it came from.
 ///
 /// `memory_max` is host memory, not VRAM: the weights and overhead figures plus
 /// [`HOST_MEMORY_BASE`], which a CPU-only entry (all-zero figures) still gets.
@@ -210,6 +212,7 @@ pub fn command_with_window(
             own(&["-m", "uvicorn", "api.src.main:app"]),
             Vec::new(),
         ),
+        (EngineKind::Strata, _) => (paths.strata_python.clone(), Vec::new(), Vec::new()),
     };
     let sized = match (&profile.context_arg, window.tokens(entry)) {
         (Some(ContextArg::Flag(flag)), Some(tokens)) => {

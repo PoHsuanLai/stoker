@@ -1,7 +1,7 @@
 //! The transport seam: one exchange (a request and its response) with the head delivered first.
 //!
 //! The wire (a codec in `model-wire`) builds an [`Exchange`] and reads the response; a
-//! transport delivers it: hyper over TCP, a Unix socket or TLS, or later an in-process engine.
+//! transport delivers it: reqwest over TCP, a Unix socket or TLS, or later an in-process engine.
 //! Wire fixtures are recorded and replayed at this seam (`model-replay::wire`).
 
 use serde::{Deserialize, Serialize};

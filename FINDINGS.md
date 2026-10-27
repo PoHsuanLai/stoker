@@ -1260,3 +1260,41 @@ A stream stopped early by the sink also has `None`.
 ## cua-parse: terminate reads its words from text (2026-10-09, lane `termtext`)
 
 Holo 3.1 4B writes its final answer in a `text` argument, not `summary`. In the cua eval, 28 of 104 live runs ended with no words for the person because only `summary` was read. `terminate` (and Holo's `finish`, which shares the arm) now reads `text` when there is no `summary` argument; a present `summary` wins, and nothing else changed (no other aliases; `answer` still reads `text` only). Covered by `terminate_words_come_from_summary_or_text` in `crates/cua-parse/tests/tools.rs`.
+
+## One HTTP client, one engine enum (2026-10-28, lane `sreq`)
+
+**reqwest replaces model-http's own hyper client (plan U0.6).** The owner chose reqwest as the one
+HTTP client. `hyper_client.rs` (350 lines) and `tls.rs` (83) are gone; `connect.rs`, `request.rs`
+and `transport.rs` build a reqwest 0.13 client in their place. Why: two hand-written hyper wrappers
+(this one and porter's `porter-http`) were the same code twice, and reqwest brings unix sockets
+(`ClientBuilder::unix_socket`), redirect and proxy control, and rustls roots from the platform
+without our own connector.
+
+- Features: `reqwest` with `default-features = false`. `tls` adds `rustls-no-provider` and a direct
+  `rustls` with `ring`; the first client built installs ring as the process default (reqwest
+  panics at build if none is installed). So no aws-lc and no system proxy (`no_proxy()`).
+- Kept: no redirects (`Policy::none()`), no idle connections (`pool_max_idle_per_host(0)`), so
+  dropping the future drops the connection; the connect timeout is reqwest's `connect_timeout`
+  (TCP and TLS handshake); the idle timeout is a timer restarted only when the sink says a chunk
+  made progress; the sink's `deadline` bounds the whole exchange.
+- Changed: the head must arrive within `connect + first_byte` together, because reqwest returns the
+  response only once the head is read; the sink's `deadline` now counts connect time too. Body
+  chunks are read with `Response::chunk()` (the same bytes as `bytes_stream`, without the `stream`
+  feature, `futures-util` and `tokio-util`).
+- Platform roots now come from `rustls-platform-verifier` (reqwest's), not `rustls-native-certs`
+  called by us. An unparsable certificate in `TlsRoots::Only` is `HttpError::Tls` (it was skipped).
+- The sans-IO `SseDecoder` and `NdjsonDecoder` stay, with their size caps and the fuzz target;
+  `sse-stream` was not adopted (it has no caps).
+- Feature `hyper` is renamed `client`. Dropped dependencies: `hyper`, `hyper-util`,
+  `http-body-util`, `rustls-native-certs`; `tokio-rustls` and `rustls-pki-types` stay as
+  dev-dependencies for the loopback TLS server in the tests.
+- Licences: everything new is MIT, Apache-2.0, ISC or Unicode-3.0, already allowed; `deny.toml`
+  is unchanged.
+
+**One `EngineKind` (plan T0.2).** `model-catalog::EngineKind` is the one closed engine set in
+stoker. It gains `Strata` (slug `strata`), so it covers llama.cpp (`llama_server`), vLLM and Strata
+beside the speech engines. Nothing else in stoker had an engine-id enum (`Flavor` in
+`model-openai-compat` is a wire dialect that includes cloud hosts, and `EngineLabel` in
+`model-replay` is a cassette string). `engine-supervisor::command` has an arm for it and
+`EnginePaths` a `strata_python` field. porter's `porter-engines::EngineId` moves in T1.1 and is
+replaced by this enum then.

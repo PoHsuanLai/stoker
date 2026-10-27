@@ -21,6 +21,7 @@ fn paths() -> EnginePaths {
         llama_server: ProgramPath(PathBuf::from("/opt/llama/bin/llama-server")),
         speech_host: ProgramPath(PathBuf::from("/opt/stoker/bin/speech-host")),
         kokoro_python: ProgramPath(PathBuf::from("/opt/kokoro/bin/python")),
+        strata_python: ProgramPath(PathBuf::from("/opt/strata/.venv/bin/python")),
         hf_cache: PathBuf::from("/data/hf/hub"),
     }
 }
@@ -187,6 +188,33 @@ fn kokoro_runs_uvicorn_in_its_own_environment_on_the_socket() {
         ]
     );
     assert_eq!(unit.sandbox.gpu, GpuAccess::Absent);
+}
+
+#[test]
+fn strata_runs_its_own_python_with_the_profile_args_only() {
+    let profile = EngineProfile {
+        kind: EngineKind::Strata,
+        context_arg: None,
+        inputs: None,
+        outputs: None,
+        args: vec![
+            EngineArg("serve/server.py".into()),
+            EngineArg("--socket={socket}".into()),
+        ],
+        weights: WeightFiles::HfSnapshot,
+    };
+    let unit = command(&entry(HOLO), &profile, &paths(), &socket("strata"));
+    assert_eq!(
+        unit.program,
+        ProgramPath(PathBuf::from("/opt/strata/.venv/bin/python"))
+    );
+    assert_eq!(
+        args(&unit),
+        [
+            "serve/server.py",
+            "--socket=/run/user/1000/inferd/strata.sock"
+        ]
+    );
 }
 
 #[test]

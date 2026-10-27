@@ -4,11 +4,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::Modalities;
 
+/// Which engine runs a model: the one closed set of engines, for the catalog, the supervisor and
+/// whatever fetches or finds an engine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EngineKind {
+    /// llama.cpp's `llama-server`.
     LlamaServer,
+    /// vLLM, in a Python environment of its own.
     Vllm,
+    /// Strata, run from its own folder with the Python environment in it.
+    Strata,
     /// Our own STT engine process (`speech-host`, sherpa-onnx without TTS), on the CPU.
     SpeechHost,
     /// Kokoro-FastAPI in a uv environment: a separate process, so its GPL espeak-ng is never

@@ -36,9 +36,9 @@ LAYERS=(
   "model-replay: P"
   "speech-provider: P"
   "speech-vad: P"
-  # The Transport trait and the wire types are pure; the hyper client and TLS sit behind the
-  # `hyper` and `tls` features in the same crate, so it is a P crate with KNOWN rows until the
-  # client is replaced by reqwest in its own crate (U0.6, T1.2).
+  # The Transport trait and the wire types are pure; the reqwest client and TLS sit behind the
+  # `client` and `tls` features in the same crate, so it is a P crate with KNOWN rows until the
+  # client moves to its own crate (T1.2).
   "model-http: P"
   "speech-host-client: C"
   "speech-host: C"
@@ -51,12 +51,10 @@ LAYERS=(
 
 # KNOWN: a violation that exists today, with the plan lane (~/rs-wt/agent-layers/PLAN.md) that
 # removes it. "crate: ban: lane". A row whose violation is gone fails, so the list only shrinks.
-# model-http: the feature-gated hyper client (hyper_client.rs) and TLS (tls.rs).
+# model-http: the feature-gated reqwest client (connect.rs, request.rs, transport.rs).
 KNOWN=(
-  "model-http: hyper: U0.6"
-  "model-http: tokio: U0.6"
-  "model-http: clock: U0.6"
-  "model-http: net: U0.6"
+  "model-http: reqwest: T1.2"
+  "model-http: tokio: T1.2"
 )
 
 # BANS: "name|tiers|extended regex" over the non-test source of a crate of those tiers. A line
@@ -81,7 +79,7 @@ BANS=(
 # vision-prep reaches the image stack only through its `pixels` feature; the one C crate with an
 # HTTP stack (model-http) may reach a runtime but nothing below. The codecs (model-wire,
 # model-openai-compat) and model-extract are pure over the Transport trait, so when
-# `HyperTransport` is used it sits behind a feature that only a daemon turns on, and these rows
+# `HttpClient`'s transport is used it sits behind a feature that only a daemon turns on, and these rows
 # keep checking default features. Nothing here reaches porter: stoker is portable.
 PORTER="porter-core porter-infer porter-client porter-provider"
 EFFECTS="tokio hyper hyper-util rustls zbus zvariant reqwest ureq wayland-client wayland-backend reis atspi oo7 ort fastembed rusqlite notify cedar-policy rmcp"
@@ -155,11 +153,11 @@ known_lane() { # crate ban -> lane, empty when not listed
 if [ "${1:-}" = "--self-test" ]; then
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
-  mkdir -p "$tmp/crates/model-provider/src" "$tmp/crates/model-http/src"
+  mkdir -p "$tmp/crates/model-provider/src" "$tmp/crates/speech-host-client/src"
   printf 'pub fn f() { let _ = std::fs::read("x"); }\n' >"$tmp/crates/model-provider/src/lib.rs"
-  printf 'pub fn f() { let _ = std::fs::read("x"); }\n' >"$tmp/crates/model-http/src/lib.rs"
+  printf 'pub fn f() { let _ = std::fs::read("x"); }\n' >"$tmp/crates/speech-host-client/src/lib.rs"
   p_hits=$(source_violations "$tmp" model-provider)
-  c_hits=$(source_violations "$tmp" model-http)
+  c_hits=$(source_violations "$tmp" speech-host-client)
   if ! grep -q '^fs: ' <<<"$p_hits"; then
     echo "SELF-TEST FAILED: a std::fs call in a P crate was not caught"
     exit 1

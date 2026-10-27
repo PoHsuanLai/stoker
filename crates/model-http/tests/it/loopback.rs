@@ -4,7 +4,7 @@
 //!
 //! The server is a hand-written HTTP/1.1 peer on a Unix socket in a private directory or on
 //! `127.0.0.1` with an ephemeral port; nothing leaves the machine.
-#![cfg(feature = "hyper")]
+#![cfg(feature = "client")]
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};

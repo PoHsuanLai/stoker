@@ -1,7 +1,7 @@
 //! The client: one endpoint, and the types a transport and a sink share. The request seam is
 //! `Transport` (`exchange`); the response body is pushed into a sink as it arrives.
 
-#[cfg(feature = "tls")]
+#[cfg(feature = "client")]
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -70,7 +70,7 @@ pub trait BodySink: Send {
         Progress::Made
     }
 
-    /// The most time the whole exchange may take after the connection is open (`None`: only the
+    /// The most time the whole exchange may take, connecting included (`None`: only the
     /// per-stage timeouts apply). An overrun is `HttpError::Timeout`.
     fn deadline(&self) -> Option<WaitMs> {
         None
@@ -120,7 +120,7 @@ impl core::fmt::Debug for DerCertificate {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 #[non_exhaustive]
 pub enum TlsRoots {
-    /// The platform's trust store (`rustls-native-certs`).
+    /// The platform's trust store.
     #[default]
     Platform,
     /// Only these roots, and nothing else: the seam for a test's scratch CA.
@@ -132,10 +132,10 @@ pub enum TlsRoots {
 pub struct HttpClient {
     endpoint: HttpEndpoint,
     roots: TlsRoots,
-    /// This client's TLS connector, built on its first `Tls` exchange. Shared by clones, which
-    /// have the same roots.
-    #[cfg(feature = "tls")]
-    tls: Arc<crate::tls::Cache>,
+    /// This client's reqwest client, built on its first exchange. Shared by clones, which have
+    /// the same endpoint and roots.
+    #[cfg(feature = "client")]
+    wire: Arc<crate::connect::Wire>,
 }
 
 impl HttpClient {
@@ -148,8 +148,8 @@ impl HttpClient {
         Self {
             endpoint,
             roots,
-            #[cfg(feature = "tls")]
-            tls: Arc::default(),
+            #[cfg(feature = "client")]
+            wire: Arc::default(),
         }
     }
 
@@ -161,8 +161,8 @@ impl HttpClient {
         &self.endpoint
     }
 
-    #[cfg(feature = "tls")]
-    pub(crate) fn tls(&self) -> &crate::tls::Cache {
-        &self.tls
+    #[cfg(feature = "client")]
+    pub(crate) fn wire(&self) -> &crate::connect::Wire {
+        &self.wire
     }
 }

@@ -344,6 +344,10 @@ fn speech_slugs_are_stable() {
         r#""speech_out""#
     );
     assert_eq!(
+        serde_json::to_string(&EngineKind::Strata).unwrap(),
+        r#""strata""#
+    );
+    assert_eq!(
         serde_json::to_string(&EngineKind::SpeechHost).unwrap(),
         r#""speech_host""#
     );
