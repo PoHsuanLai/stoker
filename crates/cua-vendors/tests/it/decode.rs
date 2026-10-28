@@ -6,7 +6,7 @@ use cua_action::{
     ScrollBy, ScrollDir, Target, WireDialect,
 };
 use cua_parse::{DropReason, InSpace, Parsed};
-use cua_vendors::{WireCodec, WireError, codec};
+use cua_vendors::{WireCodec, WireError};
 use model_provider::{JsonText, SafetySignal, ToolCall, ToolCallId, ToolName};
 use proptest::prelude::*;
 
@@ -19,7 +19,7 @@ fn call(name: &str, input: &str) -> ToolCall {
 }
 
 fn decode(dialect: WireDialect, calls: &[ToolCall]) -> Result<Parsed, WireError> {
-    codec(dialect).decode(calls, &[])
+    dialect.decode(calls, &[])
 }
 
 fn image(parsed: Parsed) -> (Vec<CuaAction<ImageSpace>>, Vec<(String, DropReason)>) {
@@ -333,7 +333,7 @@ fn gemini_points_are_a_grid_of_one_thousand() {
 #[test]
 fn gemini_safety_only_adds() {
     let click = [call("click", r#"{"x":5,"y":5}"#)];
-    let gemini = codec(WireDialect::GeminiComputerUse);
+    let gemini = WireDialect::GeminiComputerUse;
     let plain = gemini.decode(&click, &[]).unwrap();
     let InSpace::Grid(_, plain_actions) = plain.actions.clone() else {
         panic!()
@@ -378,7 +378,7 @@ proptest! {
         for dialect in [TOOLSET, LEGACY, WireDialect::OpenAiComputer, WireDialect::GeminiComputerUse] {
             if let (Ok(tool), Ok(json)) = (ToolName::new(name.clone()), JsonText::new(input.clone())) {
                 let calls = [ToolCall { id: ToolCallId("c".into()), name: tool, input: json }];
-                let _ = codec(dialect).decode(&calls, &[]);
+                let _ = dialect.decode(&calls, &[]);
             }
         }
     }

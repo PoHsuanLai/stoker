@@ -11,10 +11,11 @@ use model_provider::{ImageInput, Message, Part, Role, ToolCall, ToolResult};
 use model_wire::CodecError;
 use serde_json::{Value, json};
 
-use crate::ToolImages;
-
 /// Every message of a request, in wire order.
-pub(crate) fn encode(messages: &[Message], images: ToolImages) -> Result<Vec<Value>, CodecError> {
+pub(crate) fn encode(
+    messages: &[Message],
+    in_tool_message: bool,
+) -> Result<Vec<Value>, CodecError> {
     let mut out = Vec::new();
     let mut after_tools = Vec::new();
     for message in messages {
@@ -23,7 +24,7 @@ pub(crate) fn encode(messages: &[Message], images: ToolImages) -> Result<Vec<Val
             match part {
                 Part::ToolResult(result) => {
                     emit_run(&mut out, &mut after_tools, message.role, &mut run)?;
-                    tool_result(&mut out, &mut after_tools, result, images)?;
+                    tool_result(&mut out, &mut after_tools, result, in_tool_message)?;
                 }
                 other => run.push(other),
             }
@@ -117,7 +118,7 @@ fn tool_result(
     out: &mut Vec<Value>,
     after_tools: &mut Vec<Value>,
     result: &ToolResult,
-    images: ToolImages,
+    in_tool_message: bool,
 ) -> Result<(), CodecError> {
     let mut texts = Vec::new();
     let mut pictures = Vec::new();
@@ -130,14 +131,14 @@ fn tool_result(
         }
     }
     let text = texts.join("\n");
-    let content = match (images, pictures.is_empty()) {
+    let content = match (in_tool_message, pictures.is_empty()) {
         (_, true) => Value::String(text),
-        (ToolImages::InToolMessage, false) => {
+        (true, false) => {
             let mut parts = vec![json!({ "type": "text", "text": text })];
             parts.append(&mut pictures);
             Value::Array(parts)
         }
-        (ToolImages::NextUserMessage, false) => {
+        (false, false) => {
             after_tools.append(&mut pictures);
             Value::String(text)
         }

@@ -1,7 +1,7 @@
 //! The tool declarations and the result encodings.
 
 use cua_action::{Coord, Size, WireDialect};
-use cua_vendors::{StepResult, WireCodec, codec};
+use cua_vendors::{StepResult, WireCodec};
 use model_provider::{ImageInput, Part, ToolCallId, ToolSpec, ToolStatus};
 
 fn image() -> ImageInput {
@@ -16,7 +16,7 @@ fn id(s: &str) -> ToolCallId {
 }
 
 fn config(dialect: WireDialect) -> String {
-    let tools = codec(dialect).tools(Size::new(Coord(1024), Coord(768)));
+    let tools = dialect.tools(Size::new(Coord(1024), Coord(768)));
     let [ToolSpec::Native(native)] = &tools[..] else {
         panic!("one native tool")
     };
@@ -89,7 +89,7 @@ fn anthropic_batch_stops_at_first_failure() {
             StepResult::Done(id("c")),
             StepResult::NotRun(id("d")),
         ];
-        let parts = codec(dialect).results(&done, &next);
+        let parts = dialect.results(&done, &next);
         let (a, b, c, d) = (
             results(&parts[0]),
             results(&parts[1]),
@@ -120,7 +120,7 @@ fn anthropic_batch_stops_at_first_failure() {
 #[test]
 fn anthropic_puts_the_screenshot_in_the_last_result_that_ran() {
     let next = image();
-    let codec = codec(WireDialect::AnthropicToolset20260801);
+    let codec = WireDialect::AnthropicToolset20260801;
     let parts = codec.results(
         &[StepResult::Done(id("a")), StepResult::Done(id("b"))],
         &next,
@@ -142,13 +142,10 @@ fn openai_and_gemini_return_a_screenshot_with_every_result() {
                 why: "no".into(),
             },
         ];
-        let parts = codec(dialect).results(&done, &next);
+        let parts = dialect.results(&done, &next);
         assert_eq!(parts.len(), 2);
         assert!(parts.iter().all(|p| results(p).3 == 1));
         assert_eq!(results(&parts[1]).1, ToolStatus::Error);
-        assert_eq!(
-            codec(dialect).results(&[], &next),
-            vec![Part::Image(next.clone())]
-        );
+        assert_eq!(dialect.results(&[], &next), vec![Part::Image(next.clone())]);
     }
 }

@@ -2,8 +2,8 @@
 //! multipart body), the transcription reply and the streamed PCM.
 
 use model_openai_compat::{
-    AudioCodecError, KOKORO_FORMAT, PcmDecoder, SpeechFlavor, decode_transcription,
-    encode_speech_request, encode_transcription,
+    AudioCodecError, KOKORO_FORMAT, PcmDecoder, decode_transcription, encode_speech_request,
+    encode_transcription,
 };
 use model_provider::ModelName;
 use proptest::prelude::*;
@@ -29,20 +29,16 @@ fn tts(format: AudioFormat) -> TtsRequest {
 
 #[test]
 fn the_speech_request_is_the_documented_body() {
-    let body = encode_speech_request(&tts(KOKORO_FORMAT), SpeechFlavor::KokoroFastApi).unwrap();
+    let body = encode_speech_request(&tts(KOKORO_FORMAT)).unwrap();
     let value: serde_json::Value = serde_json::from_str(&body.0).unwrap();
     assert_eq!(
         value,
         serde_json::json!({"model":"kokoro","input":"Hello \"world\"","voice":"af_heart",
             "response_format":"pcm","stream":true})
     );
-    // A server without the endpoint, or a format the endpoint does not stream.
+    // A format the endpoint does not stream.
     assert_eq!(
-        encode_speech_request(&tts(KOKORO_FORMAT), SpeechFlavor::Vllm),
-        Err(AudioCodecError::UnsupportedFormat)
-    );
-    assert_eq!(
-        encode_speech_request(&tts(S16_16K), SpeechFlavor::KokoroFastApi),
+        encode_speech_request(&tts(S16_16K)),
         Err(AudioCodecError::UnsupportedFormat)
     );
 }

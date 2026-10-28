@@ -43,4 +43,4 @@ pub use modality::{Modalities, Modality};
 pub use model_provider::Tokens;
 pub use parse::{CatalogError, merge_catalogs, parse_entry};
 pub use reach::reachable;
-pub use slot::{Signature, Slot, ToolNeed, fits, slot_members};
+pub use slot::{Signature, Slot, fits, slot_members};

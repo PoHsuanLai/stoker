@@ -13,28 +13,24 @@ use speech_provider::{
 
 use super::encode_transcription;
 use super::reply::{Pcm, Whole, listed_models, listed_voices};
-use super::{AudioCodecError, SpeechFlavor, decode_transcription, encode_speech_request};
+use super::{AudioCodecError, decode_transcription, encode_speech_request};
 
 /// The most audio one transcription takes in, as bytes of PCM (about 35 minutes of 16 kHz S16).
 const UPLOAD_PCM_MAX: usize = 64 << 20;
 
-/// One OpenAI-compatible speech endpoint. The same value serves `SpeechToText` where the server
-/// has `/audio/transcriptions` and `TextToSpeech` where it has `/audio/speech`; a call to the
-/// other direction answers `ProviderError::BadRequest`.
+/// The transcription endpoint of an OpenAI-compatible server (vLLM): batch, WAV in, JSON out.
 ///
 /// The transport is [`HttpClient`] unless a test supplies another.
 #[derive(Debug, Clone)]
-pub struct OpenAiSpeech<T = HttpClient> {
+pub struct OpenAiTranscription<T = HttpClient> {
     client: T,
-    flavor: SpeechFlavor,
     known: Vec<SpeechModelInfo>,
 }
 
-impl<T> OpenAiSpeech<T> {
-    pub fn new(client: T, flavor: SpeechFlavor) -> Self {
+impl<T> OpenAiTranscription<T> {
+    pub fn new(client: T) -> Self {
         Self {
             client,
-            flavor,
             known: Vec::new(),
         }
     }
@@ -46,13 +42,29 @@ impl<T> OpenAiSpeech<T> {
     pub fn with_known(self, known: Vec<SpeechModelInfo>) -> Self {
         Self { known, ..self }
     }
+}
 
-    pub fn flavor(&self) -> SpeechFlavor {
-        self.flavor
+/// The speech endpoint of Kokoro-FastAPI: `/v1/audio/speech` streams 24 kHz S16 mono PCM and
+/// `/v1/audio/voices` lists the voices.
+///
+/// The transport is [`HttpClient`] unless a test supplies another.
+#[derive(Debug, Clone)]
+pub struct KokoroSpeech<T = HttpClient> {
+    client: T,
+    known: Vec<SpeechModelInfo>,
+}
+
+impl<T> KokoroSpeech<T> {
+    pub fn new(client: T) -> Self {
+        Self {
+            client,
+            known: Vec::new(),
+        }
     }
 
-    fn no_endpoint(what: &str) -> ProviderError {
-        ProviderError::BadRequest(format!("this server has no {what} endpoint"))
+    /// As [`OpenAiTranscription::with_known`].
+    pub fn with_known(self, known: Vec<SpeechModelInfo>) -> Self {
+        Self { known, ..self }
     }
 }
 
@@ -133,11 +145,8 @@ async fn drain<A: AudioSource>(audio: &mut A) -> Result<Vec<AudioChunk>, Provide
     Ok(chunks)
 }
 
-impl<T: UploadTransport> SpeechToText for OpenAiSpeech<T> {
+impl<T: UploadTransport> SpeechToText for OpenAiTranscription<T> {
     async fn describe(&self) -> Result<Vec<SpeechModelInfo>, ProviderError> {
-        if self.flavor != SpeechFlavor::Vllm {
-            return Err(Self::no_endpoint("transcription"));
-        }
         let mut models = Whole::default();
         let sent = self.client.exchange(&get("/models"), &mut models).await;
         let listed = listed_models(&models.into_body(sent)?)?;
@@ -156,9 +165,6 @@ impl<T: UploadTransport> SpeechToText for OpenAiSpeech<T> {
         audio: &mut A,
         sink: &mut K,
     ) -> Result<SttEnd, ProviderError> {
-        if self.flavor != SpeechFlavor::Vllm {
-            return Err(Self::no_endpoint("transcription"));
-        }
         let chunks = drain(audio).await?;
         let (from, to) = span(&chunks);
         let heard = if chunks.is_empty() {
@@ -196,11 +202,8 @@ impl<T: UploadTransport> SpeechToText for OpenAiSpeech<T> {
     }
 }
 
-impl<T: UploadTransport> TextToSpeech for OpenAiSpeech<T> {
+impl<T: UploadTransport> TextToSpeech for KokoroSpeech<T> {
     async fn describe(&self) -> Result<Vec<SpeechModelInfo>, ProviderError> {
-        if self.flavor != SpeechFlavor::KokoroFastApi {
-            return Err(Self::no_endpoint("speech"));
-        }
         let mut models = Whole::default();
         let sent = self.client.exchange(&get("/models"), &mut models).await;
         let listed = listed_models(&models.into_body(sent)?)?;
@@ -224,7 +227,7 @@ impl<T: UploadTransport> TextToSpeech for OpenAiSpeech<T> {
         request: &TtsRequest,
         sink: &mut K,
     ) -> Result<TtsEnd, ProviderError> {
-        let body = encode_speech_request(request, self.flavor).map_err(codec_error)?;
+        let body = encode_speech_request(request).map_err(codec_error)?;
         // The body streams in as the engine makes it: the transport hands each read over as it
         // arrives and `Whole` applies no framing, so the PCM decoder sees the raw bytes.
         let ex = Exchange {

@@ -1,4 +1,4 @@
-//! `OpenAiSpeech` speech against the fake server (`speech_fake`): the streamed PCM in whole
+//! `KokoroSpeech` against the fake server (`speech_fake`): the streamed PCM in whole
 //! samples under any cutting, barge-in, and what every failure becomes. No GPU, no network.
 
 use crate::speech_fake;
@@ -6,7 +6,7 @@ use crate::speech_fake;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use model_openai_compat::{KOKORO_FORMAT, SpeechFlavor, encode_speech_request};
+use model_openai_compat::{KOKORO_FORMAT, encode_speech_request};
 use model_provider::{ModelName, ProviderError, ServerStatus};
 use proptest::prelude::*;
 use speech_fake::*;
@@ -42,11 +42,7 @@ async fn speech_streams_pcm_into_the_sink_in_whole_samples() {
     let pieces = cut(&audio, &[1_001, 777, 3_000]);
     let server = fake(move |_| pcm(pieces.clone(), 1));
     let mut speaker = Speaker::default();
-    let end = server
-        .speech(SpeechFlavor::KokoroFastApi)
-        .speak(&tts(), &mut speaker)
-        .await
-        .unwrap();
+    let end = server.kokoro().speak(&tts(), &mut speaker).await.unwrap();
     let sent = &server.requests()[0];
     assert_eq!(
         (sent.method.as_str(), sent.path.as_str()),
@@ -54,10 +50,7 @@ async fn speech_streams_pcm_into_the_sink_in_whole_samples() {
     );
     assert_eq!(
         sent.body,
-        encode_speech_request(&tts(), SpeechFlavor::KokoroFastApi)
-            .unwrap()
-            .0
-            .into_bytes()
+        encode_speech_request(&tts()).unwrap().0.into_bytes()
     );
     // The same samples, in order, each chunk numbered from the start, all whole.
     let heard: Vec<u8> = speaker
@@ -88,11 +81,7 @@ async fn barge_in_stops_the_stream_and_answers_the_audio_played_so_far() {
         stop_after: Some(2),
         ..Speaker::default()
     };
-    let end = server
-        .speech(SpeechFlavor::KokoroFastApi)
-        .speak(&tts(), &mut speaker)
-        .await
-        .unwrap();
+    let end = server.kokoro().speak(&tts(), &mut speaker).await.unwrap();
     assert_eq!(speaker.chunks.len(), 2);
     assert_eq!(end.audio, AudioMs(100));
     // The connection was closed, so the server's long stream hit a broken pipe.
@@ -132,7 +121,7 @@ async fn a_refused_speech_request_is_the_error_and_plays_nothing() {
         let server = fake(move |_| reply.clone());
         let mut speaker = Speaker::default();
         let got = server
-            .speech(SpeechFlavor::KokoroFastApi)
+            .kokoro()
             .speak(&tts(), &mut speaker)
             .await
             .unwrap_err();
@@ -148,7 +137,7 @@ async fn a_format_the_server_does_not_stream_is_refused_before_sending() {
     let mut request = tts();
     request.format = S16_16K;
     let got = server
-        .speech(SpeechFlavor::KokoroFastApi)
+        .kokoro()
         .speak(&request, &mut Speaker::default())
         .await;
     assert_eq!(
@@ -174,7 +163,7 @@ proptest! {
         let (heard, ms) = runtime.block_on(async {
             let server = fake(move |_| pcm(pieces.clone(), 0));
             let mut speaker = Speaker::default();
-            let end = server.speech(SpeechFlavor::KokoroFastApi).speak(&tts(), &mut speaker).await.unwrap();
+            let end = server.kokoro().speak(&tts(), &mut speaker).await.unwrap();
             let heard: Vec<u8> = speaker.chunks.iter().flat_map(|c| c.pcm.as_slice().to_vec()).collect();
             (heard, end.audio)
         });

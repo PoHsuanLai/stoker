@@ -30,7 +30,7 @@ trait), section 6 (copy the recipe).
 | `model-wire` | the wire half of an endpoint: `ChatCodec`, `ChatDecoder`, `EmbedCodec`, `ErrorWire`, `CodecError`, and `Driver<C, T>`, the `Provider` (and `Embedder`) made of a codec and a transport | none (pure over the `Transport` trait) |
 | `model-extract` | structured extraction as a pure machine: `choose` (native constraint, synthetic tool call or prompted), `ExtractSession`, `Extracted`, `ExtractFailure` | none |
 | `genai-names` | the OpenTelemetry GenAI attribute, metric, operation and finish-reason names as constants; zero dependencies; no content attribute exists | none |
-| `model-openai-compat` | the chat-completions codec `OpenAiCodec` (pure `encode_request`, `StreamDecoder`), `Flavor::quirks` (the table of what differs between servers, including whether `logprobs` is sent), first-token log-probabilities (`logprobs`), `OpenAiCompat = Driver<OpenAiCodec, HttpClient>`; `audio`: `encode_speech_request`, `encode_transcription`, `PcmDecoder`, and `OpenAiSpeech` (both speech traits) | none of its own: the HTTP is `model-http`'s `Transport` (the speech provider is `OpenAiSpeech<T: UploadTransport>`, an `HttpClient` by default) |
+| `model-openai-compat` | the chat-completions codec `OpenAiCodec` (pure `encode_request`, `StreamDecoder`), the `Server` trait (what differs between servers, one default method each and one impl per server; `Flavor` names the server at run time), first-token log-probabilities (`logprobs`), `OpenAiCompat = Driver<OpenAiCodec, HttpClient>`; `audio`: `encode_speech_request`, `encode_transcription`, `PcmDecoder`, `OpenAiTranscription` (`SpeechToText`, vLLM) and `KokoroSpeech` (`TextToSpeech`) | none of its own: the HTTP is `model-http`'s `Transport` (the speech providers are generic over `T: UploadTransport`, an `HttpClient` by default) |
 | `speech-provider` | audio and text types, `SpeechToText`, `TextToSpeech`, `AudioSource`/`AudioSink`, `VoiceActivity`, `SpeechCaps`, the host wire and its framing; feature `testing`: `ScriptedStt`, `ScriptedTts`, `ScriptedVad` | none |
 | `speech-vad` | `EnergyGate`, `Framer`, `level_of`, the `endpoint` machine | none |
 | `speech-host-client` | `SpeechHostClient: SpeechToText` over the host's Unix socket | yes (the socket, when filled) |
@@ -106,7 +106,7 @@ stoker.
 | `model-wire` | `codec` < `driver` |
 | `model-extract` | `mode` < `session` < `shaped` |
 | `genai-names` | `lib` |
-| `model-openai-compat` | `quirks`, `logprobs`, `codec` < `provider`; `audio` (`codec` < `provider`) |
+| `model-openai-compat` | `server`, `logprobs`, `codec` < `provider`; `audio` (`codec` < `provider`) |
 | `speech-provider` | `audio`, `text` < `vad`, `stt`, `tts`, `caps` < `host_wire` < `testing` (feature `testing`) |
 | `speech-vad` | `level` < `energy`, `framer` < `endpoint` |
 | `speech-host-client` | `lib` |
@@ -140,7 +140,7 @@ stoker.
 | a response's status and the few headers a codec reads | `model-http::ResponseHead` (delivered by `BodySink::head` before any chunk) |
 | delivery of one exchange (TCP, Unix, TLS, in process, record, replay) | `model-http::Transport` |
 | a wire's request, reply and error format | `model-wire::{ChatCodec, EmbedCodec}`; the OpenAI-compatible one is `model-openai-compat::OpenAiCodec` |
-| what differs between OpenAI-compatible servers | `model-openai-compat::Flavor::quirks` |
+| what differs between OpenAI-compatible servers | `model-openai-compat::Server` (picked by `Flavor`) |
 | sampling, tool parallelism, per-flavor engine knobs | `model-provider::control` (no untyped parameter bag) |
 | embeddings through a provider, roles, batch plan | `model-provider::embed` |
 | the vocabulary of structured outputs and its conversions | `model-provider::shape` |
@@ -193,7 +193,7 @@ pub trait EngineHost: Send + Sync {
 pub trait ReadyProbe: Send + Sync { fn probe(&self, id: &EngineId) -> impl Future<Output = Probe> + Send; }
 pub trait GpuProbe: Send + Sync { fn memory(&self) -> impl Future<Output = Result<GpuMemory, GpuError>> + Send; }
 
-// speech-provider: one per backend (SpeechHostClient, OpenAiSpeech, SpeechReplay, RecordingSpeech);
+// speech-provider: one per backend (SpeechHostClient, OpenAiTranscription, KokoroSpeech, SpeechReplay, RecordingSpeech);
 // `SttBackend` and `TtsBackend` are closed enums in porter's inferd. Cancellation is drop.
 pub trait SpeechToText: Send + Sync {
     fn describe(&self) -> impl Future<Output = Result<Vec<SpeechModelInfo>, ProviderError>> + Send;
@@ -263,9 +263,9 @@ pub trait WireSink: Send + Sync { fn write(&self, exchange: &WireExchange) -> Re
 Closed sets stay enums: `CuaAction`, `Target`, `CuaDialect` (`WireDialect`, `TextDialect`,
 `ToolDialect`), `ModelSpace`, `ResizeRule`, `Part`, `ToolSpec`, `TurnEvent`, `ProviderError`,
 `EngineState`, `SupervisorIn`, `SupervisorOut`, `HttpTarget`, `AuthHeader`, `Flavor`,
-`WireCodecs`, `WeightFiles`, `Licence`, `EngineKind`, `CatalogKind`, `PcmFormat`, `SttMode`,
+`WeightFiles`, `Licence`, `EngineKind`, `CatalogKind`, `PcmFormat`, `SttMode`,
 `TranscriptEvent`, `LangChoice`, `LangSet`, `SpeechIo`, `HostIn`, `HostOut`, `Voiced`, `Endpoint`,
-`SpeechFlavor`, `SpeechInteraction`, `Framing`, `Verb`, `BodyKind`, `RouteRoot`, `Knob`, `EngineExtras`, `ThoughtSeal`, `ToolParallelism`, `Shape`, `ExtractMode`, `RetryClass`, `WireBody`, `WireEnd`, `ChunkPlan`, `UsageAsk`, `ToolNaming`, `ToolImages`, `DimensionsField`, `ShapeWithTools`.
+`SpeechInteraction`, `Framing`, `Verb`, `BodyKind`, `RouteRoot`, `Knob`, `EngineExtras`, `ThoughtSeal`, `ToolParallelism`, `Shape`, `ExtractMode`, `RetryClass`, `WireBody`, `WireEnd`, `ChunkPlan`, `ShapeWithTools`.
 
 ## 5. What is frozen, what is built, what is stubbed
 
@@ -289,7 +289,7 @@ on; a change is an edit of SPEC.md first. Every `todo!()` is listed in `FINDINGS
 | `model-extract`: `ExtractMode`, `ToolsPresent`, `ExtractSession`, `Extracted`, `ExtractFailure`, `choose`, `request`, `absorb` | built, tested |
 | `genai-names`: every name, `Operation`, `Finish` | built, tested (names are values, so there is no stub) |
 | `model-provider` amendment: `Sampling`, `EngineExtras`, `Knob`, `ThoughtSeal`, the `embed`, `shape`, `retry` and `sequence` types, `OutputShape::{Gbnf, Choice}`, `Constraint::{Gbnf, Choice}`, `ProviderError::Server`, `TurnUsage.cached`, `ModelInfo.{loaded_context, trained_context}` | built, round-trip and pinned-JSON tested; `plan_batches`, `EmbedEnd::check`, the `Shape` conversions and checker, `retry_class`, `next_wait`, `Retrying`, `sequence::check` stubbed |
-| `model-openai-compat`: types, `Flavor::quirks`, `OpenAiCodec` (`encode_request`, `encode`, `classify`, `describe`, `parse_models`, `encode_embed`, `decode_embed`), `StreamDecoder` | built, tested (golden bodies, the flavor table, error classes, wire cassettes under every chunking, one loopback-socket run of the whole stack); the `audio` codec (`encode_speech_request`, `encode_transcription`, `decode_transcription`, `PcmDecoder`) is built and tested; `OpenAiSpeech` is stubbed (it needs a multipart POST) |
+| `model-openai-compat`: types, the `Server` trait, `OpenAiCodec` (`encode_request`, `encode`, `classify`, `describe`, `parse_models`, `encode_embed`, `decode_embed`), `StreamDecoder` | built, tested (golden bodies, the flavor table, error classes, wire cassettes under every chunking, one loopback-socket run of the whole stack); the `audio` codec (`encode_speech_request`, `encode_transcription`, `decode_transcription`, `PcmDecoder`) is built and tested; `OpenAiTranscription` and `KokoroSpeech` are built |
 | `speech-provider`: every type, the checked names, `AudioChunk::{samples, duration}`, the host framing, the `testing` fakes | built, tested (round trips, pinned JSON, redaction, duration table, the fakes' scripts) |
 | `speech-vad`: types, defaults, `level_of`, `EnergyGate`, `Framer::push`, `endpoint` | built, tested (level rows, gate table, framer proptest, endpoint table, the chain over synthetic audio) |
 | `speech-host-client`: types | built; both trait bodies stubbed |

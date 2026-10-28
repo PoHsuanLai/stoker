@@ -74,6 +74,19 @@ pub struct EnginePaths {
     pub hf_cache: PathBuf,
 }
 
+impl EnginePaths {
+    /// The program that runs an engine of this kind.
+    pub fn program(&self, kind: EngineKind) -> &ProgramPath {
+        match kind {
+            EngineKind::Vllm => &self.vllm_python,
+            EngineKind::LlamaServer => &self.llama_server,
+            EngineKind::SpeechHost => &self.speech_host,
+            EngineKind::KokoroFastApi => &self.kokoro_python,
+            EngineKind::Strata => &self.strata_python,
+        }
+    }
+}
+
 /// Host memory an engine process needs beyond its weights: the interpreter, the tokenizer and
 /// the staging buffers of a load. A proposal, measured by spike S1 (FINDINGS).
 const HOST_MEMORY_BASE: MiB = MiB(4096);
@@ -154,9 +167,8 @@ pub fn command_with_window(
         .iter()
         .map(|arg| EngineArg(arg.0.replace(SOCKET_PLACEHOLDER, &socket_text)));
     let path_arg = |path: PathBuf| EngineArg(path.to_string_lossy().into_owned());
-    let (program, front, back) = match (profile.kind, &profile.weights) {
+    let (front, back) = match (profile.kind, &profile.weights) {
         (EngineKind::Vllm, _) => (
-            paths.vllm_python.clone(),
             own(&["-m", "vllm.entrypoints.openai.api_server", "--model"]),
             vec![
                 path_arg(snapshot),
@@ -196,23 +208,11 @@ pub fn command_with_window(
                 EngineArg("--host".into()),
                 EngineArg(socket_text.clone().into_owned()),
             ];
-            (
-                paths.llama_server.clone(),
-                Vec::new(),
-                files.into_iter().chain(serve).collect(),
-            )
+            (Vec::new(), files.into_iter().chain(serve).collect())
         }
-        (EngineKind::SpeechHost, _) => (
-            paths.speech_host.clone(),
-            own(&["--model-dir"]),
-            vec![path_arg(snapshot)],
-        ),
-        (EngineKind::KokoroFastApi, _) => (
-            paths.kokoro_python.clone(),
-            own(&["-m", "uvicorn", "api.src.main:app"]),
-            Vec::new(),
-        ),
-        (EngineKind::Strata, _) => (paths.strata_python.clone(), Vec::new(), Vec::new()),
+        (EngineKind::SpeechHost, _) => (own(&["--model-dir"]), vec![path_arg(snapshot)]),
+        (EngineKind::KokoroFastApi, _) => (own(&["-m", "uvicorn", "api.src.main:app"]), Vec::new()),
+        (EngineKind::Strata, _) => (Vec::new(), Vec::new()),
     };
     let sized = match (&profile.context_arg, window.tokens(entry)) {
         (Some(ContextArg::Flag(flag)), Some(tokens)) => {
@@ -221,7 +221,7 @@ pub fn command_with_window(
         _ => Vec::new(),
     };
     UnitSpec {
-        program,
+        program: paths.program(profile.kind).clone(),
         args: front
             .into_iter()
             .chain(back)

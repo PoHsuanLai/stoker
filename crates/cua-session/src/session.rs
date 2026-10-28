@@ -2,9 +2,9 @@
 
 use std::collections::VecDeque;
 
-use cua_action::{CuaDialect, Point, TextDialect, WindowSpace};
+use cua_action::{Point, WindowSpace};
 use cua_parse::{DropReason, ParseLimits, Parsed, ToolContext};
-use cua_vendors::{WireCodec, codec};
+use cua_vendors::WireCodec;
 use model_provider::{
     ImageInput, Message, ModelName, OutputShape, Part, Role, ToolChoice, TurnRequest,
 };
@@ -75,7 +75,7 @@ impl CuaSession {
 
     fn build(&self, obs: &ObservationIn, map: &FrameMap, image: Option<ImageInput>) -> TurnRequest {
         let dialect = self.profile.dialect;
-        if let CuaDialect::Wire(wire) = dialect {
+        if let Some(wire) = dialect.wire() {
             return self.build_wire(wire, obs, map, image);
         }
         let mut messages: Vec<Message> =
@@ -86,7 +86,7 @@ impl CuaSession {
                 })
                 .into_iter()
                 .collect();
-        let text_dialect = matches!(dialect, CuaDialect::Text(TextDialect::UiTars15));
+        let text_dialect = dialect.is_text();
         let own = history::replays_own(dialect, self.profile.actions);
         let mut lead = prompt::observation_lines(
             dialect,
@@ -162,7 +162,6 @@ impl CuaSession {
         map: &FrameMap,
         image: Option<ImageInput>,
     ) -> TurnRequest {
-        let codec = codec(wire);
         let mut messages = Vec::new();
         for turn in &self.history {
             messages.push(Message {
@@ -189,7 +188,7 @@ impl CuaSession {
             map,
         );
         let mut user = match (&image, obs.prev.is_empty()) {
-            (Some(image), false) => codec.results(&obs.prev, image),
+            (Some(image), false) => wire.results(&obs.prev, image),
             _ => Vec::new(),
         };
         let results_carry_the_frame = !user.is_empty();
@@ -307,7 +306,7 @@ impl CuaSession {
     fn repair(&self, sent: &TurnRequest, reply: &TurnTranscript, fault: &Fault) -> TurnRequest {
         let dialect = self.profile.dialect;
         let mut request = sent.clone();
-        if matches!(dialect, CuaDialect::Text(_)) && !reply.text.is_empty() {
+        if dialect.is_text() && !reply.text.is_empty() {
             request.messages.push(Message {
                 role: Role::Assistant,
                 parts: vec![Part::Text(history::cut(&reply.text))],
@@ -325,7 +324,7 @@ impl CuaSession {
     }
 
     fn remember(&mut self, sent: &TurnRequest, reply: &TurnTranscript, actions: Vec<String>) {
-        let wire = matches!(self.profile.dialect, CuaDialect::Wire(_));
+        let wire = self.profile.dialect.wire().is_some();
         let turn = HistoryTurn {
             number: self.taken,
             actions,

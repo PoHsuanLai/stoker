@@ -1,9 +1,9 @@
-//! `OpenAiSpeech::describe` against the fake server (`speech_fake`): the served models the
+//! `describe` of `OpenAiTranscription` and `KokoroSpeech` against the fake server (`speech_fake`): the served models the
 //! catalog knows, the voices read from the server, and an unreadable listing. No GPU, no network.
 
 use crate::speech_fake;
 
-use model_openai_compat::{KOKORO_FORMAT, SpeechFlavor};
+use model_openai_compat::KOKORO_FORMAT;
 use model_provider::{ModelName, ProviderError, ServerStatus, Support};
 use speech_fake::*;
 use speech_provider::{
@@ -52,10 +52,9 @@ async fn describe_in_answers_the_listed_models_the_catalog_knows() {
             voices: vec![],
         },
     );
-    let speech =
-        server
-            .speech(SpeechFlavor::Vllm)
-            .with_known(vec![whisper.clone(), absent, kokoro]);
+    let speech = server
+        .transcription()
+        .with_known(vec![whisper.clone(), absent, kokoro]);
     // Only what is served, only the right direction; the unknown served model has no caps to say.
     assert_eq!(
         SpeechToText::describe(&speech).await.unwrap(),
@@ -63,7 +62,7 @@ async fn describe_in_answers_the_listed_models_the_catalog_knows() {
     );
     assert_eq!(server.requests().len(), 1);
     // Without the catalog nothing can be described.
-    let bare = server.speech(SpeechFlavor::Vllm);
+    let bare = server.transcription();
     assert_eq!(SpeechToText::describe(&bare).await.unwrap(), vec![]);
 }
 
@@ -85,9 +84,7 @@ async fn describe_out_reads_the_voices_from_the_server() {
                 voices: voices(&["zf_xiaoxiao"]),
             },
         );
-        let speech = server
-            .speech(SpeechFlavor::KokoroFastApi)
-            .with_known(vec![catalog.clone()]);
+        let speech = server.kokoro().with_known(vec![catalog.clone()]);
         let got = TextToSpeech::describe(&speech).await.unwrap();
         let want = info(
             "kokoro",
@@ -110,9 +107,7 @@ async fn describe_out_reads_the_voices_from_the_server() {
             voices: voices(&["zf_xiaoxiao"]),
         },
     );
-    let speech = server
-        .speech(SpeechFlavor::KokoroFastApi)
-        .with_known(vec![catalog.clone()]);
+    let speech = server.kokoro().with_known(vec![catalog.clone()]);
     assert_eq!(
         TextToSpeech::describe(&speech).await.unwrap(),
         vec![catalog]
@@ -123,7 +118,7 @@ async fn describe_out_reads_the_voices_from_the_server() {
 async fn an_unreadable_listing_is_unreadable_and_a_refusal_is_its_error() {
     let bad = |body: &'static str, status: &'static str| {
         let server = fake(move |_| json(status, body));
-        let speech = server.speech(SpeechFlavor::Vllm);
+        let speech = server.transcription();
         async move {
             let got = SpeechToText::describe(&speech).await.unwrap_err();
             // The server lives until the answer is in.

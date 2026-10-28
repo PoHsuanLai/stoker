@@ -12,7 +12,7 @@ use crate::request::encode_request;
 use crate::{StreamDecoder, embed, models};
 
 /// Which server dialect of the shared wire to speak: they differ in where reasoning text arrives,
-/// which constraint fields exist, and the usage chunk (see [`Flavor::quirks`]).
+/// which constraint fields exist, and the usage chunk (see the `Server` trait).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Flavor {
@@ -79,10 +79,7 @@ impl ChatCodec for OpenAiCodec {
     }
 
     fn charges(&self) -> Charges {
-        match self.flavor {
-            Flavor::OpenRouter => Charges::PerReply,
-            Flavor::LlamaServer | Flavor::Vllm | Flavor::LiteLlm => Charges::NotReported,
-        }
+        self.flavor.server().charges()
     }
 
     fn describe(&self) -> Exchange {

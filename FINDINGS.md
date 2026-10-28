@@ -2,6 +2,20 @@
 
 Open items and standing facts. An entry names the condition that closes it.
 
+## Simplification by the new type rules (2026-10-28)
+
+Lane `esto` made the code match CONVENTIONS rules 11 to 14 (the old "no bool, never `dyn`" rules went).
+Done: `Flavor` keeps its name and serde shape, and what differs per server is now the `Server`
+trait (default methods, one impl per server) in `model-openai-compat/src/server.rs`; the five
+two-way enums and `Quirks` are gone, except a one-field `Quirks { shape_with_tools }` that
+porter's `structured.rs` still reads (delete it, and `Flavor::quirks`, when porter reads the
+shape-with-tools row another way). `OpenAiSpeech` is split into `OpenAiTranscription` and
+`KokoroSpeech`; `SpeechFlavor` is gone. `WireDialect` is its own `WireCodec`. `ToolNeed`,
+`Thinking`, `Done`, `Closed` and `IfMalformed::KeepOpen` are gone. `CuaDialect` gained `wire()`,
+`is_text()` and `is_tool()`. `EnginePaths::program(kind)` replaces the program ladder.
+Left alone because another repo names them: `Network`, `GpuAccess`, `GpuNeed`, `Batching`,
+`TextDialect`, `EnginePaths` fields, `EngineExtras`.
+
 ## S0: Holo-3.1-4B (read-only, from the Hugging Face hub files; no weights downloaded)
 
 Read: `chat_template.jinja`, `preprocessor_config.json`, `config.json`, the model API record
@@ -103,7 +117,7 @@ The four codecs (`AnthropicToolset20260801`, `AnthropicComputer20251124`, `OpenA
 
 ### `model-openai-compat` (0; the chat codec was filled in F1 and F2, the audio codec in W4, the `OpenAiSpeech` provider in W5)
 
-The chat codec passes its golden requests, the conformance list of `research-rig.md` 3.2, 3.3 and 3.7 (hand-written frames and wire cassettes under every chunking), and still waits for recorded fixtures from vLLM and llama-server (`dev/record-engine.sh`, run by hand, recorded at the `Transport`); `Flavor::quirks` is a pinned table whose rows marked "to verify" in `quirks.rs` are settled by the first recorded fixture of that engine. `OpenAiSpeech` passes a loopback test against a hand-written fake server on a Unix socket (`tests/speech_provider.rs`); it still waits for fixtures recorded by `dev/record-speech.sh` (by hand, against the user's own vLLM and Kokoro), which settle the request spellings of ask 68.
+The chat codec passes its golden requests, the conformance list of `research-rig.md` 3.2, 3.3 and 3.7 (hand-written frames and wire cassettes under every chunking), and still waits for recorded fixtures from vLLM and llama-server (`dev/record-engine.sh`, run by hand, recorded at the `Transport`); `Flavor::quirks` is a pinned table whose rows marked "to verify" in `server.rs` are settled by the first recorded fixture of that engine. `OpenAiSpeech` passes a loopback test against a hand-written fake server on a Unix socket (`tests/speech_provider.rs`); it still waits for fixtures recorded by `dev/record-speech.sh` (by hand, against the user's own vLLM and Kokoro), which settle the request spellings of ask 68.
 
 ### `model-replay` (0, filled in wave F1)
 

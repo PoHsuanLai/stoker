@@ -1,4 +1,4 @@
-//! The codec trait and the closed set of codecs.
+//! The codec trait, implemented by each [`WireDialect`].
 
 use cua_action::{CoordSpace, CuaAction, ImageSpace, Size, WireDialect};
 use cua_parse::{Batch, DropReason, InSpace, ParseLimits, Parsed};
@@ -11,7 +11,7 @@ use crate::args::{self, Verdict};
 use crate::safety::apply_safety;
 use crate::{StepResult, anthropic, gemini, openai, results};
 
-/// One vendor's computer-use encoding.
+/// One vendor's computer-use encoding: a [`WireDialect`] is its own codec.
 pub trait WireCodec {
     /// The tool declaration: a `NativeTool` or `Function` per dialect, for an image of this size.
     fn tools(&self, image: Size<ImageSpace>) -> Vec<ToolSpec>;
@@ -31,69 +31,39 @@ pub enum WireError {
     BadArguments,
 }
 
-/// The codecs, one per [`WireDialect`]; a closed set, so an enum rather than `dyn`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WireCodecs {
-    AnthropicToolset20260801,
-    AnthropicComputer20251124,
-    OpenAiComputer,
-    GeminiComputerUse,
-}
-
-impl WireCodecs {
-    pub fn dialect(&self) -> WireDialect {
-        match self {
-            WireCodecs::AnthropicToolset20260801 => WireDialect::AnthropicToolset20260801,
-            WireCodecs::AnthropicComputer20251124 => WireDialect::AnthropicComputer20251124,
-            WireCodecs::OpenAiComputer => WireDialect::OpenAiComputer,
-            WireCodecs::GeminiComputerUse => WireDialect::GeminiComputerUse,
-        }
-    }
-}
-
-/// The codec for a dialect.
-pub fn codec(dialect: WireDialect) -> WireCodecs {
-    match dialect {
-        WireDialect::AnthropicToolset20260801 => WireCodecs::AnthropicToolset20260801,
-        WireDialect::AnthropicComputer20251124 => WireCodecs::AnthropicComputer20251124,
-        WireDialect::OpenAiComputer => WireCodecs::OpenAiComputer,
-        WireDialect::GeminiComputerUse => WireCodecs::GeminiComputerUse,
-    }
-}
-
-impl WireCodec for WireCodecs {
+impl WireCodec for WireDialect {
     fn tools(&self, image: Size<ImageSpace>) -> Vec<ToolSpec> {
         let config = match self {
-            WireCodecs::AnthropicToolset20260801 => json!({"type": "computer_toolset_20260801"}),
-            WireCodecs::AnthropicComputer20251124 => json!({
+            WireDialect::AnthropicToolset20260801 => json!({"type": "computer_toolset_20260801"}),
+            WireDialect::AnthropicComputer20251124 => json!({
                 "type": "computer_20251124",
                 "name": "computer",
                 "display_width_px": image.w.0,
                 "display_height_px": image.h.0,
                 "enable_zoom": true,
             }),
-            WireCodecs::OpenAiComputer => json!({"type": "computer"}),
-            WireCodecs::GeminiComputerUse => {
+            WireDialect::OpenAiComputer => json!({"type": "computer"}),
+            WireDialect::GeminiComputerUse => {
                 json!({"type": "computer_use", "environment": "desktop"})
             }
         };
         let config = JsonText::from_value(&config);
         vec![ToolSpec::Native(NativeTool {
-            dialect: self.dialect(),
+            dialect: *self,
             config,
         })]
     }
 
     fn decode(&self, calls: &[ToolCall], safety: &[SafetySignal]) -> Result<Parsed, WireError> {
         let mut parsed = match self {
-            WireCodecs::AnthropicToolset20260801 => {
+            WireDialect::AnthropicToolset20260801 => {
                 decode_anthropic(calls, AnthropicTool::Toolset)?
             }
-            WireCodecs::AnthropicComputer20251124 => {
+            WireDialect::AnthropicComputer20251124 => {
                 decode_anthropic(calls, AnthropicTool::Computer2025)?
             }
-            WireCodecs::OpenAiComputer => decode_openai(calls)?,
-            WireCodecs::GeminiComputerUse => decode_gemini(calls)?,
+            WireDialect::OpenAiComputer => decode_openai(calls)?,
+            WireDialect::GeminiComputerUse => decode_gemini(calls)?,
         };
         parsed.actions = apply_safety(parsed.actions, safety);
         Ok(parsed)
@@ -101,10 +71,10 @@ impl WireCodec for WireCodecs {
 
     fn results(&self, done: &[StepResult], next: &ImageInput) -> Vec<Part> {
         match self {
-            WireCodecs::AnthropicToolset20260801 | WireCodecs::AnthropicComputer20251124 => {
+            WireDialect::AnthropicToolset20260801 | WireDialect::AnthropicComputer20251124 => {
                 results::anthropic(done, next)
             }
-            WireCodecs::OpenAiComputer | WireCodecs::GeminiComputerUse => {
+            WireDialect::OpenAiComputer | WireDialect::GeminiComputerUse => {
                 if done.is_empty() {
                     vec![Part::Image(next.clone())]
                 } else {

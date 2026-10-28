@@ -8,7 +8,7 @@ use cua_action::{
     ActionProfile, CuaDialect, ModelSpace, ResolutionWording, TextDialect, ToolDialect,
 };
 use cua_parse::{CursorAt, DropReason, ParseError};
-use cua_vendors::{StepResult, WireCodec, codec};
+use cua_vendors::{StepResult, WireCodec};
 use model_provider::{JsonText, SchemaText, ToolName, ToolSpec};
 use vision_prep::FrameMap;
 
@@ -102,7 +102,7 @@ pub(crate) fn system_text(
     };
     // A model whose calls we read from its text is told its tools here, not in the request, and
     // a model trained on one reply shape is told the shape.
-    let tooled = matches!(dialect, CuaDialect::Tool(_));
+    let tooled = dialect.is_tool();
     let tool_block = tooled
         .then(|| calls::tool_block(actions.calls, &tools(dialect, actions, map)))
         .flatten();
@@ -115,11 +115,6 @@ pub(crate) fn system_text(
         .chain(answer_block)
         .collect();
     (!sections.is_empty()).then(|| sections.join("\n\n"))
-}
-
-/// Whether the goal is already in the system message (the text dialect's prompt ends with it).
-pub(crate) fn goal_in_system(dialect: CuaDialect) -> bool {
-    matches!(dialect, CuaDialect::Text(_))
 }
 
 /// The name a model is shown for a verb of the common convention: its alias, or the verb.
@@ -172,7 +167,7 @@ pub(crate) fn tools(dialect: CuaDialect, actions: ActionProfile, map: &FrameMap)
         CuaDialect::Tool(ToolDialect::Holo31) => {
             function(HOLO_TOOL, HOLO_SCHEMA, map, actions.resolution)
         }
-        CuaDialect::Wire(wire) => codec(wire).tools(map.image),
+        CuaDialect::Wire(wire) => wire.tools(map.image),
     }
 }
 
@@ -249,17 +244,18 @@ pub(crate) fn observation_lines(
 ) -> Vec<String> {
     let mut out = Vec::new();
     // A vendor wire says the goal once, in the first message; its history is real messages.
-    let wire = matches!(dialect, CuaDialect::Wire(_));
+    let wire = dialect.wire().is_some();
     // A model whose own replies are replayed has the goal in the first replayed message.
     let replayed = history::replays_own(dialect, actions) && !history.is_empty();
-    if !goal_in_system(dialect) && !(wire && !history.is_empty()) && !replayed {
+    // The text dialect's system prompt ends with the goal.
+    if !dialect.is_text() && !(wire && !history.is_empty()) && !replayed {
         out.extend(goal_lines(task));
     }
     // The text dialect replays steps that have a frame as turns; the others list them all.
     let shown: Vec<&HistoryTurn> = history
         .iter()
         .skip(history.len().saturating_sub(usize::from(lines.0)))
-        .filter(|turn| !(goal_in_system(dialect) && turn.frame.is_some()))
+        .filter(|turn| !(dialect.is_text() && turn.frame.is_some()))
         .collect();
     if !shown.is_empty() && !wire && !replayed {
         out.push("Earlier actions:".to_owned());

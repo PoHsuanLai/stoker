@@ -15,8 +15,11 @@ additions, kept so the two repos read alike):
    the wire); nothing hand-writes `slug`, `parse` or `ALL`, and labels a person reads belong to
    the UI that draws them.
 2. **Async seams use `-> impl Future<Output = ...> + Send`** (return-position `impl Trait`), so
-   implementations write `async fn` and every future can cross a multi-threaded runtime. Closed
-   sets of implementations are enums implementing the trait, never `dyn`.
+   implementations write `async fn` and every future can cross a multi-threaded runtime.
+   Behaviour that differs by case is a trait with default methods, overridden where a case
+   differs (`Provider::charges`, `Server` in `model-openai-compat`). Generics by default;
+   `Box<dyn Trait>` or `&dyn Trait` is fine where the implementation is picked from
+   configuration at run time (`Flavor::server`).
 3. **`todo!()` bodies exist only while an interface is frozen and its behaviour is not
    built.** Each one is listed in `FINDINGS.md` with the work that removes it. This departs from
    the shared rule "no `todo!()` stub on master"; the freeze decides when it lands.
@@ -42,3 +45,14 @@ additions, kept so the two repos read alike):
    speech runs as its own engine process, and `speech-host` links sherpa-onnx built without TTS.
 10. **Lists are plain.** The catalog and its labels rank nothing: no best, recommended or tier
     wording in a file, a label or a doc comment; a test fails a catalog file that has any.
+11. **Plain types first (2026-10-28).** `bool` is fine for fields, return values, locals and
+    private functions; use an enum only where a public function would read `f(true, false)`, a
+    third state is realistic, or the value is written to disk or the bus and a word reads
+    better. Two-way outcomes are `Result` or `Option`, not a two-arm enum.
+12. **One fact, one type.** No mirror enums across crates; the lower crate owns the set, and a
+    field-less view of an enum is a method. If the type can say it, no runtime check says it, and
+    a single-variant enum is not a type.
+13. **Growing sets are data.** Apps, providers, programs, verbs and window classes are a string
+    id or a shipped file, not a variant list; an enum is for a set the program closes.
+14. **Newtypes only with a rule.** A parsed or validated value, a unit, or an id that must not be
+    mixed with another; otherwise the plain type.

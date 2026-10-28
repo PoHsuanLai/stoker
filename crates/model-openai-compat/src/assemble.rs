@@ -26,18 +26,6 @@ pub(crate) enum IfMalformed {
     Superseded,
     /// The stream was cut: never deliver a half-formed call.
     Drop,
-    /// Not decided yet: leave the call as it is. The decoder delivers calls at the finish reason,
-    /// so only the assembler's own tests close with it.
-    #[allow(dead_code)]
-    KeepOpen,
-}
-
-/// What `close` made of a call.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Closed {
-    Done(ToolCall),
-    Dropped,
-    Open,
 }
 
 /// The parts of one wire fragment, with empty strings already removed.
@@ -162,13 +150,13 @@ impl Pending {
         })
     }
 
-    /// Ends the call. Empty arguments, or a held `null`, mean `{}`.
-    pub(crate) fn close(self, how: IfMalformed) -> Result<Closed, CodecError> {
+    /// Ends the call: the call, or `None` when it is dropped. Empty arguments, or a held `null`,
+    /// mean `{}`.
+    pub(crate) fn close(self, how: IfMalformed) -> Result<Option<ToolCall>, CodecError> {
         let (Some(name), Some(id)) = (self.name, self.id) else {
             return match how {
                 IfMalformed::Fail => Err(CodecError::BadToolArguments),
-                IfMalformed::KeepOpen => Ok(Closed::Open),
-                IfMalformed::Superseded | IfMalformed::Drop => Ok(Closed::Dropped),
+                IfMalformed::Superseded | IfMalformed::Drop => Ok(None),
             };
         };
         let text = self.args.trim();
@@ -185,11 +173,10 @@ impl Pending {
         let input = match (parsed, how) {
             (Some(input), _) => input,
             (None, IfMalformed::Fail) => return Err(CodecError::BadToolArguments),
-            (None, IfMalformed::Drop) => return Ok(Closed::Dropped),
-            (None, IfMalformed::KeepOpen) => return Ok(Closed::Open),
+            (None, IfMalformed::Drop) => return Ok(None),
             (None, IfMalformed::Superseded) => return Err(CodecError::BadToolArguments),
         };
-        Ok(Closed::Done(ToolCall {
+        Ok(Some(ToolCall {
             id: ToolCallId(id),
             name,
             input,

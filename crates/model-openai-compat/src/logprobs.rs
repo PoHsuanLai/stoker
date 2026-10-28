@@ -15,21 +15,12 @@ use crate::Flavor;
 /// The most candidates read from one chunk: a hostile stream cannot grow the record.
 const TOP_MAX: usize = 256;
 
-/// Whether the flavor's server takes `logprobs` on a chat request.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum LogprobsAsk {
-    Request,
-    /// Hosted gateways: not asked, so no reply carries them.
-    Unsupported,
-}
-
 /// The request fields for `ask`: `top_k` is held to the 1 to 20 both engines accept.
 pub(crate) fn encode(body: &mut Map<String, Value>, ask: ChoiceScores, flavor: Flavor) {
     let ChoiceScores::FirstToken { top_k } = ask else {
         return;
     };
-    if flavor.quirks().logprobs == LogprobsAsk::Unsupported {
+    if !flavor.server().asks_logprobs() {
         return;
     }
     body.insert("logprobs".into(), json!(true));
@@ -53,23 +44,17 @@ pub(crate) enum FirstToken {
     Settled(Option<FirstTokenLogprobs>),
 }
 
-/// Whether the delta that carried the answer's first text also carried thinking text.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Thinking {
-    WithAnswer,
-    Absent,
-}
-
 impl FirstToken {
-    /// `choice` is the chunk's choice; `answer` its non-empty answer text; `thinking` whether the
+    /// `choice` is the chunk's choice; `answer` its non-empty answer text; `with_thinking` whether the
     /// same delta carried thinking text.
-    pub(crate) fn see(&mut self, choice: &Value, answer: &str, thinking: Thinking) {
+    pub(crate) fn see(&mut self, choice: &Value, answer: &str, with_thinking: bool) {
         if !matches!(self, FirstToken::Waiting) {
             return;
         }
-        let read = match thinking {
-            Thinking::WithAnswer => Err(Miss::ThoughtInSameChunk),
-            Thinking::Absent => read(choice, answer),
+        let read = if with_thinking {
+            Err(Miss::ThoughtInSameChunk)
+        } else {
+            read(choice, answer)
         };
         *self = FirstToken::Settled(match read {
             Ok(record) => Some(record),

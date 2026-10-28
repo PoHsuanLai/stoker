@@ -9,7 +9,7 @@ use cua_parse::{
     ByteOffset, InSpace, ParamKinds, ParseError, ParseLimits, Parsed, ToolContext, parse_text,
     parse_tool_calls_with, read_calls,
 };
-use cua_vendors::{WireCodec, codec};
+use cua_vendors::WireCodec;
 use model_provider::ToolCall;
 
 use crate::{TurnTranscript, prompt};
@@ -28,7 +28,7 @@ pub(crate) fn parse(
             parse_tool_calls_with(tool, context, space, &calls, limits)
         }
         CuaDialect::Wire(_) if reply.calls.is_empty() => finished_by_talking(&reply.text),
-        CuaDialect::Wire(wire) => codec(wire)
+        CuaDialect::Wire(wire) => wire
             .decode(&reply.calls, &reply.safety)
             .map_err(|_| ParseError::Malformed { at: ByteOffset(0) }),
     }

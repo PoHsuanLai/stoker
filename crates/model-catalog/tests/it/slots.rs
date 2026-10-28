@@ -3,7 +3,7 @@
 use crate::support;
 
 use model_catalog::{
-    EngineKind, Modality, ModelEntry, Signature, Slot, ToolNeed, fits, parse_entry, slot_members,
+    EngineKind, Modality, ModelEntry, Signature, Slot, fits, parse_entry, slot_members,
 };
 use support::*;
 
@@ -57,11 +57,7 @@ fn each_slot_names_its_signature() {
     let sig = |takes, gives| Signature {
         takes,
         gives,
-        tools: if (takes, gives) == (Modality::Text, Modality::Text) {
-            ToolNeed::Required
-        } else {
-            ToolNeed::Any
-        },
+        needs_tools: (takes, gives) == (Modality::Text, Modality::Text),
     };
     assert_eq!(Slot::Text.signature(), sig(Modality::Text, Modality::Text));
     assert_eq!(

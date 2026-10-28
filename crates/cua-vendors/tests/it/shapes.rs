@@ -1,20 +1,5 @@
-use cua_action::WireDialect;
-use cua_vendors::{StepResult, WireError, codec};
+use cua_vendors::{StepResult, WireError};
 use model_provider::ToolCallId;
-
-const DIALECTS: [WireDialect; 4] = [
-    WireDialect::AnthropicToolset20260801,
-    WireDialect::AnthropicComputer20251124,
-    WireDialect::OpenAiComputer,
-    WireDialect::GeminiComputerUse,
-];
-
-#[test]
-fn dialects_round_trip_through_their_codec() {
-    for dialect in DIALECTS {
-        assert_eq!(codec(dialect).dialect(), dialect);
-    }
-}
 
 #[test]
 fn step_results_and_errors_round_trip() {

@@ -5,7 +5,7 @@ use model_provider::{EmbedEnd, EmbedTurn, EmbedVector, Knob, ModelName, Tokens, 
 use model_wire::CodecError;
 use serde_json::{Map, Value, json};
 
-use crate::{DimensionsField, Flavor};
+use crate::Flavor;
 
 /// The request: the model, the inputs (the role's prefix is already on them), `float` encoding,
 /// and `dimensions` only where the server honours it (llama.cpp ignores it, and a width it never
@@ -15,7 +15,9 @@ pub(crate) fn encode(flavor: Flavor, turn: &EmbedTurn) -> Exchange {
     body.insert("model".into(), json!(turn.model.0));
     body.insert("input".into(), json!(turn.inputs));
     body.insert("encoding_format".into(), json!("float"));
-    if let (Knob::Set(dims), DimensionsField::Send) = (turn.dims, flavor.quirks().dimensions) {
+    if let Knob::Set(dims) = turn.dims
+        && flavor.server().honours_dimensions()
+    {
         body.insert("dimensions".into(), json!(dims.0));
     }
     Exchange {

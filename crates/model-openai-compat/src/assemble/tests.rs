@@ -1,9 +1,9 @@
 use std::collections::BTreeSet;
 
-use model_provider::{CallIndex, TurnEvent};
+use model_provider::{CallIndex, ToolCall, TurnEvent};
 use model_wire::CodecError;
 
-use super::{Closed, Fragment, IfMalformed, Pending};
+use super::{Fragment, IfMalformed, Pending};
 
 fn open(args: &str) -> Pending {
     let mut pending = Pending::new(CallIndex(0));
@@ -16,9 +16,9 @@ fn open(args: &str) -> Pending {
     pending
 }
 
-fn input(closed: Result<Closed, CodecError>) -> Option<String> {
+fn input(closed: Result<Option<ToolCall>, CodecError>) -> Option<String> {
     match closed {
-        Ok(Closed::Done(call)) => Some(call.input.as_str().to_owned()),
+        Ok(Some(call)) => Some(call.input.as_str().to_owned()),
         _ => None,
     }
 }
@@ -29,7 +29,6 @@ fn closing_a_well_formed_call_ignores_the_policy() {
         IfMalformed::Fail,
         IfMalformed::Superseded,
         IfMalformed::Drop,
-        IfMalformed::KeepOpen,
     ] {
         assert_eq!(
             input(open("{\"x\":1}").close(how)).as_deref(),
@@ -40,7 +39,7 @@ fn closing_a_well_formed_call_ignores_the_policy() {
 }
 
 #[test]
-fn the_four_outcomes_for_arguments_that_are_not_json() {
+fn the_three_outcomes_for_arguments_that_are_not_json() {
     assert_eq!(
         open("{\"x\":").close(IfMalformed::Fail),
         Err(CodecError::BadToolArguments)
@@ -54,14 +53,7 @@ fn the_four_outcomes_for_arguments_that_are_not_json() {
         input(open("").close(IfMalformed::Superseded)).as_deref(),
         Some("{}")
     );
-    assert_eq!(
-        open("{\"x\":").close(IfMalformed::Drop),
-        Ok(Closed::Dropped)
-    );
-    assert_eq!(
-        open("{\"x\":").close(IfMalformed::KeepOpen),
-        Ok(Closed::Open)
-    );
+    assert_eq!(open("{\"x\":").close(IfMalformed::Drop), Ok(None));
 }
 
 #[test]
@@ -77,18 +69,8 @@ fn a_call_that_never_got_a_name_is_dropped_or_a_fault() {
         )
         .unwrap();
     assert_eq!(events, Vec::<TurnEvent>::new());
-    assert_eq!(
-        pending.clone().close(IfMalformed::Drop),
-        Ok(Closed::Dropped)
-    );
-    assert_eq!(
-        pending.clone().close(IfMalformed::Superseded),
-        Ok(Closed::Dropped)
-    );
-    assert_eq!(
-        pending.clone().close(IfMalformed::KeepOpen),
-        Ok(Closed::Open)
-    );
+    assert_eq!(pending.clone().close(IfMalformed::Drop), Ok(None));
+    assert_eq!(pending.clone().close(IfMalformed::Superseded), Ok(None));
     assert_eq!(
         pending.close(IfMalformed::Fail),
         Err(CodecError::BadToolArguments)

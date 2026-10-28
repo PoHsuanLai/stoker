@@ -1,14 +1,14 @@
-//! `OpenAiSpeech` transcription against the fake server (`speech_fake`): the upload it sends, the
+//! `OpenAiTranscription` against the fake server (`speech_fake`): the upload it sends, the
 //! event it delivers, and what every failure becomes. No GPU, no network.
 
 use crate::speech_fake;
 
 use model_http::{HttpClient, HttpTarget, WaitMs};
-use model_openai_compat::{OpenAiSpeech, SpeechFlavor, encode_transcription};
+use model_openai_compat::{OpenAiTranscription, encode_transcription};
 use model_provider::{ProviderError, RetrySeconds, ServerStatus};
 use speech_fake::*;
 use speech_provider::{
-    AudioMs, HeardText, Lang, LangChoice, SampleIndex, SpeechToText, TextToSpeech, TranscriptEvent,
+    AudioMs, HeardText, Lang, LangChoice, SampleIndex, SpeechToText, TranscriptEvent,
 };
 use std::collections::VecDeque;
 
@@ -21,7 +21,7 @@ async fn a_transcription_uploads_the_wav_and_answers_one_final_event() {
     let request = stt(LangChoice::Prefer(vec![Lang::new("en-US").unwrap()]));
     let mut events = Events::default();
     let end = server
-        .speech(SpeechFlavor::Vllm)
+        .transcription()
         .transcribe(&request, &mut Spoken(audio.clone().into()), &mut events)
         .await
         .unwrap();
@@ -56,7 +56,7 @@ async fn no_audio_sends_nothing_and_says_nothing() {
     let server = fake(|_| json("200 OK", r#"{"text":"x"}"#));
     let mut events = Events::default();
     let end = server
-        .speech(SpeechFlavor::Vllm)
+        .transcription()
         .transcribe(
             &stt(LangChoice::Auto),
             &mut Spoken(VecDeque::new()),
@@ -114,7 +114,7 @@ async fn every_failure_of_a_transcription_is_the_error_it_means_and_names_no_tex
     for (reply, want) in cases {
         let server = fake(move |_| reply.clone());
         let got = server
-            .speech(SpeechFlavor::Vllm)
+            .transcription()
             .transcribe(
                 &stt(LangChoice::Auto),
                 &mut Spoken(vec![chunk(0, 16)].into()),
@@ -129,10 +129,7 @@ async fn every_failure_of_a_transcription_is_the_error_it_means_and_names_no_tex
 
 #[tokio::test]
 async fn nobody_listening_is_unreachable_and_a_silent_server_times_out() {
-    let nowhere = OpenAiSpeech::new(
-        HttpClient::new(endpoint(HttpTarget::Unix(scratch()))),
-        SpeechFlavor::Vllm,
-    );
+    let nowhere = OpenAiTranscription::new(HttpClient::new(endpoint(HttpTarget::Unix(scratch()))));
     let got = nowhere
         .transcribe(
             &stt(LangChoice::Auto),
@@ -148,7 +145,7 @@ async fn nobody_listening_is_unreachable_and_a_silent_server_times_out() {
     let mut slow = server.endpoint.clone();
     slow.timeouts.first_byte = WaitMs(50);
     slow.timeouts.idle = WaitMs(50);
-    let speech = OpenAiSpeech::new(HttpClient::new(slow), SpeechFlavor::Vllm);
+    let speech = OpenAiTranscription::new(HttpClient::new(slow));
     let got = speech
         .transcribe(
             &stt(LangChoice::Auto),
@@ -163,35 +160,4 @@ async fn nobody_listening_is_unreachable_and_a_silent_server_times_out() {
         ),
         "{got:?}"
     );
-}
-
-#[tokio::test]
-async fn a_server_has_one_direction() {
-    let server = fake(|_| json("200 OK", "{}"));
-    let vllm = server.speech(SpeechFlavor::Vllm);
-    let kokoro = server.speech(SpeechFlavor::KokoroFastApi);
-    let no = |what: &str| ProviderError::BadRequest(format!("this server has no {what} endpoint"));
-    assert_eq!(
-        TextToSpeech::describe(&vllm).await.unwrap_err(),
-        no("speech")
-    );
-    assert_eq!(
-        vllm.speak(&tts(), &mut Speaker::default())
-            .await
-            .unwrap_err(),
-        ProviderError::BadRequest("this server cannot take the audio format".into())
-    );
-    assert_eq!(
-        SpeechToText::describe(&kokoro).await.unwrap_err(),
-        no("transcription")
-    );
-    let got = kokoro
-        .transcribe(
-            &stt(LangChoice::Auto),
-            &mut Spoken(vec![chunk(0, 16)].into()),
-            &mut Events::default(),
-        )
-        .await;
-    assert_eq!(got.unwrap_err(), no("transcription"));
-    assert!(server.requests().is_empty());
 }

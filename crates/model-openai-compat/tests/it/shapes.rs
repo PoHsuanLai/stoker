@@ -1,12 +1,8 @@
-use model_http::RouteRoot;
-use model_openai_compat::{
-    DimensionsField, Flavor, LogprobsAsk, Quirks, RequestJson, ToolImages, ToolNaming, UsageAsk,
-};
+use model_openai_compat::{Flavor, RequestJson};
 use model_provider::ShapeWithTools;
 
 #[test]
 fn flavors_have_stable_slugs() {
-    use model_openai_compat::SpeechFlavor;
     const CHAT: &[(Flavor, &str)] = &[
         (Flavor::LlamaServer, r#""llama_server""#),
         (Flavor::Vllm, r#""vllm""#),
@@ -19,17 +15,6 @@ fn flavors_have_stable_slugs() {
             &serde_json::from_str::<Flavor>(json).unwrap(),
             flavor,
             "chat {json}"
-        );
-    }
-    const SPEECH: &[(SpeechFlavor, &str)] = &[
-        (SpeechFlavor::Vllm, r#""vllm""#),
-        (SpeechFlavor::KokoroFastApi, r#""kokoro_fast_api""#),
-    ];
-    for (flavor, json) in SPEECH {
-        assert_eq!(
-            &serde_json::to_string(flavor).unwrap(),
-            json,
-            "speech {json}"
         );
     }
 }
@@ -53,88 +38,18 @@ fn multipart_bodies_do_not_print_the_audio() {
 }
 
 #[test]
-fn the_quirk_table_is_pinned() {
-    const CASES: &[(Flavor, Quirks)] = &[
-        (
-            Flavor::LlamaServer,
-            Quirks {
-                usage: UsageAsk::Request,
-                tool_naming: ToolNaming::AutoOnly,
-                tool_images: ToolImages::InToolMessage,
-                shape_with_tools: ShapeWithTools::AfterResult,
-                describe_root: RouteRoot::Server,
-                dimensions: DimensionsField::Ignored,
-                logprobs: LogprobsAsk::Request,
-            },
-        ),
-        (
-            Flavor::Vllm,
-            Quirks {
-                usage: UsageAsk::Request,
-                tool_naming: ToolNaming::Any,
-                tool_images: ToolImages::NextUserMessage,
-                shape_with_tools: ShapeWithTools::Together,
-                describe_root: RouteRoot::Base,
-                dimensions: DimensionsField::Send,
-                logprobs: LogprobsAsk::Request,
-            },
-        ),
-        (
-            Flavor::LiteLlm,
-            Quirks {
-                usage: UsageAsk::Request,
-                tool_naming: ToolNaming::Any,
-                tool_images: ToolImages::NextUserMessage,
-                shape_with_tools: ShapeWithTools::AfterResult,
-                describe_root: RouteRoot::Base,
-                dimensions: DimensionsField::Send,
-                logprobs: LogprobsAsk::Unsupported,
-            },
-        ),
-        (
-            Flavor::OpenRouter,
-            Quirks {
-                usage: UsageAsk::Never,
-                tool_naming: ToolNaming::Any,
-                tool_images: ToolImages::NextUserMessage,
-                shape_with_tools: ShapeWithTools::AfterResult,
-                describe_root: RouteRoot::Base,
-                dimensions: DimensionsField::Send,
-                logprobs: LogprobsAsk::Unsupported,
-            },
-        ),
+fn what_porter_reads_of_a_server_is_pinned() {
+    const CASES: &[(Flavor, ShapeWithTools)] = &[
+        (Flavor::LlamaServer, ShapeWithTools::AfterResult),
+        (Flavor::Vllm, ShapeWithTools::Together),
+        (Flavor::LiteLlm, ShapeWithTools::AfterResult),
+        (Flavor::OpenRouter, ShapeWithTools::AfterResult),
     ];
-    for (flavor, quirks) in CASES {
-        assert_eq!(flavor.quirks(), *quirks, "{flavor:?}");
-        let json = serde_json::to_string(quirks).unwrap();
-        assert_eq!(serde_json::from_str::<Quirks>(&json).unwrap(), *quirks);
-    }
-}
-
-#[test]
-fn a_quirk_row_has_pinned_json() {
-    assert_eq!(
-        serde_json::to_string(&Flavor::LlamaServer.quirks()).unwrap(),
-        r#"{"usage":"request","tool_naming":"auto_only","tool_images":"in_tool_message","shape_with_tools":"after_result","describe_root":"server","dimensions":"ignored","logprobs":"request"}"#
-    );
-}
-
-#[test]
-fn only_llama_server_refuses_a_named_tool_and_ignores_dimensions() {
-    for flavor in [
-        Flavor::LlamaServer,
-        Flavor::Vllm,
-        Flavor::LiteLlm,
-        Flavor::OpenRouter,
-    ] {
-        let q = flavor.quirks();
+    for (flavor, shape_with_tools) in CASES {
         assert_eq!(
-            q.tool_naming == ToolNaming::AutoOnly,
-            flavor == Flavor::LlamaServer
-        );
-        assert_eq!(
-            q.dimensions == DimensionsField::Ignored,
-            flavor == Flavor::LlamaServer
+            flavor.quirks().shape_with_tools,
+            *shape_with_tools,
+            "{flavor:?}"
         );
     }
 }

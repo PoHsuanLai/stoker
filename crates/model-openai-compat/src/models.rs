@@ -10,7 +10,7 @@ use crate::Flavor;
 /// `GET /models` under the base, or `/props` at the server root for llama-server (its models list
 /// carries no loaded context).
 pub(crate) fn describe(flavor: Flavor) -> Exchange {
-    let root = flavor.quirks().describe_root;
+    let root = flavor.server().describe_root();
     let path = match root {
         RouteRoot::Server => "/props",
         RouteRoot::Base => "/models",

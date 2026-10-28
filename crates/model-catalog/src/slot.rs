@@ -31,22 +31,14 @@ pub enum Slot {
     Embeddings,
 }
 
-/// Whether a slot needs the model to call tools.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum ToolNeed {
-    Any,
-    /// The text side must support tool calls (native or parsed by the engine).
-    Required,
-}
-
 /// What a slot needs: one modality taken in and one given out (a model may take and give more),
 /// and whether it must call tools.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Signature {
     pub takes: Modality,
     pub gives: Modality,
-    pub tools: ToolNeed,
+    /// The text side must support tool calls (native or parsed by the engine).
+    pub needs_tools: bool,
 }
 
 impl Slot {
@@ -54,18 +46,18 @@ impl Slot {
     /// "text in -> text out (+ tools)", because the agent loop is built on tool calls; a text model
     /// without them is not offered there. The other slots are one conversion each.
     pub fn signature(self) -> Signature {
-        let (takes, gives, tools) = match self {
-            Slot::Text => (Modality::Text, Modality::Text, ToolNeed::Required),
-            Slot::VoiceIn => (Modality::Audio, Modality::Text, ToolNeed::Any),
-            Slot::VoiceOut => (Modality::Text, Modality::Audio, ToolNeed::Any),
-            Slot::ImageIn => (Modality::Image, Modality::Text, ToolNeed::Any),
-            Slot::ComputerUse => (Modality::Image, Modality::Actions, ToolNeed::Any),
-            Slot::Embeddings => (Modality::Text, Modality::Vector, ToolNeed::Any),
+        let (takes, gives, needs_tools) = match self {
+            Slot::Text => (Modality::Text, Modality::Text, true),
+            Slot::VoiceIn => (Modality::Audio, Modality::Text, false),
+            Slot::VoiceOut => (Modality::Text, Modality::Audio, false),
+            Slot::ImageIn => (Modality::Image, Modality::Text, false),
+            Slot::ComputerUse => (Modality::Image, Modality::Actions, false),
+            Slot::Embeddings => (Modality::Text, Modality::Vector, false),
         };
         Signature {
             takes,
             gives,
-            tools,
+            needs_tools,
         }
     }
 }
@@ -75,15 +67,13 @@ pub fn fits(slot: Slot, caps: &Capabilities) -> bool {
     let Signature {
         takes,
         gives,
-        tools,
+        needs_tools,
     } = slot.signature();
-    let tooled = match tools {
-        ToolNeed::Any => true,
-        ToolNeed::Required => caps
+    let tooled = !needs_tools
+        || caps
             .text_out
             .as_ref()
-            .is_some_and(|text| text.tools != ToolSupport::Absent),
-    };
+            .is_some_and(|text| text.tools != ToolSupport::Absent);
     caps.inputs.contains(takes) && caps.outputs.contains(gives) && tooled
 }
 

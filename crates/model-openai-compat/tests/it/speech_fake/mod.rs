@@ -11,7 +11,7 @@ use std::time::Duration;
 use model_http::{
     AuthHeader, HttpClient, HttpEndpoint, HttpTarget, Proxy, Timeouts, UrlPath, WaitMs,
 };
-use model_openai_compat::{KOKORO_FORMAT, OpenAiSpeech, SpeechFlavor};
+use model_openai_compat::{KOKORO_FORMAT, KokoroSpeech, OpenAiTranscription};
 use model_provider::{Flow, ModelName};
 use speech_provider::{
     AudioChunk, AudioFormat, AudioPull, AudioSink, AudioSource, Lang, LangChoice, PcmBytes,
@@ -189,8 +189,12 @@ impl Drop for Fake {
 }
 
 impl Fake {
-    pub fn speech(&self, flavor: SpeechFlavor) -> OpenAiSpeech {
-        OpenAiSpeech::new(HttpClient::new(self.endpoint.clone()), flavor)
+    pub fn transcription(&self) -> OpenAiTranscription {
+        OpenAiTranscription::new(HttpClient::new(self.endpoint.clone()))
+    }
+
+    pub fn kokoro(&self) -> KokoroSpeech {
+        KokoroSpeech::new(HttpClient::new(self.endpoint.clone()))
     }
 
     pub fn requests(&self) -> Vec<Seen> {

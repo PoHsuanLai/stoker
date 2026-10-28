@@ -1,6 +1,5 @@
 //! Speech request encoding and response decoding, with no I/O.
 
-use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use speech_provider::{
     AudioChunk, AudioFormat, HeardText, LangChoice, PcmFormat, SampleIndex, SampleRate, SttRequest,
@@ -8,17 +7,6 @@ use speech_provider::{
 };
 
 use crate::RequestJson;
-
-/// Which server answers: they differ in the PCM they stream and where the voices are listed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SpeechFlavor {
-    /// vLLM's transcription endpoint (batch, WAV in, JSON out).
-    Vllm,
-    /// Kokoro-FastAPI: `/v1/audio/speech` with `response_format = "pcm"`, 24 kHz S16 mono, and
-    /// `/v1/audio/voices`.
-    KokoroFastApi,
-}
 
 /// Why a speech request cannot be encoded or a response cannot be read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -52,13 +40,9 @@ impl core::fmt::Debug for MultipartBody {
 }
 
 /// The JSON body of `POST /audio/speech` for `request`: model, input, voice, `pcm`, stream on.
-/// The format the request asks for must be the one `flavor` streams.
-pub fn encode_speech_request(
-    request: &TtsRequest,
-    flavor: SpeechFlavor,
-) -> Result<RequestJson, AudioCodecError> {
-    // Only Kokoro-FastAPI has the speech endpoint, and it streams one format.
-    if flavor != SpeechFlavor::KokoroFastApi || request.format != KOKORO_FORMAT {
+/// Kokoro-FastAPI streams one format, and the format the request asks for must be it.
+pub fn encode_speech_request(request: &TtsRequest) -> Result<RequestJson, AudioCodecError> {
+    if request.format != KOKORO_FORMAT {
         return Err(AudioCodecError::UnsupportedFormat);
     }
     let body = json!({

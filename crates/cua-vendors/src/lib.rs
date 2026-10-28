@@ -3,12 +3,11 @@
 //!
 //! ```
 //! use cua_action::{Coord, Size, WireDialect};
-//! use cua_vendors::{WireCodec, codec};
+//! use cua_vendors::WireCodec;
 //!
-//! // One codec per dialect; it declares its tool for an image of the given size.
-//! let codec = codec(WireDialect::OpenAiComputer);
-//! assert_eq!(codec.dialect(), WireDialect::OpenAiComputer);
-//! assert_eq!(codec.tools(Size::new(Coord(1280), Coord(800))).len(), 1);
+//! // A dialect declares its tool for an image of the given size.
+//! let dialect = WireDialect::OpenAiComputer;
+//! assert_eq!(dialect.tools(Size::new(Coord(1280), Coord(800))).len(), 1);
 //! ```
 
 mod anthropic;
@@ -20,5 +19,5 @@ mod results;
 mod safety;
 mod step_result;
 
-pub use codec::{WireCodec, WireCodecs, WireError, codec};
+pub use codec::{WireCodec, WireError};
 pub use step_result::StepResult;

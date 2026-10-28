@@ -49,6 +49,26 @@ pub enum CuaDialect {
     Tool(ToolDialect),
 }
 
+impl CuaDialect {
+    /// The vendor protocol, when the model speaks one.
+    pub fn wire(self) -> Option<WireDialect> {
+        match self {
+            CuaDialect::Wire(wire) => Some(wire),
+            CuaDialect::Text(_) | CuaDialect::Tool(_) => None,
+        }
+    }
+
+    /// Whether the model answers in action text.
+    pub fn is_text(self) -> bool {
+        matches!(self, CuaDialect::Text(_))
+    }
+
+    /// Whether the engine parses the model's tool calls (or we read them from its text).
+    pub fn is_tool(self) -> bool {
+        matches!(self, CuaDialect::Tool(_))
+    }
+}
+
 /// Where a dialect's points live: the pixels of the image shown, or a normalised grid over it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "v", rename_all = "snake_case")]

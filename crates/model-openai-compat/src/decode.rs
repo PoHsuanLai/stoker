@@ -3,17 +3,17 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use model_provider::{
-    CallIndex, ModelName, ProviderError, StopReason, Tokens, TurnEnd, TurnEvent, TurnUsage,
+    CallIndex, Charges, ModelName, ProviderError, StopReason, Tokens, TurnEnd, TurnEvent, TurnUsage,
 };
 use model_wire::{ChatDecoder, CodecError};
 use serde_json::Value;
 
-use crate::assemble::{Closed, Fragment, IfMalformed, Pending};
+use crate::Flavor;
+use crate::assemble::{Fragment, IfMalformed, Pending};
 use crate::charge::read_charge;
 use crate::envelope::envelope_error;
 use crate::leak::{LeakMarker, LeakWatch};
-use crate::logprobs::{FirstToken, Thinking};
-use crate::{Flavor, LogprobsAsk};
+use crate::logprobs::FirstToken;
 
 /// The most frame bytes one reply may carry in all; past it the reply is unreadable. A turn is
 /// kilobytes, and the longest legitimate one (a 32 MiB tool argument, the assembler's own cap)
@@ -47,7 +47,8 @@ pub struct StreamDecoder {
     flavor: Flavor,
     served: ModelName,
     phase: Phase,
-    done: Done,
+    /// The `[DONE]` marker was seen.
+    done: bool,
     open: BTreeMap<u32, Pending>,
     ids: BTreeSet<String>,
     delivered: u16,
@@ -59,19 +60,13 @@ pub struct StreamDecoder {
     first: FirstToken,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Done {
-    No,
-    Marker,
-}
-
 impl StreamDecoder {
     pub fn new(flavor: Flavor, served: ModelName) -> Self {
         Self {
             flavor,
             served,
             phase: Phase::Nothing,
-            done: Done::No,
+            done: false,
             open: BTreeMap::new(),
             ids: BTreeSet::new(),
             delivered: 0,
@@ -133,9 +128,9 @@ impl StreamDecoder {
         }
         if usage.is_some() {
             let mut usage = read_usage(self.flavor, value);
-            usage.charge = match self.flavor {
-                Flavor::OpenRouter => read_charge(frame),
-                Flavor::LlamaServer | Flavor::Vllm | Flavor::LiteLlm => None,
+            usage.charge = match self.flavor.server().charges() {
+                Charges::PerReply => read_charge(frame),
+                _ => None,
             };
             self.usage = Some(usage);
             events.push(TurnEvent::Usage(usage));
@@ -146,7 +141,7 @@ impl StreamDecoder {
     /// Settles the first-token record at the first chunk with answer text (vLLM and
     /// llama-server only; the others never ask).
     fn first_token(&mut self, choice: &Value, delta: &Value) {
-        if self.flavor.quirks().logprobs != LogprobsAsk::Request {
+        if !self.flavor.server().asks_logprobs() {
             return;
         }
         let answer = delta
@@ -156,15 +151,11 @@ impl StreamDecoder {
         if answer.is_empty() {
             return;
         }
-        let thinking = match ["reasoning_content", "reasoning"]
+        let with_thinking = ["reasoning_content", "reasoning"]
             .iter()
             .filter_map(|key| delta.get(*key))
-            .any(|v| v.as_str().is_some_and(|s| !s.is_empty()))
-        {
-            true => Thinking::WithAnswer,
-            false => Thinking::Absent,
-        };
-        self.first.see(choice, &answer, thinking);
+            .any(|v| v.as_str().is_some_and(|s| !s.is_empty()));
+        self.first.see(choice, &answer, with_thinking);
     }
 
     fn delta(&mut self, delta: &Value) -> Result<Vec<TurnEvent>, CodecError> {
@@ -243,11 +234,11 @@ impl StreamDecoder {
         how: IfMalformed,
     ) -> Result<Vec<TurnEvent>, CodecError> {
         Ok(match pending.close(how)? {
-            Closed::Done(call) => {
+            Some(call) => {
                 self.delivered = self.delivered.saturating_add(1);
                 vec![TurnEvent::ToolCallDone(call)]
             }
-            Closed::Dropped | Closed::Open => Vec::new(),
+            None => Vec::new(),
         })
     }
 
@@ -288,7 +279,7 @@ impl StreamDecoder {
     }
 
     fn marker(&mut self) -> Result<Vec<TurnEvent>, CodecError> {
-        self.done = Done::Marker;
+        self.done = true;
         if self.phase != Phase::Streaming {
             return Ok(Vec::new());
         }
@@ -310,7 +301,7 @@ impl ChatDecoder for StreamDecoder {
             return Err(CodecError::Unreadable);
         }
         let frame = frame.trim();
-        if frame.is_empty() || self.done == Done::Marker {
+        if frame.is_empty() || self.done {
             return Ok(Vec::new());
         }
         if frame == "[DONE]" {
@@ -383,9 +374,10 @@ fn read_usage(flavor: Flavor, chunk: &Value) -> TurnUsage {
         .and_then(|u| u.get("prompt_tokens_details"))
         .and_then(|d| d.get("cached_tokens"));
     let timings = chunk.get("timings").and_then(|t| t.get("cache_n"));
-    let (first, second) = match flavor {
-        Flavor::LlamaServer => (timings, details),
-        Flavor::Vllm | Flavor::LiteLlm | Flavor::OpenRouter => (details, timings),
+    let (first, second) = if flavor.server().cache_from_timings_first() {
+        (timings, details)
+    } else {
+        (details, timings)
     };
     let cached = first.or(second).map_or(Tokens(0), |v| tokens(Some(v)));
     TurnUsage {
