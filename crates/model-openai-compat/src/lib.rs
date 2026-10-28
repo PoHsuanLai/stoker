@@ -25,6 +25,7 @@ pub use audio::{
     AudioCodecError, KOKORO_FORMAT, KokoroSpeech, MultipartBody, OpenAiTranscription, PcmDecoder,
     decode_transcription, encode_speech_request, encode_transcription,
 };
+pub use charge::read_charge;
 pub use codec::{Flavor, OpenAiCodec, RequestJson};
 pub use decode::StreamDecoder;
 pub use leak::LeakMarker;

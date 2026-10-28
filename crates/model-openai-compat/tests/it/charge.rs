@@ -1,7 +1,7 @@
 //! The charge of an OpenRouter reply: `usage.cost` in the last chunk, read exactly, and only for
 //! that flavor. The fixture is built from OpenRouter's documented response shape, not recorded.
 
-use model_openai_compat::{Flavor, StreamDecoder};
+use model_openai_compat::{Flavor, StreamDecoder, read_charge};
 use model_provider::{ModelName, Money, Tokens, TurnEvent, TurnUsage};
 use model_wire::ChatDecoder;
 use rust_decimal::Decimal;
@@ -80,4 +80,12 @@ fn a_charge_that_cannot_be_read_is_none_and_the_tokens_stay() {
 fn a_usage_chunk_without_cost_has_no_charge() {
     let frame = r#"{"choices":[],"usage":{"prompt_tokens":5,"completion_tokens":1}}"#;
     assert_eq!(usage_of(Flavor::OpenRouter, &[frame]).charge, None);
+}
+
+#[test]
+fn a_whole_reply_body_gives_its_charge_and_a_body_without_one_gives_none() {
+    let body = r#"{"id":"gen-1","type":"message","content":[],"usage":{"input_tokens":5,"output_tokens":1,"cost":0.00042}}"#;
+    assert_eq!(read_charge(body), Some(Money::usd(Decimal::new(42, 5))));
+    assert_eq!(read_charge(r#"{"usage":{"input_tokens":5}}"#), None);
+    assert_eq!(read_charge("not json"), None);
 }
