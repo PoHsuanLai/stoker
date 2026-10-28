@@ -1382,9 +1382,8 @@ lane (no cargo build, check, test or clippy), so the first gate is the first com
 - Left as it is: `AttachedEngine.engine: EngineKind`. `Flavor` lives in `model-openai-compat`, and
   `model-catalog` naming it would put a codec crate (and `model-http`) under the catalogue.
   Making it a wire slug type is a separate step with porter's `flavor_of`.
-- Not in the trait because nothing in stoker calls it yet (porter's step e): `bus_word`,
-  `seat_flags`, `context_flag`, `serves_chat`, `wire`, `env`. `program` is
-  `EnginePaths::program(kind)`, a map lookup, not a method.
+- Not in the trait at that step, added for porter's adoption (below): `bus_word`, `seat_flags`, `env`.
+  `program` is `EnginePaths::program(kind)`, a map lookup, not a method.
 
 ## One `ActionDialect` trait instead of matches on `CuaDialect` (2026-10-29, lane `tr7`)
 
@@ -1406,3 +1405,21 @@ cargo build, check, test or clippy), so the first gate is the first compile.
   (`parse_text`'s one-arm match stays; the enum has one variant).
 - `cua-eval`'s `matches!(dialect, CuaDialect::Wire(_))` still compiles; `spec(dialect).wire().is_some()`
   replaces it when cua adopts the trait.
+
+## `Engine` gains the methods porter needs (2026-10-29, lane `tr2`)
+
+Porter's TR2 lane replaces its own matches on `EngineKind` with these. Nothing was built or run in
+this lane (no cargo build, check, test or clippy), so the first gate is the first compile. Every
+word is the one porter sends today.
+
+- `bus_word` (default the disk word: `llama_cpp`, `vllm`, `strata`; the speech host `speech`,
+  Kokoro `kokoro`): the id on the bus.
+- `running_word` (default the slug; `llama-server`, `speech-host`, `kokoro`): the engine word of a
+  running-models row. Porter had two tables for the same engines (it sends `llama-server` there and
+  `llama_cpp` in the engines list), so there are two methods.
+- `seat_flags` (`Option`, `--max-num-seqs` for vLLM, `--parallel` and `-np` for llama.cpp; `None`
+  for an engine that takes every request at once, which is also what "has seats" asked).
+- `env(libs) -> HostEnv` (`vars`, `reads`): vLLM's `PYTHONDONTWRITEBYTECODE=1`, the speech host's
+  `LD_LIBRARY_PATH` and a read-only bind of the libraries folder.
+- `caches_prompts` (llama.cpp), `hears` (speech host) and `speaks` (speech host, Kokoro): which
+  slots an engine serves, without naming porter's slot type.

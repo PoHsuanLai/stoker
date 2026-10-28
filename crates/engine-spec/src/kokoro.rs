@@ -11,6 +11,18 @@ impl Engine for Kokoro {
         "kokoro_fast_api"
     }
 
+    fn bus_word(&self) -> &'static str {
+        "kokoro"
+    }
+
+    fn running_word(&self) -> &'static str {
+        "kokoro"
+    }
+
+    fn speaks(&self) -> bool {
+        true
+    }
+
     fn command(&self, _launch: &Launch<'_>) -> LaunchArgs {
         LaunchArgs {
             front: own(&["-m", "uvicorn", "api.src.main:app"]),

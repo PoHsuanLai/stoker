@@ -70,3 +70,83 @@ fn only_strata_is_run_from_a_folder_the_person_points_at() {
         .collect();
     assert_eq!(pointed, [EngineKind::Strata]);
 }
+
+#[test]
+fn the_bus_and_running_words_are_the_ones_already_on_the_bus() {
+    let words: Vec<_> = ENGINES
+        .into_iter()
+        .map(|kind| (engine(kind).bus_word(), engine(kind).running_word()))
+        .collect();
+    assert_eq!(
+        words,
+        [
+            ("llama_cpp", "llama-server"),
+            ("vllm", "vllm"),
+            ("strata", "strata"),
+            ("speech", "speech-host"),
+            ("kokoro", "kokoro"),
+        ]
+    );
+}
+
+#[test]
+fn seats_prompt_caches_and_speech_are_facts_of_the_engine() {
+    let seats: Vec<_> = ENGINES
+        .into_iter()
+        .map(|kind| engine(kind).seat_flags())
+        .collect();
+    assert_eq!(
+        seats,
+        [
+            Some(&["--parallel", "-np"][..]),
+            Some(&["--max-num-seqs"][..]),
+            None,
+            None,
+            None
+        ]
+    );
+    let caching: Vec<_> = ENGINES
+        .into_iter()
+        .filter(|kind| engine(*kind).caches_prompts())
+        .collect();
+    assert_eq!(caching, [EngineKind::LlamaServer]);
+    let speech: Vec<_> = ENGINES
+        .into_iter()
+        .map(|kind| (engine(kind).hears(), engine(kind).speaks()))
+        .collect();
+    assert_eq!(
+        speech,
+        [
+            (false, false),
+            (false, false),
+            (false, false),
+            (true, true),
+            (false, true)
+        ]
+    );
+}
+
+#[test]
+fn only_vllm_and_the_speech_host_add_to_their_unit() {
+    use engine_spec::HostEnv;
+    use std::path::Path;
+    let libs = Path::new("/opt/sherpa/lib");
+    let vllm = engine(EngineKind::Vllm).env(Some(libs));
+    assert_eq!(vllm.vars, [("PYTHONDONTWRITEBYTECODE", "1".to_owned())]);
+    assert!(vllm.reads.is_empty());
+    let host = engine(EngineKind::SpeechHost);
+    let with = host.env(Some(libs));
+    assert_eq!(
+        with.vars,
+        [("LD_LIBRARY_PATH", "/opt/sherpa/lib".to_owned())]
+    );
+    assert_eq!(with.reads, [libs.to_path_buf()]);
+    assert_eq!(host.env(None), HostEnv::default());
+    for kind in [
+        EngineKind::LlamaServer,
+        EngineKind::Strata,
+        EngineKind::KokoroFastApi,
+    ] {
+        assert_eq!(engine(kind).env(Some(libs)), HostEnv::default());
+    }
+}

@@ -23,6 +23,11 @@ fn an_engine_that_writes_only_its_slug_gets_the_defaults() {
     assert!(echo.pointed().is_none());
     assert!(echo.accepts(&WeightFiles::SherpaDir));
     assert!(!echo.requires_gpu_estimate());
+    assert_eq!(echo.bus_word(), "echo");
+    assert_eq!(echo.running_word(), "echo");
+    assert!(echo.seat_flags().is_none());
+    assert!(!echo.caches_prompts() && !echo.hears() && !echo.speaks());
+    assert_eq!(echo.env(None), engine_spec::HostEnv::default());
     let entry = parse_entry(include_str!("../../../../catalog/holo-3.1-4b.toml")).unwrap();
     let launch = Launch {
         entry: &entry,

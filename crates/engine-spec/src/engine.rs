@@ -4,6 +4,7 @@ use std::path::Path;
 
 use model_catalog::{EngineArg, EngineKind, ModelEntry, WeightFiles};
 
+use crate::host_env::HostEnv;
 use crate::package::PackageSource;
 
 /// What one engine does differently. Every method has a default, so an engine overrides only
@@ -15,6 +16,19 @@ pub trait Engine: Sync {
     /// The word in install folders, records and the helper's arguments. Those words were written
     /// by installs that already exist, so llama.cpp's stays `llama_cpp`. Default: the slug.
     fn disk_word(&self) -> &'static str {
+        self.slug()
+    }
+
+    /// The id the engine goes by where a person's settings and the bus name it (`llama_cpp`,
+    /// `vllm`, `strata`, `speech`, `kokoro`). Those words are already on the bus, so the speech
+    /// engines keep the short ones. Default: the disk word.
+    fn bus_word(&self) -> &'static str {
+        self.disk_word()
+    }
+
+    /// The word a list of running models shows for the engine (`llama-server`, `speech-host`: the
+    /// program's own name where it has one). Default: the slug.
+    fn running_word(&self) -> &'static str {
         self.slug()
     }
 
@@ -36,6 +50,35 @@ pub trait Engine: Sync {
     /// The arguments before and after the profile's own, for one launch.
     fn command(&self, _launch: &Launch<'_>) -> LaunchArgs {
         LaunchArgs::default()
+    }
+
+    /// The launch-argument names a profile sets how many requests the engine takes at once with
+    /// (`--max-num-seqs`), when it takes them in turn at all. `None` for an engine that takes
+    /// every request at once.
+    fn seat_flags(&self) -> Option<&'static [&'static str]> {
+        None
+    }
+
+    /// What the engine's unit gets besides its command line. `libs` is the folder of the shared
+    /// libraries the engine loads, when the person set one. Default: nothing.
+    fn env(&self, _libs: Option<&Path>) -> HostEnv {
+        HostEnv::default()
+    }
+
+    /// Whether the engine keeps the prompt of a conversation between requests.
+    fn caches_prompts(&self) -> bool {
+        false
+    }
+
+    /// Whether the engine runs speech-to-text models. A model of neither speech kind runs on an
+    /// engine that does neither.
+    fn hears(&self) -> bool {
+        false
+    }
+
+    /// Whether the engine runs text-to-speech models.
+    fn speaks(&self) -> bool {
+        false
     }
 
     /// Whether this engine reads `weights`. Default: any.

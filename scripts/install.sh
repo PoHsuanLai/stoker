@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# install.sh: install stoker's model catalogue (the files inferd reads to know which models exist),
-# for the whole machine or for one user. Nothing here is built: stoker is libraries and data. The
+# install.sh: install stoker's model catalogue (the files inferd reads to know which models exist)
+# and the engine helper (engine-install's `engine-helper`, the one program stoker ships), for the
+# whole machine or for one user. The rest of stoker is libraries and data. The
 # speech host that the catalogue's speech models name is not installed, because it needs the
 # sherpa libraries that dev/build-sherpa.sh fetches.
 #
@@ -25,6 +26,8 @@
 #
 # What goes where:
 #   PREFIX/share/stoker/catalog/         the model files (--user: ~/.local/share/stoker/catalog/)
+#   PREFIX/libexec/quire/engine-helper   the helper `pkexec` runs as root to install an engine for everyone
+#   PREFIX/share/polkit-1/actions/org.quire.engines.policy   its polkit action (system installs only)
 # inferd reads the catalogue from the person's own folder and from the shared-data folders of the
 # system (/usr/local/share and /usr/share unless the system names others), so the default prefix
 # /usr/local is found. A prefix whose share folder is not one of those is not.
@@ -35,7 +38,7 @@ NEEDS_GIT=0
 FIRST_SERVICE=""
 CARGO_EXTRA=()
 SANDBOX_NOTE=""
-BINARIES=()
+BINARIES=("engine-helper|engine-install|libexec")
 NO_UNITS=1
 
 extra_arg() { return 1; }
@@ -43,6 +46,13 @@ extra_build_tools() { :; }
 
 install_rest() {
   put_tree 644 "$ROOT/catalog" "$SHARE/stoker/catalog"
+  # The helper `pkexec` runs to install an engine for everyone needs its polkit action, which only
+  # the system's share folder holds. An install for one person has no such action.
+  if [ "$MODE" = system ]; then
+    put 644 "$ROOT/dist/org.quire.engines.policy" "$PREFIX/share/polkit-1/actions/org.quire.engines.policy" policy
+    # porter installed this helper's action before the engines moved here; it names a program that is gone.
+    drop "$PREFIX/share/polkit-1/actions/org.quire.porter.engines.policy"
+  fi
 }
 
 runtime_checks() {
@@ -210,6 +220,7 @@ rewrite_exec() { # the shipped /usr/libexec/quire is now under the prefix
 render() { # kind source -> text on stdout
   case "$1" in
     unit) rewrite_exec <"$2" ;;
+    policy) sed -e "s|/usr/libexec/quire/|$LIBEXEC/|" "$2" ;;
     # A program under the home folder could not start if its unit hid the home folder.
     # ProtectHome=yes and =tmpfs both hide the home folder, and the program under it.
     sandbox) if under_home; then sed -E -e 's|^ProtectHome=yes$|ProtectHome=read-only|' -e 's|^ProtectHome=tmpfs$|ProtectHome=read-only|' "$2"; else cat "$2"; fi ;;

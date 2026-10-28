@@ -19,6 +19,7 @@
 mod cache;
 mod check;
 mod engine;
+mod host_env;
 mod kokoro;
 mod llama;
 mod package;
@@ -30,5 +31,6 @@ mod vllm;
 pub use cache::{repo_dir, snapshot_dir};
 pub use check::{SpecError, check_entry};
 pub use engine::{ENGINES, Engine, Launch, LaunchArgs, Pointed, engine, engine_from_disk_word};
+pub use host_env::HostEnv;
 pub use package::{PackageManager, PackageSource, Releases, Unnumbered, Verified};
 pub use paths::{EnginePaths, ProgramPath};

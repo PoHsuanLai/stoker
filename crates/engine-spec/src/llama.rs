@@ -61,6 +61,10 @@ impl Engine for Llama {
         "llama_cpp"
     }
 
+    fn running_word(&self) -> &'static str {
+        "llama-server"
+    }
+
     fn packages(&self) -> &'static [PackageSource] {
         &PACKAGES
     }
@@ -103,6 +107,14 @@ impl Engine for Llama {
             front: Vec::new(),
             back: files.into_iter().chain(serve).collect(),
         }
+    }
+
+    fn seat_flags(&self) -> Option<&'static [&'static str]> {
+        Some(&["--parallel", "-np"])
+    }
+
+    fn caches_prompts(&self) -> bool {
+        true
     }
 
     fn accepts(&self, weights: &WeightFiles) -> bool {
