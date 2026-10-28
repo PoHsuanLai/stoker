@@ -27,6 +27,7 @@ mod scan;
 mod text_calls;
 mod tools;
 mod ui_tars;
+mod verbs;
 mod wrappers;
 
 pub use chord::{from_text as chord_from_text, from_words as chord_from_words};

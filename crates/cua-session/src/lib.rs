@@ -38,15 +38,16 @@
 
 mod answer;
 mod calls;
+mod dialect;
 mod history;
 mod model;
 mod prompt;
-mod reply;
 mod session;
 mod shown;
 mod transcript;
 mod window;
 
+pub use dialect::{ActionDialect, spec};
 pub use model::{
     CuaProfile, CuaTaskText, FrameBudget, MaskedRegions, ObservationIn, RepairBudget, StepIndex,
     StepLines, StepNote, StepOutcome, TreeText, TurnSettings, TurnTranscript,

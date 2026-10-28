@@ -73,7 +73,7 @@ pub(crate) fn cut(reply: &str) -> String {
 /// Whether the earlier steps are replayed as the model's own turns: a tool dialect whose profile
 /// says so. The text dialect always alternates, and a vendor wire keeps real messages.
 pub(crate) fn replays_own(dialect: CuaDialect, actions: ActionProfile) -> bool {
-    dialect.is_tool() && actions.history == HistoryShape::OwnReplies
+    crate::dialect::spec(dialect).is_tool() && actions.history == HistoryShape::OwnReplies
 }
 
 /// The reply text a turn keeps. A model whose own replies are replayed keeps them from the start

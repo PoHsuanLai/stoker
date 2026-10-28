@@ -1,33 +1,18 @@
 //! Prompt text: the system prompt and tool declaration of a dialect (files under `prompts/`), the
 //! words of one observation, and the repair message. Pure string building.
 
-use std::borrow::Cow;
 use std::collections::VecDeque;
 
-use cua_action::{
-    ActionProfile, CuaDialect, ModelSpace, ResolutionWording, TextDialect, ToolDialect,
-};
+use cua_action::{ActionProfile, CuaDialect, ModelSpace, ResolutionWording};
 use cua_parse::{CursorAt, DropReason, ParseError};
-use cua_vendors::{StepResult, WireCodec};
-use model_provider::{JsonText, SchemaText, ToolName, ToolSpec};
+use cua_vendors::StepResult;
 use vision_prep::FrameMap;
 
+use crate::dialect;
 use crate::history::{self, HistoryTurn};
 use crate::{CuaTaskText, MaskedRegions, ObservationIn, StepLines, StepNote};
-use crate::{answer, calls, shown};
+use crate::{answer, calls};
 
-const UI_TARS: &str = include_str!("../prompts/ui_tars_15.txt");
-const QWEN_SYSTEM: &str = include_str!("../prompts/qwen_computer_use.txt");
-const QWEN_TOOL: &str = include_str!("../prompts/qwen_computer_use.tool.txt");
-const QWEN_SCHEMA: &str = include_str!("../prompts/computer_use.schema.json");
-const HOLO_SYSTEM: &str = include_str!("../prompts/holo_31.txt");
-const HOLO_TOOL: &str = include_str!("../prompts/holo_31.tool.txt");
-const HOLO_SCHEMA: &str = include_str!("../prompts/holo_31.schema.json");
-
-/// The function name both tool dialects declare.
-const FUNCTION: &str = "computer_use";
-/// The language of `Thought:` for the text dialect.
-const THOUGHT_LANGUAGE: &str = "English";
 /// How much of a refusal's reason is shown to the model.
 const WHY_CHARS: usize = 120;
 /// How much of one note is shown to the model.
@@ -49,7 +34,7 @@ pub(crate) fn body(file: &str) -> &str {
 
 /// `1000x1000` for a grid of 0 to 1000, the image's size for pixels. A profile can have the
 /// grid worded by its cell count instead (a grid of 0 to 999 is then `1000x1000` too).
-fn resolution(map: &FrameMap, wording: ResolutionWording) -> String {
+pub(crate) fn resolution(map: &FrameMap, wording: ResolutionWording) -> String {
     match (map.space, wording) {
         (ModelSpace::Grid(max), ResolutionWording::GridTop) => format!("{0}x{0}", max.0),
         (ModelSpace::Grid(max), ResolutionWording::GridCells) => {
@@ -59,7 +44,7 @@ fn resolution(map: &FrameMap, wording: ResolutionWording) -> String {
     }
 }
 
-fn points(map: &FrameMap) -> String {
+pub(crate) fn points(map: &FrameMap) -> String {
     match map.space {
         ModelSpace::Grid(max) => format!(
             "A point is [x, y] on a grid of 0 to {} over the screenshot, x across and y down.",
@@ -72,7 +57,7 @@ fn points(map: &FrameMap) -> String {
     }
 }
 
-fn instruction(task: &CuaTaskText) -> String {
+pub(crate) fn instruction(task: &CuaTaskText) -> String {
     let hints = task.hints.iter().map(|hint| format!("\nHint: {hint}"));
     std::iter::once(task.goal.clone()).chain(hints).collect()
 }
@@ -84,27 +69,13 @@ pub(crate) fn system_text(
     map: &FrameMap,
     task: &CuaTaskText,
 ) -> Option<String> {
-    let system = match dialect {
-        CuaDialect::Text(TextDialect::UiTars15) => Some(
-            body(UI_TARS)
-                .replace("{language}", THOUGHT_LANGUAGE)
-                .replace("{instruction}", &instruction(task)),
-        ),
-        CuaDialect::Tool(ToolDialect::QwenComputerUse) => Some(
-            body(QWEN_SYSTEM)
-                .replace("{points}", &points(map))
-                .replace("{terminate}", shown_name(actions, "terminate")),
-        ),
-        CuaDialect::Tool(ToolDialect::Holo31) => {
-            Some(body(HOLO_SYSTEM).replace("{points}", &points(map)))
-        }
-        CuaDialect::Wire(_) => None,
-    };
+    let spec = dialect::spec(dialect);
+    let system = spec.system(actions, map, task);
     // A model whose calls we read from its text is told its tools here, not in the request, and
     // a model trained on one reply shape is told the shape.
-    let tooled = dialect.is_tool();
+    let tooled = spec.is_tool();
     let tool_block = tooled
-        .then(|| calls::tool_block(actions.calls, &tools(dialect, actions, map)))
+        .then(|| calls::tool_block(actions.calls, &spec.tools(actions, map)))
         .flatten();
     let answer_block = tooled
         .then(|| answer::block(actions, shown_name(actions, "terminate")))
@@ -118,57 +89,12 @@ pub(crate) fn system_text(
 }
 
 /// The name a model is shown for a verb of the common convention: its alias, or the verb.
-fn shown_name(actions: ActionProfile, canonical: &'static str) -> &'static str {
+pub(crate) fn shown_name(actions: ActionProfile, canonical: &'static str) -> &'static str {
     actions
         .aliases
         .of(canonical)
         .next()
         .map_or(canonical, |alias| alias.model_verb())
-}
-
-fn function(
-    description: &str,
-    schema: &str,
-    map: &FrameMap,
-    wording: ResolutionWording,
-) -> Vec<ToolSpec> {
-    let parameters = JsonText::new(schema.trim()).map(SchemaText);
-    let name = ToolName::new(FUNCTION);
-    match (name, parameters) {
-        (Ok(name), Ok(parameters)) => vec![ToolSpec::Function {
-            name,
-            description: body(description)
-                .replace("{resolution}", &resolution(map, wording))
-                .replace("{scroll}", cua_parse::SCROLL_PIXELS_RULE),
-            parameters,
-        }],
-        _ => unreachable!("the shipped prompt files are valid"),
-    }
-}
-
-/// The parameter schema of the function a tool dialect declares, as the model is shown it.
-pub(crate) fn schema_text(dialect: ToolDialect, actions: ActionProfile) -> Cow<'static, str> {
-    match dialect {
-        ToolDialect::QwenComputerUse => shown::schema(QWEN_SCHEMA, actions),
-        ToolDialect::Holo31 => Cow::Borrowed(HOLO_SCHEMA),
-    }
-}
-
-/// The tools the dialect declares (a request declares them unless we read the calls ourselves).
-pub(crate) fn tools(dialect: CuaDialect, actions: ActionProfile, map: &FrameMap) -> Vec<ToolSpec> {
-    match dialect {
-        CuaDialect::Text(_) => Vec::new(),
-        CuaDialect::Tool(ToolDialect::QwenComputerUse) => function(
-            QWEN_TOOL,
-            &shown::schema(QWEN_SCHEMA, actions),
-            map,
-            actions.resolution,
-        ),
-        CuaDialect::Tool(ToolDialect::Holo31) => {
-            function(HOLO_TOOL, HOLO_SCHEMA, map, actions.resolution)
-        }
-        CuaDialect::Wire(wire) => wire.tools(map.image),
-    }
 }
 
 fn result_text(result: &StepResult) -> String {
@@ -244,18 +170,18 @@ pub(crate) fn observation_lines(
 ) -> Vec<String> {
     let mut out = Vec::new();
     // A vendor wire says the goal once, in the first message; its history is real messages.
-    let wire = dialect.wire().is_some();
+    let wire = dialect::spec(dialect).wire().is_some();
     // A model whose own replies are replayed has the goal in the first replayed message.
     let replayed = history::replays_own(dialect, actions) && !history.is_empty();
     // The text dialect's system prompt ends with the goal.
-    if !dialect.is_text() && !(wire && !history.is_empty()) && !replayed {
+    if !dialect::spec(dialect).is_text() && !(wire && !history.is_empty()) && !replayed {
         out.extend(goal_lines(task));
     }
     // The text dialect replays steps that have a frame as turns; the others list them all.
     let shown: Vec<&HistoryTurn> = history
         .iter()
         .skip(history.len().saturating_sub(usize::from(lines.0)))
-        .filter(|turn| !(dialect.is_text() && turn.frame.is_some()))
+        .filter(|turn| !(dialect::spec(dialect).is_text() && turn.frame.is_some()))
         .collect();
     if !shown.is_empty() && !wire && !replayed {
         out.push("Earlier actions:".to_owned());
@@ -334,25 +260,6 @@ pub(crate) fn repair_text(dialect: CuaDialect, actions: ActionProfile, fault: &F
             )
         }
     };
-    let how = match dialect {
-        CuaDialect::Text(_) => {
-            "Reply again as `Thought: ...` and then `Action: ...`, with one action from the action space."
-                .to_owned()
-        }
-        CuaDialect::Tool(_) => {
-            // A model whose calls we read from its text is told how a call is written.
-            let said = "Answer again with one call to the computer_use function.";
-            [
-                Some(said),
-                calls::reminder(actions.calls),
-                answer::reminder(actions.answer),
-            ]
-                .into_iter()
-                .flatten()
-                .collect::<Vec<&str>>()
-                .join(" ")
-        }
-        CuaDialect::Wire(_) => "Answer again with one call to the computer tool.".to_owned(),
-    };
+    let how = dialect::spec(dialect).retry(actions);
     format!("{what} {how}")
 }

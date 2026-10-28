@@ -7,6 +7,7 @@ use crate::common::in_space;
 use crate::profile::ToolContext;
 use crate::tools::Tools;
 use crate::ui_tars::UiTars;
+use crate::verbs::Verbs;
 use crate::{ParseError, ParseLimits, Parsed};
 
 /// Parses a text dialect (`Thought: .. Action: click(start_box='(x,y)')`) whose points live in
@@ -61,7 +62,7 @@ pub fn parse_tool_calls_with(
     }
     in_space(
         &Tools {
-            dialect,
+            verbs: Verbs::of(dialect),
             context,
             calls,
         },

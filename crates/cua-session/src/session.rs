@@ -14,7 +14,7 @@ use crate::history::{self, HistoryTurn};
 use crate::prompt::{self, Fault};
 use crate::{
     CuaProfile, CuaTaskText, MaskedRegions, ObservationIn, RepairBudget, StepIndex, StepOutcome,
-    TurnSettings, TurnTranscript, reply, window,
+    TurnSettings, TurnTranscript, dialect, window,
 };
 use crate::{answer, calls};
 
@@ -75,7 +75,8 @@ impl CuaSession {
 
     fn build(&self, obs: &ObservationIn, map: &FrameMap, image: Option<ImageInput>) -> TurnRequest {
         let dialect = self.profile.dialect;
-        if let Some(wire) = dialect.wire() {
+        let spec = dialect::spec(dialect);
+        if let Some(wire) = spec.wire() {
             return self.build_wire(wire, obs, map, image);
         }
         let mut messages: Vec<Message> =
@@ -86,7 +87,7 @@ impl CuaSession {
                 })
                 .into_iter()
                 .collect();
-        let text_dialect = dialect.is_text();
+        let text_dialect = spec.is_text();
         let own = history::replays_own(dialect, self.profile.actions);
         let mut lead = prompt::observation_lines(
             dialect,
@@ -137,10 +138,7 @@ impl CuaSession {
         TurnRequest {
             model: self.model.clone(),
             messages,
-            tools: calls::declared(
-                self.profile.actions,
-                prompt::tools(dialect, self.profile.actions, map),
-            ),
+            tools: calls::declared(self.profile.actions, spec.tools(self.profile.actions, map)),
             tool_choice: ToolChoice::Auto,
             tool_calls: self.settings.tool_calls,
             output: OutputShape::Free,
@@ -204,7 +202,7 @@ impl CuaSession {
         TurnRequest {
             model: self.model.clone(),
             messages,
-            tools: prompt::tools(self.profile.dialect, self.profile.actions, map),
+            tools: dialect::spec(self.profile.dialect).tools(self.profile.actions, map),
             tool_choice: ToolChoice::Auto,
             tool_calls: self.settings.tool_calls,
             output: OutputShape::Free,
@@ -258,7 +256,8 @@ impl CuaSession {
             profile: self.profile.actions,
             cursor: cursor.map(|at| prompt::cursor_in_model(map, at)),
         };
-        let parsed = reply::parse(dialect, map.space, context, &reply, ParseLimits::default());
+        let parsed =
+            dialect::spec(dialect).parse(map.space, context, &reply, ParseLimits::default());
         let (fault, spent) = match parsed {
             Ok(Parsed {
                 thought,
@@ -306,7 +305,7 @@ impl CuaSession {
     fn repair(&self, sent: &TurnRequest, reply: &TurnTranscript, fault: &Fault) -> TurnRequest {
         let dialect = self.profile.dialect;
         let mut request = sent.clone();
-        if dialect.is_text() && !reply.text.is_empty() {
+        if dialect::spec(dialect).is_text() && !reply.text.is_empty() {
             request.messages.push(Message {
                 role: Role::Assistant,
                 parts: vec![Part::Text(history::cut(&reply.text))],
@@ -324,7 +323,7 @@ impl CuaSession {
     }
 
     fn remember(&mut self, sent: &TurnRequest, reply: &TurnTranscript, actions: Vec<String>) {
-        let wire = self.profile.dialect.wire().is_some();
+        let wire = dialect::spec(self.profile.dialect).wire().is_some();
         let turn = HistoryTurn {
             number: self.taken,
             actions,

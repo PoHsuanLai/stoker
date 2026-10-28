@@ -1385,3 +1385,24 @@ lane (no cargo build, check, test or clippy), so the first gate is the first com
 - Not in the trait because nothing in stoker calls it yet (porter's step e): `bus_word`,
   `seat_flags`, `context_flag`, `serves_chat`, `wire`, `env`. `program` is
   `EnginePaths::program(kind)`, a map lookup, not a method.
+
+## One `ActionDialect` trait instead of matches on `CuaDialect` (2026-10-29, lane `tr7`)
+
+Trait audit `~/rs-wt/trait-audit/stoker.md` section 3. Nothing was built or run in this lane (no
+cargo build, check, test or clippy), so the first gate is the first compile.
+
+- `cua-session` gains `trait ActionDialect` (`wire`, `is_text`, `is_tool`, `system`, `schema`,
+  `tools`, `retry`, `parse`; only `parse` is required), `src/dialect/` with one impl per family
+  (`UiTars`, `Qwen`, `Holo`, `Wire`) and `spec(CuaDialect) -> &'static dyn ActionDialect`, the only
+  `match` on `CuaDialect` that picks behaviour. It lives in `cua-session` because the methods take
+  `FrameMap`, `CuaTaskText` and `TurnTranscript`. `CuaDialect` stays the serde key.
+- Gone: the five matches in `prompt.rs` (`system_text`, `schema_text`, `tools`, `repair_text`) and
+  `reply.rs` (the file); `CuaDialect::wire`, `is_text` and `is_tool` (now trait methods; `spec(d)`
+  returns them).
+- `cua-parse` reads the Holo verbs from a table (`verbs.rs`: synonyms, extra verbs, whether the
+  function name is the verb, scroll by direction) instead of eight `== Holo31` guards. A written
+  verb is mapped to the convention's name first, so Holo `click` is `left_click`.
+- Left: `Verbs::of(ToolDialect)` and `ui_tars::of(TextDialect)` are matches on the smaller enums
+  (`parse_text`'s one-arm match stays; the enum has one variant).
+- `cua-eval`'s `matches!(dialect, CuaDialect::Wire(_))` still compiles; `spec(dialect).wire().is_some()`
+  replaces it when cua adopts the trait.

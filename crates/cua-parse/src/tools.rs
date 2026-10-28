@@ -18,13 +18,14 @@
 
 use cua_action::{
     Button, Choice, ClickCount, CoordSpace, CuaAction, FinishOutcome, Notches, ScrollBy, ScrollDir,
-    Summary, Target, ToolDialect, TypedText, WaitMs,
+    Summary, Target, TypedText, WaitMs,
 };
 use model_provider::ToolCall;
 use serde_json::{Map, Value};
 
 use crate::common::{Batch, Collected, Ctx, Dialect, bounded, click, scroll_length};
 use crate::profile::{self, ToolContext};
+use crate::verbs::Verbs;
 use crate::{DropReason, ParseError, ParseLimits, chord};
 
 /// Qwen's function name.
@@ -37,7 +38,7 @@ const SCROLL_NOTCHES: u16 = 5;
 const MS_PER_SECOND: f64 = 1000.0;
 
 pub(crate) struct Tools<'a> {
-    pub dialect: cua_action::ToolDialect,
+    pub verbs: &'static Verbs,
     pub context: ToolContext,
     pub calls: &'a [ToolCall],
 }
@@ -78,7 +79,7 @@ impl Tools<'_> {
             return (name.to_owned(), Err(DropReason::MissingArgument));
         };
         let wrapped = name == QWEN_FUNCTION;
-        if !wrapped && self.dialect != ToolDialect::Holo31 {
+        if !wrapped && !self.verbs.function_is_verb {
             return (name.to_owned(), Err(DropReason::UnsupportedVerb));
         }
         let verb = if wrapped {
@@ -89,63 +90,61 @@ impl Tools<'_> {
         } else {
             name.to_owned()
         };
-        let result = profile::action(context, self.dialect, ctx, &verb, &args)
-            .unwrap_or_else(|| verb_action(self.dialect, ctx, &verb, &args));
+        let result = profile::action(context, self.verbs, ctx, &verb, &args)
+            .unwrap_or_else(|| verb_action(self.verbs, ctx, &verb, &args));
         (verb, result)
     }
 }
 
 pub(crate) fn verb_action<S: CoordSpace>(
-    dialect: ToolDialect,
+    verbs: &Verbs,
     ctx: &Ctx,
     verb: &str,
     args: &Args,
 ) -> Verdict<CuaAction<S>> {
     let at = |prefixes: &[&str]| point(ctx, args, prefixes);
-    match (verb, dialect) {
-        ("left_click", _) | ("click", ToolDialect::Holo31) => {
-            Ok(click(at(&[""])?, Button::Left, ClickCount::One))
-        }
-        ("right_click", _) => Ok(click(at(&[""])?, Button::Right, ClickCount::One)),
-        ("middle_click", _) => Ok(click(at(&[""])?, Button::Middle, ClickCount::One)),
-        ("double_click", _) => Ok(click(at(&[""])?, Button::Left, ClickCount::Two)),
-        ("triple_click", _) => Ok(click(at(&[""])?, Button::Left, ClickCount::Three)),
-        ("mouse_move", _) | ("move", ToolDialect::Holo31) => Ok(CuaAction::MoveTo {
+    match verbs.canonical(verb) {
+        "left_click" => Ok(click(at(&[""])?, Button::Left, ClickCount::One)),
+        "right_click" => Ok(click(at(&[""])?, Button::Right, ClickCount::One)),
+        "middle_click" => Ok(click(at(&[""])?, Button::Middle, ClickCount::One)),
+        "double_click" => Ok(click(at(&[""])?, Button::Left, ClickCount::Two)),
+        "triple_click" => Ok(click(at(&[""])?, Button::Left, ClickCount::Three)),
+        "mouse_move" => Ok(CuaAction::MoveTo {
             at: Target::Point(at(&[""])?),
         }),
         // Qwen: `start_coordinate` is the start and `coordinate` the end.
-        ("left_click_drag", _) | ("drag", ToolDialect::Holo31) => Ok(CuaAction::Drag {
+        "left_click_drag" => Ok(CuaAction::Drag {
             from: Target::Point(at(&["start_"])?),
             to: Target::Point(at(&["end_", ""])?),
             button: Button::Left,
         }),
-        ("type", _) => Ok(CuaAction::Type {
+        "type" => Ok(CuaAction::Type {
             text: bounded(TypedText::new(string(args, "text")?))?,
         }),
-        ("key", _) => Ok(CuaAction::Key {
+        "key" => Ok(CuaAction::Key {
             chord: keys(args)?,
             repeat: cua_action::Repeat::ONCE,
         }),
-        ("scroll", _) => scroll(dialect, ctx, args, Axis::Vertical),
-        ("hscroll", _) => scroll(dialect, ctx, args, Axis::Horizontal),
-        ("wait", _) => Ok(CuaAction::Wait {
+        "scroll" => scroll(verbs, ctx, args, Axis::Vertical),
+        "hscroll" => scroll(verbs, ctx, args, Axis::Horizontal),
+        "wait" => Ok(CuaAction::Wait {
             for_ms: seconds(args.get("time").ok_or(DropReason::MissingArgument)?)?,
         }),
-        ("terminate", _) | ("finish", ToolDialect::Holo31) => Ok(CuaAction::Finish {
+        "terminate" => Ok(CuaAction::Finish {
             outcome: outcome(string(args, "status")?)?,
             summary: bounded(Summary::new(final_words(args)))?,
             extracted: Vec::new(),
         }),
-        ("answer", _) => Ok(CuaAction::Finish {
+        "answer" => Ok(CuaAction::Finish {
             outcome: FinishOutcome::Done,
             summary: bounded(Summary::new(string(args, "text")?))?,
             extracted: Vec::new(),
         }),
-        ("ask", ToolDialect::Holo31) => Ok(CuaAction::Ask {
+        "ask" if verbs.has("ask") => Ok(CuaAction::Ask {
             question: bounded(Summary::new(string(args, "question")?))?,
             choices: choices(args)?,
         }),
-        ("observe", ToolDialect::Holo31) => Ok(CuaAction::Observe),
+        "observe" if verbs.has("observe") => Ok(CuaAction::Observe),
         _ => Err(DropReason::UnsupportedVerb),
     }
 }
@@ -246,7 +245,7 @@ pub(crate) enum Axis {
 /// that names no point acts at the centre of the frame (Qwen's schema makes the coordinate
 /// optional); a half-given point is still refused.
 pub(crate) fn scroll<S: CoordSpace>(
-    dialect: ToolDialect,
+    verbs: &Verbs,
     ctx: &Ctx,
     args: &Args,
     axis: Axis,
@@ -284,7 +283,7 @@ pub(crate) fn scroll<S: CoordSpace>(
                 by: ScrollBy::Distance(scroll_length(magnitude)),
             })
         }
-        (None, Some(dir)) if dialect == ToolDialect::Holo31 => Ok(CuaAction::Scroll {
+        (None, Some(dir)) if verbs.scroll_by_direction => Ok(CuaAction::Scroll {
             at,
             dir: direction(dir.as_str().ok_or(DropReason::BadArgument)?)?,
             by: ScrollBy::Notches(Notches(SCROLL_NOTCHES)),

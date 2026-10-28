@@ -22,7 +22,7 @@ trait), section 6 (copy the recipe).
 | `model-provider` | `TurnRequest`, `Message`, `Part`, `ToolSpec`, `TurnEvent`, `TurnSink`, `Caps`, the `Provider` trait (with `charges() -> Charges`), `ProviderError`; `money` (`Money`, `Charges`, `MoneyError`: only what a provider reports, no price table); the controls (`Sampling`, `ToolParallelism`, `EngineExtras`, `ThoughtSeal`, `Knob`); `embed` (`Embedder`, `EmbedTurn`, `EmbedRole`, `plan_batches`); `shape` (`Shape`, `Extract`, the schema, GBNF and regex conversions); `retry` (`RetryClass`, `next_wait`, `Retrying`); `logprobs` (`ChoiceScores`, `FirstTokenLogprobs`, `Logprob`, the `option_permille` helper); `sequence` (`check`); feature `testing`: `ScriptedProvider` | none |
 | `cua-parse` | `parse_text`, `parse_tool_calls`, `parse_tool_calls_with` (`ToolContext`, `CursorAt`), `read_calls` (calls read from the reply text, `ParamKinds`), `answer_parts` (the `<think>` and `<action>` of a reply), `Parsed`, `Dropped`, `ParseLimits` | none |
 | `cua-vendors` | the `WireCodec` trait and one codec per `WireDialect` (formerly `cua-wire`): tool declarations, decoders and result encoders for the Anthropic, OpenAI and Gemini computer-use tools | none |
-| `cua-session` | `CuaSession`: history window, prompt assembly (`prompts/`), parse with one repair, mapping to window space; `TurnSettings`, `TranscriptSink` | none |
+| `cua-session` | `CuaSession`: history window, prompt assembly (`prompts/`), parse with one repair, mapping to window space; `TurnSettings`, `TranscriptSink`; `trait ActionDialect` with default methods (`wire`, `is_text`, `is_tool`, `system`, `schema`, `tools`, `retry`, `parse`), one impl per family and `spec(dialect) -> &'static dyn ActionDialect` (the only `match` on `CuaDialect` that picks behaviour; the dialect stays the serde key) | none |
 | `model-replay` | cassette format, `ReplayProvider`, `RecordingProvider` over a `CassetteSink`; `wire`: wire cassettes recorded and replayed at the `Transport` seam (`RecordingTransport`, `ReplayTransport`, `ChunkPlan`); `check_sequence`; `speech`: speech cassettes (audio as digests), `SpeechReplay`, `RecordingSpeech` | an injected sink |
 | `model-catalog` | `ModelEntry` (`family`, `cold_start_estimate_s`, `Capabilities`: `Modality` inputs and outputs with the detail tables `text_out`, `image_in`, `audio_in`, `audio_out`, `vector_out`, `actions_out`), `EngineProfile` (may narrow inputs and outputs; `context_arg: ContextArg` says how the engine takes its window), `TextOut` (`context`/`max_output` are what one engine line serves; `context_max`, `max_output_max`, `context_min` are the model's own limits, all optional), `Locality` (`OnDevice`, or `Remote { reach }` with `Reach { provider, model, wire }` (no prices)), `Slot`, `fits`, `slot_members`, `reachable`, `parse_entry`, `merge_catalogs`; the shipped `catalog/*.toml`. The older view (`roles`, `caps`, `sampling`, `speech`, `embed`) is derived and deprecated: use `Slot` | none |
 | `engine-spec` | what differs between the engines, as `trait Engine` with default methods (`slug`, `disk_word`, `packages`, `package_paths`, `pointed`, `command`, `accepts`, `requires_gpu_estimate`), one unit struct per engine and `engine(kind) -> &'static dyn Engine` (the only `match` on `EngineKind` that picks behaviour; the kind stays the serde key); `ENGINES`, `engine_from_disk_word`; the launch values (`Launch`, `LaunchArgs`, `ProgramPath`, `EnginePaths` as a map by kind, `repo_dir`, `snapshot_dir`); `PackageSource` and its types; `check_entry` (what an entry needs of its engines) | none |
@@ -106,9 +106,9 @@ stoker.
 | `cua-action` | `space` < `geometry`, `target`, `text`, `keys` < `dialect`, `profile`, `action` |
 | `vision-prep` | `rule` < `frame_map` < `pixels` |
 | `model-provider` | `units`, `ids` < `control`, `request` < `caps`, `event` < `provider` < `embed`, `shape` (`check`, `gbnf`, `pattern`, `schema`, `from_schema`), `sequence` < `retry` < `scripted` (feature `testing`) |
-| `cua-parse` | `limits` < `outcome` < `common`, `scan`, `chord` < `ui_tars`, `profile` < `tools` < `parse` |
+| `cua-parse` | `limits` < `outcome` < `common`, `scan`, `chord`, `verbs` < `ui_tars`, `profile` < `tools` < `parse` |
 | `cua-vendors` | `step_result`, `args`, `safety`, `results` < `anthropic`, `openai`, `gemini` < `codec` |
-| `cua-session` | `model`, `history`, `shown`, `prompt`, `reply`, `window`, `transcript` < `session` |
+| `cua-session` | `model`, `history`, `shown`, `prompt`, `dialect` (`ui_tars`, `tool`, `wire`), `window`, `transcript` < `session` |
 | `model-replay` | `print` < `cassette` < `sequence` < `provider`, `speech`, `wire` |
 | `model-catalog` | `modality`, `engine` < `capabilities` < `slot`, `view` < `entry` < `reach`, `file`, `check`, `legacy` < `parse` |
 | `engine-spec` | `package`, `cache`, `paths` < `engine` < `vllm`, `llama`, `strata`, `speech_host`, `kokoro` < `check` |
@@ -330,9 +330,13 @@ on; a change is an edit of SPEC.md first. Every `todo!()` is listed in `FINDINGS
 `inferd::AdapterModel`.
 
 **Add a dialect**: the variant in `cua-action::dialect` (`TextDialect`, `ToolDialect` or
-`WireDialect`); its parser arm in `cua-parse` (or its codec in `cua-vendors`) with a fixture
-recorded by `dev/record-engine.sh`; its prompt in `cua-session/prompts/`; a row in the
-dialect slug test of `cua-action/tests/shapes.rs`.
+`WireDialect`); a unit struct and `impl ActionDialect` in `cua-session/src/dialect/` that overrides
+only what differs (`parse` is required; `system`, `schema`, `tools`, `retry`, `is_text`, `is_tool`
+and `wire` default), and its arm in `cua-session::spec`; for a tool dialect, its verb table in
+`cua-parse/src/verbs.rs` (synonyms, extra verbs, whether the function name is the verb) and its arm
+in `Verbs::of`; or its codec in `cua-vendors` for a wire; a fixture recorded by
+`dev/record-engine.sh`; its prompt in `cua-session/prompts/`; a row in the dialect slug test of
+`cua-action/tests/shapes.rs`. A test dialect needs only its impl (`cua-session/tests/it/echo.rs`).
 
 **Add a model that speaks a variant of a tool dialect**: no code. There is no standard for a
 screen model's actions; the convention is Anthropic's computer-use tool as Qwen copied it

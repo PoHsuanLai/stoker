@@ -6,14 +6,14 @@
 //! on to the dialect's own table, so the default profile changes nothing.
 
 use cua_action::{
-    ActionProfile, Button, CoordSpace, CuaAction, DragStyle, ScrollAxis, Summary, Target,
-    ToolDialect, VerbAlias,
+    ActionProfile, Button, CoordSpace, CuaAction, DragStyle, ScrollAxis, Summary, Target, VerbAlias,
 };
 use serde_json::Value;
 
 use crate::DropReason;
 use crate::common::{Ctx, bounded};
 use crate::tools::{Args, Axis, Verdict, point, scroll, string, verb_action};
+use crate::verbs::Verbs;
 
 /// Where the cursor is, in the model's own space (the grid or the image's pixels). A drag that
 /// starts at the cursor needs it.
@@ -34,7 +34,7 @@ pub struct ToolContext {
 /// The action a profile makes of a verb, or `None` when the profile says nothing about it.
 pub(crate) fn action<S: CoordSpace>(
     context: &ToolContext,
-    dialect: ToolDialect,
+    verbs: &Verbs,
     ctx: &Ctx,
     verb: &str,
     args: &Args,
@@ -47,8 +47,8 @@ pub(crate) fn action<S: CoordSpace>(
         (_, "left_click_drag", DragStyle::FromCursor, _) => {
             Some(drag_from_cursor(context, ctx, args))
         }
-        (_, "scroll", _, ScrollAxis::ByDirection) => Some(scroll_by_direction(dialect, ctx, args)),
-        (Some(_), ..) => Some(verb_action(dialect, ctx, canonical, args)),
+        (_, "scroll", _, ScrollAxis::ByDirection) => Some(scroll_by_direction(verbs, ctx, args)),
+        (Some(_), ..) => Some(verb_action(verbs, ctx, canonical, args)),
         (None, ..) => None,
     }
 }
@@ -99,7 +99,7 @@ fn drag_from_cursor<S: CoordSpace>(
 
 /// A `scroll` whose `direction` names the axis: `vertical` when it says nothing.
 fn scroll_by_direction<S: CoordSpace>(
-    dialect: ToolDialect,
+    verbs: &Verbs,
     ctx: &Ctx,
     args: &Args,
 ) -> Verdict<CuaAction<S>> {
@@ -112,5 +112,5 @@ fn scroll_by_direction<S: CoordSpace>(
         },
         Some(_) => return Err(DropReason::BadArgument),
     };
-    scroll(dialect, ctx, args, axis)
+    scroll(verbs, ctx, args, axis)
 }
