@@ -1,6 +1,7 @@
 //! The integration tests of `model-openai-compat`, one binary (one link) for all of them.
 
 mod audio_codec;
+mod charge;
 mod classify;
 mod driver;
 mod e2e;

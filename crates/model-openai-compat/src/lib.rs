@@ -7,6 +7,7 @@
 
 mod assemble;
 mod audio;
+mod charge;
 mod classify;
 mod codec;
 mod decode;

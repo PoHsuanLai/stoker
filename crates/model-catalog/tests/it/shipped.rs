@@ -539,13 +539,6 @@ fn the_hosted_entries_are_remote_chat_models_with_tools_and_two_reaches() {
         };
         assert_eq!(reach[0].wire, wire, "{id}");
         assert_eq!(reach[1].wire, Wire::OpenAiCompat, "{id}");
-        for r in reach {
-            assert!(
-                r.price.input_per_mtok.0 > 0
-                    && r.price.output_per_mtok.0 >= r.price.input_per_mtok.0,
-                "{id}"
-            );
-        }
         // The file says where each fact was read and when.
         let text = read("../../catalog", id);
         assert!(

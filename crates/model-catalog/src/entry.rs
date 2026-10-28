@@ -74,19 +74,6 @@ pub struct ProviderId(pub String);
 #[serde(transparent)]
 pub struct RemoteModelId(pub String);
 
-/// Money in millionths of a US dollar.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct MicroUsd(pub u64);
-
-/// A model's price at one provider, per million tokens, in whole micro-dollars (the names are
-/// porter's `PriceTable`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Price {
-    pub input_per_mtok: MicroUsd,
-    pub output_per_mtok: MicroUsd,
-}
-
 /// The wire a provider speaks: which client codec an engine of ours needs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -98,13 +85,12 @@ pub enum Wire {
     AnthropicMessages,
 }
 
-/// One way to reach a hosted model: a provider, the model's id there, what it costs there and the
-/// wire to speak.
+/// One way to reach a hosted model: a provider, the model's id there and the wire to speak. The
+/// catalogue keeps no prices: what a reply cost is what the provider reports.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Reach {
     pub provider: ProviderId,
     pub model: RemoteModelId,
-    pub price: Price,
     pub wire: Wire,
 }
 

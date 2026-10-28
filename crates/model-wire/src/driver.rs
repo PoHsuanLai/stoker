@@ -2,7 +2,7 @@
 
 use model_http::{Transport, WaitMs};
 use model_provider::{
-    Count, Dims, EmbedEnd, EmbedFault, EmbedTurn, Embedder, Knob, ModelInfo, Provider,
+    Charges, Count, Dims, EmbedEnd, EmbedFault, EmbedTurn, Embedder, Knob, ModelInfo, Provider,
     ProviderError, TurnEnd, TurnRequest, TurnSink, TurnUsage,
 };
 
@@ -67,6 +67,10 @@ impl<C: ChatCodec, T: Transport> Provider for Driver<C, T> {
         );
         let result = self.transport.exchange(&exchange, &mut adapter).await;
         adapter.conclude(result)
+    }
+
+    fn charges(&self) -> Charges {
+        self.codec.charges()
     }
 }
 

@@ -35,7 +35,7 @@ pub use engine::{
 };
 pub use entry::{
     CatalogId, CatalogKind, ColdStartEstimateS, Family, GitRevision, GpuNeed, HfRepo, Licence,
-    Locality, MiB, MicroUsd, ModelEntry, Price, ProviderId, Reach, ReasoningDefault, RemoteModelId,
+    Locality, MiB, ModelEntry, ProviderId, Reach, ReasoningDefault, RemoteModelId,
     SamplingDefaults, Spdx, VramEstimate, WeightSource, Wire,
 };
 pub use file::EntryFile;

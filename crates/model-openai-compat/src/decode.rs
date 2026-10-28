@@ -9,6 +9,7 @@ use model_wire::{ChatDecoder, CodecError};
 use serde_json::Value;
 
 use crate::assemble::{Closed, Fragment, IfMalformed, Pending};
+use crate::charge::read_charge;
 use crate::envelope::envelope_error;
 use crate::leak::{LeakMarker, LeakWatch};
 use crate::logprobs::{FirstToken, Thinking};
@@ -90,7 +91,7 @@ impl StreamDecoder {
         self.leak.found().filter(|_| self.delivered == 0)
     }
 
-    fn chunk(&mut self, value: &Value) -> Result<Vec<TurnEvent>, CodecError> {
+    fn chunk(&mut self, value: &Value, frame: &str) -> Result<Vec<TurnEvent>, CodecError> {
         if let Some(error) = envelope_error(value) {
             self.fault = Some(error);
             return Err(CodecError::Unreadable);
@@ -131,7 +132,11 @@ impl StreamDecoder {
             }
         }
         if usage.is_some() {
-            let usage = read_usage(self.flavor, value);
+            let mut usage = read_usage(self.flavor, value);
+            usage.charge = match self.flavor {
+                Flavor::OpenRouter => read_charge(frame),
+                Flavor::LlamaServer | Flavor::Vllm | Flavor::LiteLlm => None,
+            };
             self.usage = Some(usage);
             events.push(TurnEvent::Usage(usage));
         }
@@ -315,7 +320,7 @@ impl ChatDecoder for StreamDecoder {
         if !value.is_object() {
             return Err(CodecError::Unreadable);
         }
-        self.chunk(&value)
+        self.chunk(&value, frame)
     }
 
     fn fault(&self) -> Option<ProviderError> {

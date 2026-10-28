@@ -1298,3 +1298,28 @@ beside the speech engines. Nothing else in stoker had an engine-id enum (`Flavor
 `model-replay` is a cassette string). `engine-supervisor::command` has an arm for it and
 `EnginePaths` a `strata_python` field. porter's `porter-engines::EngineId` moves in T1.1 and is
 replaced by this enum then.
+
+## Provider-reported charge (2026-10-28, lane `scharge`)
+
+Owner decision: stoker shows only what the provider reports and keeps no price table.
+
+- `model-provider::Money { amount: Decimal, currency: Currency }` (rust_decimal, iso_currency), with
+  a typed `checked_add` (`MoneyError`: different currencies, overflow). `Charges { PerReply,
+  NotReported }` and `Provider::charges()` (default `NotReported`); `ChatCodec::charges()` feeds the
+  driver's. `Retrying` and `RecordingProvider` forward it. `TurnUsage.charge: Option<Money>`,
+  `Some` only when the reply carried one; `TurnUsage` keeps `Copy` (`Decimal` and `Currency` are
+  `Copy`).
+- Combining: a later `Usage` event replaces an earlier one, charge included; nothing is summed
+  within an attempt. A retried turn reports once per attempt and the caller adds them.
+- OpenRouter is the only flavor that reads it: `usage.cost` (credits, 1 credit = 1 US dollar), read
+  from the number's text through `serde_json::value::RawValue` (the `raw_value` feature; no float
+  rounds it, and `arbitrary_precision` stays off). Negative, non-number or oversized values are
+  `None`. `usage.cost_details.upstream_inference_cost` (bring-your-own-key only) is ignored.
+- Licences: rust_decimal 1.43.0 and iso_currency 0.7.1 are MIT; `deny.toml` is unchanged.
+  `cargo metadata --offline` also re-locked `toml_datetime`, `toml_parser` and added `toml_edit`,
+  `borsh`, `rand 0.8`, `lazy_static`, `iso_country` and friends (transitive of the two crates).
+- Deleted: `model-catalog`'s `Price`, `MicroUsd` and `Reach.price`, every `price =` in `catalog/*.toml`
+  and the price text in their header comments. porter's `price_of` must go at its next re-pin.
+- **Needs a live recording.** `tests/fixtures/openrouter_stream_cost_from_docs.sse` is built from
+  OpenRouter's documented response shape, not recorded (no network or key in this lane). Record a real
+  streamed reply with a key, check where `usage.cost` sits and its number format, and replace it.

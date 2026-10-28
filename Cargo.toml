@@ -68,6 +68,9 @@ keyboard-types = { version = "0.7", features = ["serde"] }
 base64 = "0.22"
 proptest = "1"
 zeroize = "1"
+# model-provider's `Money`: an exact decimal amount and an ISO 4217 currency (both MIT, which deny.toml allows).
+rust_decimal = { version = "1", default-features = false, features = ["std", "serde"] }
+iso_currency = { version = "0.7", features = ["with-serde"] }
 image = { version = "0.25.6", default-features = false, features = ["png", "jpeg"] }
 fast_image_resize = "6.1.0"
 blake3 = "1"

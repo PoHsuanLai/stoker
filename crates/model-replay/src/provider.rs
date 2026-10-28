@@ -3,7 +3,7 @@
 use std::sync::Mutex;
 
 use model_provider::{
-    Flow, ModelInfo, ModelName, Provider, ProviderError, StopReason, TurnEnd, TurnEvent,
+    Charges, Flow, ModelInfo, ModelName, Provider, ProviderError, StopReason, TurnEnd, TurnEvent,
     TurnRequest, TurnSink, TurnUsage, UsageReport,
 };
 use serde::{Deserialize, Serialize};
@@ -252,5 +252,9 @@ impl<P: Provider, C: CassetteSink> Provider for RecordingProvider<P, C> {
             })?;
             end
         }
+    }
+
+    fn charges(&self) -> Charges {
+        self.inner.charges()
     }
 }

@@ -2,7 +2,8 @@
 
 use model_http::{Exchange, ResponseHead};
 use model_provider::{
-    EmbedEnd, EmbedTurn, ModelInfo, ModelName, ProviderError, TurnEnd, TurnEvent, TurnRequest,
+    Charges, EmbedEnd, EmbedTurn, ModelInfo, ModelName, ProviderError, TurnEnd, TurnEvent,
+    TurnRequest,
 };
 
 /// Why a request cannot be encoded or a reply cannot be read.
@@ -42,6 +43,11 @@ pub trait ChatCodec: ErrorWire + Send + Sync {
     fn describe(&self) -> Exchange;
 
     fn parse_models(&self, body: &[u8]) -> Result<Vec<ModelInfo>, CodecError>;
+
+    /// Whether this wire's replies carry what they cost; the driver's `Provider::charges`.
+    fn charges(&self) -> Charges {
+        Charges::NotReported
+    }
 }
 
 /// Reads one reply, frame by frame. A frame is one SSE event's data, one NDJSON line, or the whole

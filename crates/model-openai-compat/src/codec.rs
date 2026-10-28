@@ -1,7 +1,9 @@
 //! Request encoding and stream decoding, with no I/O: the chat-completions codec.
 
 use model_http::{Exchange, Framing, JsonBody, ResponseHead, RouteRoot, UrlPath, Verb};
-use model_provider::{EmbedEnd, EmbedTurn, ModelInfo, ModelName, ProviderError, TurnRequest};
+use model_provider::{
+    Charges, EmbedEnd, EmbedTurn, ModelInfo, ModelName, ProviderError, TurnRequest,
+};
 use model_wire::{ChatCodec, CodecError, EmbedCodec, ErrorWire};
 use serde::{Deserialize, Serialize};
 
@@ -74,6 +76,13 @@ impl ChatCodec for OpenAiCodec {
 
     fn decoder(&self, served: ModelName) -> StreamDecoder {
         StreamDecoder::new(self.flavor, served)
+    }
+
+    fn charges(&self) -> Charges {
+        match self.flavor {
+            Flavor::OpenRouter => Charges::PerReply,
+            Flavor::LlamaServer | Flavor::Vllm | Flavor::LiteLlm => Charges::NotReported,
+        }
     }
 
     fn describe(&self) -> Exchange {

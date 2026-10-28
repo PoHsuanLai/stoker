@@ -22,6 +22,7 @@ mod embed;
 mod event;
 mod ids;
 mod logprobs;
+mod money;
 mod provider;
 mod request;
 mod retry;
@@ -55,6 +56,7 @@ pub use ids::{
     ToolNameError,
 };
 pub use logprobs::{ChoiceScores, FirstTokenLogprobs, Logprob, TokenLogprob};
+pub use money::{Charges, Money, MoneyError};
 pub use provider::{ModelInfo, Provider, ProviderError};
 pub use request::{
     Effort, ImageBytes, ImageDetail, ImageInput, Limits, Message, NativeTool, OutputShape, Part,

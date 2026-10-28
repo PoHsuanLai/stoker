@@ -3,7 +3,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ModelName, ProviderDetail, RetrySeconds, ServerStatus, Tokens, TurnEnd, TurnRequest, TurnSink,
+    Charges, ModelName, ProviderDetail, RetrySeconds, ServerStatus, Tokens, TurnEnd, TurnRequest,
+    TurnSink,
 };
 
 /// One endpoint: a running engine or a cloud account.
@@ -20,6 +21,11 @@ pub trait Provider: Send + Sync {
         request: &TurnRequest,
         sink: &mut K,
     ) -> impl Future<Output = Result<TurnEnd, ProviderError>> + Send;
+
+    /// Whether this endpoint reports what a reply cost. Only an endpoint that does overrides it.
+    fn charges(&self) -> Charges {
+        Charges::NotReported
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

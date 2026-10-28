@@ -3,6 +3,7 @@
 mod detail;
 mod embed;
 mod logprobs;
+mod money;
 mod retry;
 mod rig_amendment;
 mod sequence;

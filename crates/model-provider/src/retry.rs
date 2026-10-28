@@ -10,8 +10,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Attempt, Flow, ModelInfo, Permille, Provider, ProviderError, RetrySeconds, TurnEnd, TurnEvent,
-    TurnRequest, TurnSink, UsageReport, WaitMs,
+    Attempt, Charges, Flow, ModelInfo, Permille, Provider, ProviderError, RetrySeconds, TurnEnd,
+    TurnEvent, TurnRequest, TurnSink, UsageReport, WaitMs,
 };
 
 /// How a failure may be retried.
@@ -147,6 +147,10 @@ impl<P: Provider, S: Sleeper> Provider for Retrying<P, S> {
             }
             attempt = Attempt(attempt.0.saturating_add(1));
         }
+    }
+
+    fn charges(&self) -> Charges {
+        self.inner.charges()
     }
 }
 

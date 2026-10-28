@@ -113,6 +113,7 @@ fn requests_and_events_round_trip() {
             output: Tokens(2),
             cached: Tokens(8),
             images: ImageCount(1),
+            charge: None,
         }),
     ];
     for event in events {

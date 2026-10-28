@@ -17,9 +17,7 @@ fn hosted(reaches: &[(&str, &str)]) -> ModelEntry {
     let reach: Vec<String> = reaches
         .iter()
         .map(|(provider, wire)| {
-            format!(
-                r#"{{ provider = "{provider}", model = "m", price = {{ input_per_mtok = 1, output_per_mtok = 2 }}, wire = "{wire}" }}"#
-            )
+            format!(r#"{{ provider = "{provider}", model = "m", wire = "{wire}" }}"#)
         })
         .collect();
     let locality = format!(
@@ -104,11 +102,9 @@ fn an_on_device_entry_has_no_reach() {
 }
 
 #[test]
-fn the_choice_comes_back_whole_for_the_footer_and_the_price() {
+fn the_choice_comes_back_whole_for_the_footer() {
     let e = hosted(&[("openrouter", "open_ai_compat")]);
     let reach: &Reach = reachable(&e, &[id("openrouter")], &OPEN).unwrap();
-    assert_eq!(reach.price.input_per_mtok.0, 1);
-    assert_eq!(reach.price.output_per_mtok.0, 2);
     assert_eq!(reach.wire, Wire::OpenAiCompat);
 }
 

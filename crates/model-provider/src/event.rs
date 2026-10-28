@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    CallIndex, FirstTokenLogprobs, ImageCount, ModelName, ThoughtSeal, Tokens, ToolCall,
+    CallIndex, FirstTokenLogprobs, ImageCount, ModelName, Money, ThoughtSeal, Tokens, ToolCall,
     ToolCallId, ToolName,
 };
 
@@ -38,7 +38,13 @@ pub enum SafetySignal {
     Blocked(String),
 }
 
-/// What one turn used, in tokens and images.
+/// What one turn used, in tokens and images, and the charge when the provider reported one.
+///
+/// Combining rule: the server's final usage chunk is the whole truth of an attempt, so a later
+/// `Usage` event replaces an earlier one (charge included); nothing is summed within an attempt.
+/// A usage chunk without a charge leaves `charge` as `None`, never a guess. A retried turn
+/// reports once per attempt through `TurnSink::ended`, and a caller adds the reported charges
+/// of those attempts with `Money::checked_add`, counting an attempt with `None` as unpriced.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct TurnUsage {
     pub input: Tokens,
@@ -47,6 +53,9 @@ pub struct TurnUsage {
     /// `input`.
     pub cached: Tokens,
     pub images: ImageCount,
+    /// What the provider said this reply cost; `Some` only when the reply carried it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub charge: Option<Money>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
