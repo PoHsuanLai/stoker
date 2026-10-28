@@ -163,7 +163,7 @@ fn shape(
         return Ok(());
     }
     if !request.tools.is_empty() {
-        match flavor.server().shape_with_tools() {
+        match flavor.shape_with_tools() {
             ShapeWithTools::Together => {}
             ShapeWithTools::AfterResult if has_tool_result(&request.messages) => {}
             ShapeWithTools::AfterResult => return Ok(()),

@@ -7,9 +7,8 @@ Open items and standing facts. An entry names the condition that closes it.
 Lane `esto` made the code match CONVENTIONS rules 11 to 14 (the old "no bool, never `dyn`" rules went).
 Done: `Flavor` keeps its name and serde shape, and what differs per server is now the `Server`
 trait (default methods, one impl per server) in `model-openai-compat/src/server.rs`; the five
-two-way enums and `Quirks` are gone, except a one-field `Quirks { shape_with_tools }` that
-porter's `structured.rs` still reads (delete it, and `Flavor::quirks`, when porter reads the
-shape-with-tools row another way). `OpenAiSpeech` is split into `OpenAiTranscription` and
+two-way enums and `Quirks` are gone; porter reads the one row it needs through
+`Flavor::shape_with_tools()`. `OpenAiSpeech` is split into `OpenAiTranscription` and
 `KokoroSpeech`; `SpeechFlavor` is gone. `WireDialect` is its own `WireCodec`. `ToolNeed`,
 `Thinking`, `Done`, `Closed` and `IfMalformed::KeepOpen` are gone. `CuaDialect` gained `wire()`,
 `is_text()` and `is_tool()`. `EnginePaths::program(kind)` replaces the program ladder.

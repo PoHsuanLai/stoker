@@ -38,7 +38,7 @@ fn multipart_bodies_do_not_print_the_audio() {
 }
 
 #[test]
-fn what_porter_reads_of_a_server_is_pinned() {
+fn how_each_server_combines_a_shape_with_tools() {
     const CASES: &[(Flavor, ShapeWithTools)] = &[
         (Flavor::LlamaServer, ShapeWithTools::AfterResult),
         (Flavor::Vllm, ShapeWithTools::Together),
@@ -46,10 +46,6 @@ fn what_porter_reads_of_a_server_is_pinned() {
         (Flavor::OpenRouter, ShapeWithTools::AfterResult),
     ];
     for (flavor, shape_with_tools) in CASES {
-        assert_eq!(
-            flavor.quirks().shape_with_tools,
-            *shape_with_tools,
-            "{flavor:?}"
-        );
+        assert_eq!(flavor.shape_with_tools(), *shape_with_tools, "{flavor:?}");
     }
 }

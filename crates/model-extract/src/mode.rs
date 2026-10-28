@@ -38,7 +38,7 @@ pub enum ToolsPresent {
 /// Rules 1 and 2 hold only when the request has no tools of its own or the engine composes a
 /// constrained reply with tools (`with_tools` is `Together`): a constraint over the whole reply
 /// would suppress the tool calls. `with_tools` is the engine flavor's property
-/// (`Quirks::shape_with_tools` in the codec crate).
+/// (`Flavor::shape_with_tools` in the codec crate).
 pub fn choose(
     caps: &Caps,
     shape: &Shape,

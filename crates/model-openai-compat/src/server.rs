@@ -14,18 +14,10 @@ use serde_json::{Map, Value, json};
 
 use crate::Flavor;
 
-/// What porter reads of a server's differences.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Quirks {
-    pub shape_with_tools: ShapeWithTools,
-}
-
 impl Flavor {
-    /// The part of the server's behaviour that porter reads.
-    pub fn quirks(self) -> Quirks {
-        Quirks {
-            shape_with_tools: self.server().shape_with_tools(),
-        }
+    /// How a requested output shape combines with tools on this server.
+    pub fn shape_with_tools(self) -> ShapeWithTools {
+        self.server().shape_with_tools()
     }
 
     /// The server's behaviour.
