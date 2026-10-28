@@ -526,7 +526,9 @@ async fn dropping_the_future_closes_the_connection() {
     let client = HttpClient::new(endpoint(server.target.clone()));
     let ex = post("/chat/completions", Framing::Sse);
     let mut seen = Seen::default();
-    let _ = tokio::time::timeout(Duration::from_millis(100), client.exchange(&ex, &mut seen)).await;
+    // The server floods without end, so the exchange never finishes on its own: the window only has
+    // to be long enough for a loaded machine to read a first chunk (100 ms was not, under the gate).
+    let _ = tokio::time::timeout(Duration::from_secs(1), client.exchange(&ex, &mut seen)).await;
     assert!(!seen.chunks.is_empty(), "some of the stream was read first");
     for _ in 0..200 {
         if server.peer_closed.load(Ordering::SeqCst) {
