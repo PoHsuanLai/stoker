@@ -324,13 +324,7 @@ fn zero_vram_means_no_gpu() {
     ] {
         assert_eq!(shipped(id).vram.gpu_need(), need, "{id}");
     }
-    // A vLLM engine with an all-zero estimate is a mistake in the file.
-    let text = std::fs::read_to_string(catalog_dir().join("whisper-large-v3.toml")).unwrap();
-    let zeroed = text.replace(
-        "vram = { weights_mib = 2960, kv_per_1k_ctx_mib = 0, overhead_mib = 1500 }",
-        "vram = { weights_mib = 0, kv_per_1k_ctx_mib = 0, overhead_mib = 0 }",
-    );
-    assert_eq!(parse_entry(&zeroed), Err(CatalogError::VllmWithoutVram));
+    // A vLLM engine with an all-zero estimate is refused by `engine_spec::check_entry`.
 }
 
 #[test]

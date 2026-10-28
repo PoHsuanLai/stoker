@@ -4,7 +4,8 @@
 //! the manifest says the rest.
 
 use crate::host::{Arch, Backend, BackendChoice, Gpus, preference};
-use crate::release::{OsRelease, PackageSource};
+use crate::release::OsRelease;
+use engine_spec::PackageSource;
 use model_catalog::EngineKind;
 
 /// One file to download.
@@ -168,9 +169,10 @@ impl Manifest {
     pub fn offer(&self, engine: EngineKind, host: &Host) -> Offer {
         Offer {
             row: self.choose(engine, host),
-            package: crate::rows::packages(engine)
+            package: engine_spec::engine(engine)
+                .packages()
                 .iter()
-                .find(|package| package.exists_on(&host.release)),
+                .find(|package| host.release.ships(package)),
         }
     }
 }

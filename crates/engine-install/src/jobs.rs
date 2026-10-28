@@ -13,7 +13,7 @@ use crate::fetch::Fetcher;
 use crate::installer::Installer;
 use crate::progress::{CancelToken, Meter};
 use engine_manifest::{Backend, Failure, Host, Manifest, Row};
-use engine_probe::{Finder, Found, Roots, Scope, pointed_strata};
+use engine_probe::{Finder, Found, Roots, Scope, pointed};
 use model_catalog::EngineKind;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -151,11 +151,11 @@ impl EngineInstalls {
     /// The engine's program, if it is here now: a package's, an install of ours, or (Strata) the
     /// folder the person pointed at.
     pub fn find(&self, engine: EngineKind) -> Option<Found> {
-        let pointed = (engine == EngineKind::Strata)
-            .then(|| (self.inner.strata_folder)())
-            .flatten()
-            .and_then(|folder| pointed_strata(&folder));
-        pointed.or_else(|| self.inner.finder.find(engine))
+        let in_folder = engine_spec::engine(engine)
+            .pointed()
+            .and_then(|_| (self.inner.strata_folder)())
+            .and_then(|folder| pointed(engine, &folder));
+        in_folder.or_else(|| self.inner.finder.find(engine))
     }
 
     /// Where `engine` stands now.

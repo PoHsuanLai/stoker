@@ -7,7 +7,7 @@
 
 use crate::helper::Report;
 use crate::progress::{CancelToken, Meter};
-use engine_manifest::{Backend, Failure, engine_slug};
+use engine_manifest::{Backend, Failure};
 use model_catalog::EngineKind;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -58,7 +58,7 @@ pub async fn install_for_everyone(
     let mut child = Command::new(&helper.pkexec)
         .arg(&helper.program)
         .arg("install")
-        .arg(engine_slug(engine))
+        .arg(engine_spec::engine(engine).disk_word())
         .arg(backend.slug())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

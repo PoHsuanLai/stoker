@@ -15,6 +15,7 @@ path = "src/bin/engine-helper.rs"
 [dependencies]
 engine-manifest = { workspace = true }
 engine-probe = { workspace = true }
+engine-spec = { workspace = true }
 model-catalog = { workspace = true }
 model-http = { workspace = true, features = ["client", "tls"] }
 # The archives are unpacked in process (`extract`), never by the system's `tar`.

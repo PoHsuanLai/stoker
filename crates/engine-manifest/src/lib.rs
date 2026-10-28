@@ -11,7 +11,8 @@
 //! - [`Host`] is what to choose by: the processor, the cards ([`Gpus`]) and the distro; the
 //!   person may force a backend.
 //! - The engine itself is the catalog's [`EngineKind`](model_catalog::EngineKind), named by
-//!   [`engine_slug`] and [`engine_from_slug`].
+//!   `engine_spec::engine(kind).disk_word()` and [`engine_from_slug`]; its distro packages are
+//!   `engine_spec::engine(kind).packages()`.
 //!
 //! ```
 //! use engine_manifest::{Arch, Backend, Manifest};
@@ -32,10 +33,9 @@ mod release;
 mod rows;
 mod seal;
 
-pub use engine::{engine_from_slug, engine_slug};
+pub use engine::engine_from_slug;
 pub use failure::Failure;
 pub use host::{Arch, Backend, BackendChoice, GpuVendor, Gpus, preference};
 pub use manifest::{Artifact, Delivery, Host, Manifest, Offer, PythonEnv, Row};
-pub use release::{OsRelease, PackageManager, PackageSource, Releases, Unnumbered, Verified};
-pub use rows::packages;
+pub use release::OsRelease;
 pub use seal::{SealLine, TreeSeal, hex};

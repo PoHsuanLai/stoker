@@ -319,6 +319,7 @@ version = "0.1.0"
 dependencies = [
  "engine-manifest",
  "engine-probe",
+ "engine-spec",
  "flate2",
  "model-catalog",
  "model-http",
@@ -338,6 +339,7 @@ dependencies = [
 name = "engine-manifest"
 version = "0.1.0"
 dependencies = [
+ "engine-spec",
  "model-catalog",
  "serde_json",
  "sha2",
@@ -348,6 +350,7 @@ name = "engine-probe"
 version = "0.1.0"
 dependencies = [
  "engine-manifest",
+ "engine-spec",
  "model-catalog",
  "serde",
  "serde_json",
@@ -357,9 +360,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "engine-spec"
+version = "0.1.0"
+dependencies = [
+ "model-catalog",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "engine-supervisor"
 version = "0.1.0"
 dependencies = [
+ "engine-spec",
  "model-catalog",
  "proptest",
  "serde",

@@ -2,9 +2,9 @@
 
 use std::path::PathBuf;
 
+use engine_spec::{EnginePaths, ProgramPath};
 use engine_supervisor::{
-    EnginePaths, EnvPair, GpuAccess, Network, ProgramPath, Sandbox, SocketPath, UnitSpec, Window,
-    command, command_with_window,
+    EnvPair, GpuAccess, MissingProgram, Network, Sandbox, SocketPath, UnitSpec, Window,
 };
 use model_catalog::{
     ContextArg, EngineArg, EngineKind, EngineProfile, FileName, MiB, ModelEntry, Tokens,
@@ -16,14 +16,49 @@ const KOKORO: &str = include_str!("../../../../catalog/kokoro-82m.toml");
 const NEMOTRON: &str = include_str!("../../../../catalog/nemotron-3.5-asr-streaming.toml");
 
 fn paths() -> EnginePaths {
+    let program = |kind, path: &str| (kind, ProgramPath(PathBuf::from(path)));
     EnginePaths {
-        vllm_python: ProgramPath(PathBuf::from("/opt/vllm/bin/python")),
-        llama_server: ProgramPath(PathBuf::from("/opt/llama/bin/llama-server")),
-        speech_host: ProgramPath(PathBuf::from("/opt/stoker/bin/speech-host")),
-        kokoro_python: ProgramPath(PathBuf::from("/opt/kokoro/bin/python")),
-        strata_python: ProgramPath(PathBuf::from("/opt/strata/.venv/bin/python")),
+        programs: [
+            program(EngineKind::Vllm, "/opt/vllm/bin/python"),
+            program(EngineKind::LlamaServer, "/opt/llama/bin/llama-server"),
+            program(EngineKind::SpeechHost, "/opt/stoker/bin/speech-host"),
+            program(EngineKind::KokoroFastApi, "/opt/kokoro/bin/python"),
+            program(EngineKind::Strata, "/opt/strata/.venv/bin/python"),
+        ]
+        .into(),
         hf_cache: PathBuf::from("/data/hf/hub"),
     }
+}
+
+fn command(
+    entry: &ModelEntry,
+    profile: &EngineProfile,
+    paths: &EnginePaths,
+    socket: &SocketPath,
+) -> UnitSpec {
+    engine_supervisor::command(entry, profile, paths, socket).unwrap()
+}
+
+fn command_with_window(
+    entry: &ModelEntry,
+    profile: &EngineProfile,
+    paths: &EnginePaths,
+    socket: &SocketPath,
+    window: Window,
+) -> UnitSpec {
+    engine_supervisor::command_with_window(entry, profile, paths, socket, window).unwrap()
+}
+
+#[test]
+fn an_engine_with_no_listed_program_cannot_start() {
+    let holo = entry(HOLO);
+    let none = EnginePaths::new(PathBuf::from("/data/hf/hub"));
+    assert_eq!(
+        engine_supervisor::command(&holo, &holo.engines[0], &none, &socket("x")),
+        Err(MissingProgram {
+            kind: EngineKind::Vllm
+        })
+    );
 }
 
 fn socket(name: &str) -> SocketPath {

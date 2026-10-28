@@ -91,7 +91,7 @@ Decisions taken from it:
   tagged enum in the repo, because the file format fixes the `dir` key.
 - **`VramEstimate::gpu_need` is `Absent` exactly when all three numbers are zero**; `command` gives
   such an entry a sandbox with `GpuAccess::Absent`, and `parse_entry` refuses a vLLM engine with
-  an all-zero estimate (`VllmWithoutVram`).
+  an all-zero estimate (`VllmWithoutVram`; since 2026-10-29 `engine_spec::check_entry` refuses it).
 - **The catalog ranks nothing** (the user's answer to V4: a plain list, no Best or recommended
   tier anywhere). Labels are the model's name; `the_catalog_ranks_nothing` fails a file that
   says best, recommended, accurate, fastest or premium. The UI sorts however it likes; the data
@@ -473,7 +473,7 @@ codec of `model-openai-compat` 4, the `speech-provider` fakes 4, `speech-vad` 5.
 | Ask | What changed |
 | --- | --- |
 | 65 | `CodecError::NativeToolUnsupported` (`model-wire`); `encode_request` answers it for a `ToolSpec::Native`; the driver maps it to `BadRequest("native tools are not supported by this wire")` |
-| 66 | `parse_entry` refuses a llama-server profile whose weights are not `gguf` (`CatalogError::LlamaServerWithoutGguf`) |
+| 66 | `parse_entry` refuses a llama-server profile whose weights are not `gguf` (`CatalogError::LlamaServerWithoutGguf`; since 2026-10-29 `engine_spec::check_entry` refuses it) |
 | 98 | `ModelEntry.embed: Option<EmbedCaps>` (the `embed` table: `dims`, `max_batch`, `max_input`, `prompts`), skipped when absent so every shipped file is unchanged. It belongs to the `embeddings` role (`CatalogError::EmbedTableWithoutEmbeddingsRole`), and an entry that has it needs no chat fields for that role. An `embeddings` entry without the table still needs them, as before |
 | 99 | `Reasoning::EngineDefault` (`{"kind":"engine_default"}`): the OpenAI-compatible codec sends no `chat_template_kwargs`, `reasoning_effort` or `reasoning` for it |
 | 100 | `Shape::from_json_schema(&SchemaText, SchemaLimits) -> Result<Shape, SchemaRefusal>` and `model_extract::ShapedSession` (the typed session's machine over a shape held as a value) |
@@ -1355,3 +1355,33 @@ Owner decision: stoker shows only what the provider reports and keeps no price t
 - **Needs a live recording.** `tests/fixtures/openrouter_stream_cost_from_docs.sse` is built from
   OpenRouter's documented response shape, not recorded (no network or key in this lane). Record a real
   streamed reply with a key, check where `usage.cost` sits and its number format, and replace it.
+
+## One `Engine` trait instead of matches on `EngineKind` (2026-10-29, lane `tr1`)
+
+Trait audit `~/rs-wt/trait-audit/stoker.md` section 1, steps a-d. Nothing was built or run in this
+lane (no cargo build, check, test or clippy), so the first gate is the first compile.
+
+- New pure crate `engine-spec` (tier P, depends on `model-catalog`): `trait Engine` with default
+  methods (`slug`, `disk_word`, `packages`, `package_paths`, `pointed`, `command`, `accepts`,
+  `requires_gpu_estimate`), one unit struct per engine and `engine(kind) -> &'static dyn Engine`,
+  the only `match` on `EngineKind` that picks behaviour. `EngineKind` stays the serde key.
+- Moved down into it: `PackageSource` and its types (from `engine-manifest`; `OsRelease` stays
+  there and gains `ships(&PackageSource)`), `ProgramPath` and `EnginePaths` (from
+  `engine-supervisor`), `repo_dir` and `snapshot_dir`. `EnginePaths` is a map keyed by
+  `EngineKind` plus `hf_cache`, so an engine with no program listed is `MissingProgram` from
+  `command` (it was a required field per engine).
+- Callers moved: `engine_slug` and `rows::packages` (engine-manifest), `package_paths` and
+  `PACKAGED` (engine-probe), the Strata case in `Jobs::find` (engine-install, now
+  `Engine::pointed` plus `engine_probe::pointed`), `EnginePaths::program` and the five-way
+  argument match in `command_with_window` (engine-supervisor).
+- `parse_entry` no longer refuses a vLLM line with an all-zero estimate or a llama-server line whose
+  weights are not GGUF (`CatalogError::VllmWithoutVram`, `LlamaServerWithoutGguf` are gone);
+  `engine_spec::check_entry` does, and the caller (porter's catalog loader) must run it after
+  `parse_entry`. Their tests moved to `engine-spec/tests/it/check.rs`, which also checks every
+  shipped entry.
+- Left as it is: `AttachedEngine.engine: EngineKind`. `Flavor` lives in `model-openai-compat`, and
+  `model-catalog` naming it would put a codec crate (and `model-http`) under the catalogue.
+  Making it a wire slug type is a separate step with porter's `flavor_of`.
+- Not in the trait because nothing in stoker calls it yet (porter's step e): `bus_word`,
+  `seat_flags`, `context_flag`, `serves_chat`, `wire`, `env`. `program` is
+  `EnginePaths::program(kind)`, a map lookup, not a method.

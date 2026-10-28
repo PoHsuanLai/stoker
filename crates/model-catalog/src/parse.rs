@@ -2,10 +2,7 @@
 
 use crate::CatalogKind;
 use crate::file::EntryFile;
-use crate::{
-    DetailTable, EngineKind, GpuNeed, Locality, Modality, ModelEntry, Serving, WeightFiles, check,
-    legacy,
-};
+use crate::{DetailTable, Locality, Modality, ModelEntry, Serving, check, legacy};
 
 /// Why a catalog file was refused.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -41,10 +38,6 @@ pub enum CatalogError {
     ChatRoleWithoutSampling,
     #[error("the `sampling` table needs a chat role")]
     SamplingWithoutChatRole,
-    #[error("a vLLM engine needs a GPU memory estimate; the entry's is all zeros")]
-    VllmWithoutVram,
-    #[error("a llama-server engine reads GGUF files; the profile's weights are not `gguf`")]
-    LlamaServerWithoutGguf,
     #[error("the `embed` table needs the embeddings role")]
     EmbedTableWithoutEmbeddingsRole,
     #[error("a remote entry runs on the providers and lists no engine")]
@@ -84,9 +77,10 @@ pub enum CatalogError {
 /// Parses one `catalog/<id>.toml`.
 ///
 /// Beyond the file format: the declared inputs and outputs and the detail tables agree (see
-/// `check::capabilities`), an engine's subset stays inside its model's sets, a vLLM engine needs
-/// a GPU estimate, and a llama-server profile names GGUF weights (`command` has no `--model` for
-/// anything else). A file with a `roles` key is in the older shape and is read by `legacy`.
+/// `check::capabilities`) and an engine's subset stays inside its model's sets. What an entry
+/// needs of its engines (a GPU estimate, weights the engine reads) is `engine_spec::check_entry`,
+/// which the caller runs next. A file with a `roles` key is in the older shape and is read by
+/// `legacy`.
 pub fn parse_entry(text: &str) -> Result<ModelEntry, CatalogError> {
     let table: toml::Table = text
         .parse()
@@ -95,12 +89,6 @@ pub fn parse_entry(text: &str) -> Result<ModelEntry, CatalogError> {
         true => legacy::parse(text)?,
         false => parse_new(text)?,
     };
-    if entry.vram.gpu_need() == GpuNeed::Absent
-        && entry.engines.iter().any(|e| e.kind == EngineKind::Vllm)
-    {
-        return Err(CatalogError::VllmWithoutVram);
-    }
-    check_weights(&entry)?;
     Ok(entry)
 }
 
@@ -128,17 +116,6 @@ fn parse_new(text: &str) -> Result<ModelEntry, CatalogError> {
     check::attached_parser(&capabilities, &file.serving)?;
     check::narrowing(&capabilities, &file.engines)?;
     Ok(file.into_entry())
-}
-
-fn check_weights(entry: &ModelEntry) -> Result<(), CatalogError> {
-    let bad = entry.engines.iter().any(|e| {
-        e.kind == EngineKind::LlamaServer && !matches!(e.weights, WeightFiles::Gguf { .. })
-    });
-    if bad {
-        Err(CatalogError::LlamaServerWithoutGguf)
-    } else {
-        Ok(())
-    }
 }
 
 /// The system entries with the user's applied: a user entry replaces the system entry of the

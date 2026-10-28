@@ -25,9 +25,10 @@ trait), section 6 (copy the recipe).
 | `cua-session` | `CuaSession`: history window, prompt assembly (`prompts/`), parse with one repair, mapping to window space; `TurnSettings`, `TranscriptSink` | none |
 | `model-replay` | cassette format, `ReplayProvider`, `RecordingProvider` over a `CassetteSink`; `wire`: wire cassettes recorded and replayed at the `Transport` seam (`RecordingTransport`, `ReplayTransport`, `ChunkPlan`); `check_sequence`; `speech`: speech cassettes (audio as digests), `SpeechReplay`, `RecordingSpeech` | an injected sink |
 | `model-catalog` | `ModelEntry` (`family`, `cold_start_estimate_s`, `Capabilities`: `Modality` inputs and outputs with the detail tables `text_out`, `image_in`, `audio_in`, `audio_out`, `vector_out`, `actions_out`), `EngineProfile` (may narrow inputs and outputs; `context_arg: ContextArg` says how the engine takes its window), `TextOut` (`context`/`max_output` are what one engine line serves; `context_max`, `max_output_max`, `context_min` are the model's own limits, all optional), `Locality` (`OnDevice`, or `Remote { reach }` with `Reach { provider, model, wire }` (no prices)), `Slot`, `fits`, `slot_members`, `reachable`, `parse_entry`, `merge_catalogs`; the shipped `catalog/*.toml`. The older view (`roles`, `caps`, `sampling`, `speech`, `embed`) is derived and deprecated: use `Slot` | none |
-| `engine-supervisor` | the pure `step` and `budget`; `command` and `command_with_window` (catalog entry and a `Window`, the served one or a chosen one, to `UnitSpec`); the seams `EngineHost`, `ReadyProbe`, `GpuProbe`; feature `testing`: fakes | none; the daemon fills the seams |
+| `engine-spec` | what differs between the engines, as `trait Engine` with default methods (`slug`, `disk_word`, `packages`, `package_paths`, `pointed`, `command`, `accepts`, `requires_gpu_estimate`), one unit struct per engine and `engine(kind) -> &'static dyn Engine` (the only `match` on `EngineKind` that picks behaviour; the kind stays the serde key); `ENGINES`, `engine_from_disk_word`; the launch values (`Launch`, `LaunchArgs`, `ProgramPath`, `EnginePaths` as a map by kind, `repo_dir`, `snapshot_dir`); `PackageSource` and its types; `check_entry` (what an entry needs of its engines) | none |
+| `engine-supervisor` | the pure `step` and `budget`; `command` and `command_with_window` (catalog entry and a `Window`, the served one or a chosen one, to `UnitSpec`, or `MissingProgram`); the seams `EngineHost`, `ReadyProbe`, `GpuProbe`; feature `testing`: fakes | none; the daemon fills the seams |
 | `model-http` | `HttpEndpoint` (with `Timeouts` and `ExtraHeader`s), `HttpTarget` (Tcp, Unix, Tls), `AuthHeader`, the pure `SseDecoder` and `NdjsonDecoder`, `ResponseHead`, `BodySink` (head, then chunks), `Exchange`, the `Transport` seam, `Upload` and `UploadTransport` (a POST of bytes), and `HttpClient: Transport + UploadTransport` (reqwest over TCP and Unix sockets, behind the `client` feature; TLS to a `Tls` target behind `tls`, with `TlsRoots` choosing the roots) | yes (the transport) |
-| `engine-manifest` | the engines as data: `Manifest` (pinned `Row`s by `EngineKind`, `Arch` and `Backend`: `Artifact`s with hashes and sizes, `Delivery`, `PythonEnv` and its lock, the tree seal), `Host` (`Arch`, `Gpus`, `OsRelease`, `BackendChoice`), `preference`, `packages` and `PackageSource`, `Failure` (the codes of an install), `TreeSeal` and `SealLine` (the seal's line format; `tools/seal.py` pins the rows with it), `engine_slug` and `engine_from_slug` (the serde slug of an `EngineKind` in a directory, a record and a helper's arguments) | none |
+| `engine-manifest` | the engines as data: `Manifest` (pinned `Row`s by `EngineKind`, `Arch` and `Backend`: `Artifact`s with hashes and sizes, `Delivery`, `PythonEnv` and its lock, the tree seal), `Host` (`Arch`, `Gpus`, `OsRelease` with `ships(&PackageSource)`, `BackendChoice`), `preference`, `Failure` (the codes of an install), `TreeSeal` and `SealLine` (the seal's line format; `tools/seal.py` pins the rows with it), `engine_from_slug` (the disk word of an engine, `Engine::disk_word`, read back to an `EngineKind`) | none |
 | `engine-probe` | reading this computer for the manifest: `read_host`, `read_gpus` (the kernel's files and `os-release` under a given root), `Roots`, `InstallDir`, `Record` (where installs live and what one leaves), `Finder` (which engine is here, never running it), `Verifier` (the seal check before a person's own install starts), `seal_of`, `file_digest`, `entry_digests`. Every path and root is an argument | reads files |
 | `engine-install` | getting an engine from the manifest: `Fetcher` (an `https` download over `model-http`'s `HttpClient` that resumes, follows redirects as `PinnedUrl`s, can be stopped, is counted and kept only if its size and hash are the pinned ones), `Installer` (space checked, unpacked in process by `tar` and `flate2`, sealed, renamed into place whole; or a Python environment filled by the pinned `uv` from a hashed lock), `install_package`, `EngineInstalls` (the jobs a program offers and follows), `install_for_everyone` and `HelperProgram` (the caller names `pkexec` and the helper by path), and the `helper` module with the `engine-helper` program (`install <engine> <backend>`, nothing else) | HTTPS, files, child processes |
 | `model-wire` | the wire half of an endpoint: `ChatCodec`, `ChatDecoder`, `EmbedCodec`, `ErrorWire`, `CodecError`, and `Driver<C, T>`, the `Provider` (and `Embedder`) made of a codec and a transport | none (pure over the `Transport` trait) |
@@ -62,10 +63,11 @@ The direct edges in use (documentation; dev-dependencies are outside it):
 | `cua-session` | `cua-action`, `cua-parse`, `cua-vendors`, `model-provider`, `vision-prep` |
 | `model-replay` | `model-http`, `model-provider`, `speech-provider`, `vision-prep` |
 | `model-catalog` | `model-provider`, `speech-provider` |
-| `engine-supervisor` | `model-catalog` |
-| `engine-manifest` | `model-catalog` |
-| `engine-probe` | `engine-manifest`, `model-catalog` |
-| `engine-install` | `engine-manifest`, `engine-probe`, `model-catalog`, `model-http` (features `client`, `tls`) |
+| `engine-spec` | `model-catalog` |
+| `engine-supervisor` | `engine-spec`, `model-catalog` |
+| `engine-manifest` | `engine-spec`, `model-catalog` |
+| `engine-probe` | `engine-manifest`, `engine-spec`, `model-catalog` |
+| `engine-install` | `engine-manifest`, `engine-probe`, `engine-spec`, `model-catalog`, `model-http` (features `client`, `tls`) |
 | `model-openai-compat` | `model-http`, `model-provider`, `model-wire`, `speech-provider` |
 | `speech-provider` | `model-provider` |
 | `speech-vad` | `speech-provider` |
@@ -109,6 +111,7 @@ stoker.
 | `cua-session` | `model`, `history`, `shown`, `prompt`, `reply`, `window`, `transcript` < `session` |
 | `model-replay` | `print` < `cassette` < `sequence` < `provider`, `speech`, `wire` |
 | `model-catalog` | `modality`, `engine` < `capabilities` < `slot`, `view` < `entry` < `reach`, `file`, `check`, `legacy` < `parse` |
+| `engine-spec` | `package`, `cache`, `paths` < `engine` < `vllm`, `llama`, `strata`, `speech_host`, `kokoro` < `check` |
 | `engine-supervisor` | `state` < `unit`, `budget` < `step` < `host` < `fakes` (feature `testing`) |
 | `engine-manifest` | `engine`, `host`, `release`, `failure`, `seal` < `manifest` < `rows` |
 | `engine-probe` | `seal`, `host` < `layout` < `found`, `verify` |
@@ -149,8 +152,10 @@ stoker.
 | the SSE framing | `model-http::SseDecoder` |
 | the NDJSON framing | `model-http::NdjsonDecoder` |
 | a response's status and the few headers a codec reads (`Location` and `Content-Range` for a download) | `model-http::ResponseHead` (delivered by `BodySink::head` before any chunk) |
-| the pinned engine builds, their hashes, the distro packages | `engine-manifest::Manifest`, `packages` |
-| an engine's slug on disk, in a record and in the helper's arguments | `engine-manifest::engine_slug`, `engine_from_slug` (the serde slug of `EngineKind`) |
+| the pinned engine builds and their hashes | `engine-manifest::Manifest` |
+| the distro packages of an engine, the paths a package puts it at | `engine-spec::Engine::packages`, `package_paths` |
+| an engine's word on disk, in a record and in the helper's arguments | `engine-spec::Engine::disk_word` (`engine-manifest::engine_from_slug` reads it back) |
+| what an engine's command line, weights and GPU estimate are | `engine-spec::Engine` (`command`, `accepts`, `requires_gpu_estimate`); `check_entry` for a parsed entry |
 | the tree seal's text | `engine-manifest::SealLine`, `TreeSeal` (made on disk by `engine-probe::seal_of`; pinned by `tools/seal.py`) |
 | where engine installs live, the record, which engine is here | `engine-probe::Roots`, `Record`, `Finder` |
 | downloading, unpacking and sealing an engine install | `engine-install::Installer`, `Fetcher` (the only place) |
@@ -302,6 +307,7 @@ on; a change is an edit of SPEC.md first. Every `todo!()` is listed in `FINDINGS
 | `model-catalog`: types, `parse_entry`, `merge_catalogs`, `VramEstimate::need`, `gpu_need`, `SamplingDefaults`, `holo-3.1-4b`, the five speech entries, `Modality`, `Capabilities::on_engine`, `Slot`, `fits`, `slot_members`, `reachable`, the eight hosted entries (Claude, Gemini, Kimi, GPT), older-shape files | built, tested |
 | `engine-supervisor`: types, `Supervisor::new`, config defaults, fakes, `step`, `budget`, `command` | built, tested (the lifecycle table, the budget table with the in-turn window, `command` for vLLM, llama-server, the speech host and Kokoro) |
 | `model-http`: types, `ResponseHead`, `BodySink::head`, `Exchange`, `Transport`, `Timeouts`, `ExtraHeader`, `HttpError`, the SSE and NDJSON decoders, `Transport for HttpClient` (feature `client`) | built; round-trip, pinned-JSON, proptest and loopback-socket tested (TLS is feature `tls`, tested against a scratch CA on loopback; the egress proxy answers `Connect`) |
+| `engine-spec`: `Engine`, the five impls, `engine`, `check_entry`, `EnginePaths` | built, tested (the words, the defaults on a test engine, the entry checks moved from `parse_entry`) |
 | `engine-manifest`, `engine-probe`, `engine-install`: moved from porter's `porter-engines` and `porter-engines-install` (porter `f0539103`) | built, tested (the rows, the seal against `tools/seal.py`'s vector, the Finder and Verifier on scratch directories, the fetcher, installer, jobs and helper against a loopback `https` host with a scratch CA); porter, detent and the installer scripts still use their own copies until they move over |
 | `model-wire`: `ChatCodec`, `ChatDecoder`, `EmbedCodec`, `ErrorWire`, `CodecError`, `Driver` | built, tested with a scripted transport and a line codec (head decides, framer, decoder fault, Retry-After, stop, every transport failure, embed checks) |
 | `model-extract`: `ExtractMode`, `ToolsPresent`, `ExtractSession`, `Extracted`, `ExtractFailure`, `choose`, `request`, `absorb` | built, tested |
@@ -380,10 +386,7 @@ flag and the window (`Window::Serve` is the entry's `context`, `Window::Chosen` 
 inferd picks from the limits and the free GPU memory). An engine that sets the window per request
 says `context_arg = { kind = "per_request" }` and gets nothing at start.
 
-**Add an engine kind**: its `EngineKind` variant (the one closed set of engines: llama.cpp, vLLM, Strata and the speech engines; nothing else in stoker keeps its own list); the arm in `engine-supervisor::command`
-(program, flags, socket flag, sandbox, and its `ContextArg` if it takes a window at start) with a row in the `command_is_pure` table; its
-`EnginePaths` field and the settings key that fills it (`SpeechHost`: `ai.engine.speech_host.path`;
-`KokoroFastApi`: `ai.engine.kokoro.python`).
+**Add an engine kind**: its `EngineKind` variant (the one closed set of engines: llama.cpp, vLLM, Strata and the speech engines; nothing else in stoker keeps its own list); a unit struct and `impl Engine` in `engine-spec` that overrides only what differs (`slug` is required; the disk word, packages, `command`, `accepts`, `requires_gpu_estimate` and `pointed` default), its arm in `engine-spec::engine` and its entry in `ENGINES`; the settings key that fills its `EnginePaths` program (`SpeechHost`: `ai.engine.speech_host.path`; `KokoroFastApi`: `ai.engine.kokoro.python`). A test engine needs only its impl (`engine-spec/tests/it/echo.rs`).
 
 **Add a hosted entry**: a `catalog/<id>.toml` with `locality = { kind = "remote", v = { reach = [...] } }`
 (each reach: `provider` as porter's provider file id, `model` the provider's own id, `wire`; no

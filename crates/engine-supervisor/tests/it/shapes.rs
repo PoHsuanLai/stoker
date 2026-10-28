@@ -1,10 +1,11 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+use engine_spec::ProgramPath;
 use engine_supervisor::{
     Attempt, BudgetVerdict, EngineFailure, EngineId, EngineSpec, EngineState, EnvPair, ExitCode,
-    GpuAccess, GpuMemory, MonoMs, Network, Probe, ProgramPath, Sandbox, Supervisor,
-    SupervisorConfig, SupervisorIn, UnitSpec,
+    GpuAccess, GpuMemory, MonoMs, Network, Probe, Sandbox, Supervisor, SupervisorConfig,
+    SupervisorIn, UnitSpec,
 };
 use model_catalog::{EngineArg, MiB};
 

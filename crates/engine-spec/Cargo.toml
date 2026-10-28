@@ -1,0 +1,20 @@
+[package]
+name = "engine-spec"
+description = "What differs between the engines (llama-server, vLLM, Strata, the speech host, Kokoro) as one trait with default methods: the disk word, the distro packages, the command line, the checks a catalog entry must pass. Pure."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+model-catalog = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

@@ -9,10 +9,9 @@ use crate::fetch::Fetcher;
 use crate::installer::{InstallError, Installer};
 use crate::package::install_package;
 use crate::progress::{CancelToken, Meter};
-use engine_manifest::{
-    Arch, Backend, Failure, Manifest, OsRelease, PackageSource, Row, engine_from_slug,
-};
+use engine_manifest::{Arch, Backend, Failure, Manifest, OsRelease, Row, engine_from_slug};
 use engine_probe::{Roots, Scope};
+use engine_spec::PackageSource;
 use model_catalog::EngineKind;
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -139,9 +138,10 @@ impl Helper {
     /// The package to use and its manager's program, when this release has one and the manager
     /// is here.
     fn package(&self, engine: EngineKind) -> Option<(&'static PackageSource, PathBuf)> {
-        engine_manifest::packages(engine)
+        engine_spec::engine(engine)
+            .packages()
             .iter()
-            .filter(|source| source.exists_on(&self.release))
+            .filter(|source| self.release.ships(source))
             .map(|source| {
                 let program = self
                     .prefix

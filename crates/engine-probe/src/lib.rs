@@ -15,7 +15,7 @@ mod layout;
 mod seal;
 mod verify;
 
-pub use found::{Finder, Found, Place, pointed_strata};
+pub use found::{Finder, Found, Place, pointed};
 pub use host::{read_gpus, read_host};
 pub use layout::{InstallDir, Record, RecordError, Roots, Scope};
 pub use seal::{SealError, file_digest, seal_of};

@@ -42,8 +42,9 @@ LAYERS=(
   "model-http: P"
   "speech-host-client: C"
   "speech-host: C"
-  # The engines as data (engine-manifest), the reads of this computer (engine-probe) and the
+  # What differs between the engines as one trait (engine-spec), the engines as data (engine-manifest), the reads of this computer (engine-probe) and the
   # install (engine-install: downloads through model-http, child processes, the helper program).
+  "engine-spec: P"
   "engine-manifest: P"
   "engine-probe: C"
   "engine-install: C"
@@ -115,6 +116,7 @@ RULES=(
   "speech-vad: $EFFECTS $PORTER $AUDIO_DEVICES $GPL_TTS"
   "speech-host-client: $IO_FORBIDDEN $PORTER $AUDIO_DEVICES $GPL_TTS"
   "speech-host: $EFFECTS $PORTER $AUDIO_DEVICES $GPL_TTS"
+  "engine-spec: $EFFECTS $PORTER"
   "engine-manifest: $EFFECTS $PORTER"
   "engine-probe: $EFFECTS $PORTER"
   "engine-install: $IO_NO_BUS $PORTER"

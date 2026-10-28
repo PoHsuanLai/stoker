@@ -5,7 +5,7 @@
 //! `.<name>.partial/` and renamed into place whole, so a directory without a leading dot is a
 //! finished install.
 
-use engine_manifest::{Row, engine_from_slug, engine_slug};
+use engine_manifest::{Row, engine_from_slug};
 use model_catalog::EngineKind;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -71,7 +71,8 @@ impl Roots {
 
     /// The directory that holds every install of `engine` for `scope`.
     pub fn engine_dir(&self, scope: Scope, engine: EngineKind) -> PathBuf {
-        self.root(scope).join(engine_slug(engine))
+        self.root(scope)
+            .join(engine_spec::engine(engine).disk_word())
     }
 
     /// Where `row` installs for `scope`.

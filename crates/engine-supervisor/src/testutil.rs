@@ -4,7 +4,8 @@ use std::path::PathBuf;
 
 use model_catalog::MiB;
 
-use crate::{EngineId, EngineSpec, GpuAccess, Network, ProgramPath, Sandbox, UnitSpec};
+use crate::{EngineId, EngineSpec, GpuAccess, Network, Sandbox, UnitSpec};
+use engine_spec::ProgramPath;
 
 pub fn id(name: &str) -> EngineId {
     EngineId(name.to_owned())

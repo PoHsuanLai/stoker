@@ -10,6 +10,7 @@ publish.workspace = true
 
 [dependencies]
 engine-manifest = { workspace = true }
+engine-spec = { workspace = true }
 model-catalog = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

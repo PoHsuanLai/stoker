@@ -12,9 +12,10 @@
 //! use std::time::Duration;
 //!
 //! use engine_supervisor::{
-//!     BudgetVerdict, EngineId, EngineSpec, GpuAccess, GpuMemory, MonoMs, Network, ProgramPath,
-//!     Sandbox, UnitSpec, budget,
+//!     BudgetVerdict, EngineId, EngineSpec, GpuAccess, GpuMemory, MonoMs, Network, Sandbox,
+//!     UnitSpec, budget,
 //! };
+//! use engine_spec::ProgramPath;
 //! use model_catalog::MiB;
 //!
 //! let want = EngineSpec {
@@ -58,6 +59,6 @@ pub use host::{EngineHost, GpuError, GpuProbe, HostError, ReadyProbe};
 pub use state::{Attempt, EngineFailure, EngineId, EngineState, ExitCode, MonoMs, Probe};
 pub use step::{Supervisor, SupervisorConfig, SupervisorIn, SupervisorOut, step};
 pub use unit::{
-    EnginePaths, EnvPair, GpuAccess, Network, ProgramPath, Sandbox, SocketPath, UnitSpec, Window,
-    command, command_with_window,
+    EnvPair, GpuAccess, MissingProgram, Network, Sandbox, SocketPath, UnitSpec, Window, command,
+    command_with_window,
 };

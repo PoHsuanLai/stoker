@@ -3,6 +3,7 @@
 
 use crate::layout::{InstallDir, Record, Roots, Scope};
 use engine_manifest::Manifest;
+use engine_spec::{ENGINES, engine};
 use model_catalog::EngineKind;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -33,18 +34,6 @@ pub struct Found {
     pub version: Option<String>,
 }
 
-/// The fixed paths a package puts an engine's program at, first choice first.
-fn package_paths(engine: EngineKind) -> &'static [&'static str] {
-    match engine {
-        EngineKind::LlamaServer => &["/usr/bin/llama-server", "/usr/local/bin/llama-server"],
-        EngineKind::Vllm => &["/usr/bin/vllm", "/usr/local/bin/vllm"],
-        EngineKind::Strata | EngineKind::SpeechHost | EngineKind::KokoroFastApi => &[],
-    }
-}
-
-/// The engines a distro package can hold.
-const PACKAGED: [EngineKind; 2] = [EngineKind::LlamaServer, EngineKind::Vllm];
-
 /// Looks for engines at the fixed system paths and in the two install roots.
 #[derive(Debug, Clone)]
 pub struct Finder {
@@ -58,12 +47,13 @@ impl Finder {
     /// A finder over `roots` that trusts a system path when `held` says only root could have
     /// written it.
     pub fn new(roots: Roots, held: fn(&Path) -> bool) -> Self {
-        let packages = PACKAGED
+        let packages = ENGINES
             .into_iter()
-            .flat_map(|engine| {
-                package_paths(engine)
+            .flat_map(|kind| {
+                engine(kind)
+                    .package_paths()
                     .iter()
-                    .map(move |path| (engine, PathBuf::from(path)))
+                    .map(move |path| (kind, PathBuf::from(path)))
             })
             .collect();
         Self {
@@ -152,16 +142,19 @@ fn is_program(path: &Path) -> bool {
         .is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
 }
 
-/// Strata run from a folder the person points at: it counts when it holds Strata's server and
-/// its own Python. The engine's release is read from the engine's `BUILD.json` when there is one.
-pub fn pointed_strata(folder: &Path) -> Option<Found> {
-    let python = folder.join(".venv/bin/python");
-    let ready = folder.join("serve/server.py").is_file() && is_program(&python);
+/// An engine run from a folder the person points at (Strata): it counts when the folder holds
+/// the engine's marker file and its own program (`Engine::pointed` says where). The engine's
+/// release is read from the folder's build record when there is one. `None` for an engine that
+/// is not run from a folder.
+pub fn pointed(engine: EngineKind, folder: &Path) -> Option<Found> {
+    let layout = engine_spec::engine(engine).pointed()?;
+    let program = folder.join(layout.program);
+    let ready = folder.join(layout.marker).is_file() && is_program(&program);
     ready.then(|| Found {
-        engine: EngineKind::Strata,
+        engine,
         place: Place::Pointed,
-        program: python,
-        version: std::fs::read(folder.join("engine/BUILD.json"))
+        program,
+        version: std::fs::read(folder.join(layout.build_record))
             .ok()
             .and_then(|text| serde_json::from_slice::<serde_json::Value>(&text).ok())
             .and_then(|json| json.get("version")?.as_str().map(str::to_owned)),
@@ -275,9 +268,9 @@ mod tests {
     #[test]
     fn a_strata_folder_counts_when_it_has_its_server_and_python() {
         let dir = tempfile::tempdir().expect("scratch dir");
-        assert_eq!(pointed_strata(dir.path()), None);
+        assert_eq!(pointed(EngineKind::Strata, dir.path()), None);
         program(&dir.path().join(".venv/bin/python"));
-        assert_eq!(pointed_strata(dir.path()), None);
+        assert_eq!(pointed(EngineKind::Strata, dir.path()), None);
         std::fs::create_dir_all(dir.path().join("serve")).expect("dir");
         std::fs::write(dir.path().join("serve/server.py"), "").expect("server");
         std::fs::create_dir_all(dir.path().join("engine")).expect("dir");
@@ -286,7 +279,7 @@ mod tests {
             "{\"version\":\"0.1.42\"}",
         )
         .expect("build");
-        let found = pointed_strata(dir.path()).expect("found");
+        let found = pointed(EngineKind::Strata, dir.path()).expect("found");
         assert_eq!(
             (found.place, found.version.as_deref()),
             (Place::Pointed, Some("0.1.42"))

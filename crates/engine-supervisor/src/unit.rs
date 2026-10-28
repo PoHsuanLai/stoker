@@ -1,17 +1,12 @@
 //! How to start an engine: the unit the host runs.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
+use engine_spec::{EnginePaths, Launch, ProgramPath, engine, repo_dir, snapshot_dir};
 use model_catalog::{
     ContextArg, EngineArg, EngineKind, EngineProfile, GpuNeed, MiB, ModelEntry, Tokens,
-    WeightFiles, WeightSource,
 };
 use serde::{Deserialize, Serialize};
-
-/// An absolute path to an engine's program.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ProgramPath(pub PathBuf);
 
 /// The Unix socket an engine listens on, `$XDG_RUNTIME_DIR/inferd/<engine>.sock`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -61,32 +56,6 @@ pub struct UnitSpec {
     pub sandbox: Sandbox,
 }
 
-/// Where the engines' programs and the weights cache are, from settings
-/// (`ai.engine.vllm.python`, `ai.engine.llama_server.path`, `ai.engine.speech_host.path`,
-/// `ai.engine.kokoro.python`, `ai.engine.strata.python`); never from the environment.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct EnginePaths {
-    pub vllm_python: ProgramPath,
-    pub llama_server: ProgramPath,
-    pub speech_host: ProgramPath,
-    pub kokoro_python: ProgramPath,
-    pub strata_python: ProgramPath,
-    pub hf_cache: PathBuf,
-}
-
-impl EnginePaths {
-    /// The program that runs an engine of this kind.
-    pub fn program(&self, kind: EngineKind) -> &ProgramPath {
-        match kind {
-            EngineKind::Vllm => &self.vllm_python,
-            EngineKind::LlamaServer => &self.llama_server,
-            EngineKind::SpeechHost => &self.speech_host,
-            EngineKind::KokoroFastApi => &self.kokoro_python,
-            EngineKind::Strata => &self.strata_python,
-        }
-    }
-}
-
 /// Host memory an engine process needs beyond its weights: the interpreter, the tokenizer and
 /// the staging buffers of a load. A proposal, measured by spike S1 (FINDINGS).
 const HOST_MEMORY_BASE: MiB = MiB(4096);
@@ -118,6 +87,13 @@ impl Window {
     }
 }
 
+/// Why no unit can be built.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("settings list no program for the {kind:?} engine")]
+pub struct MissingProgram {
+    pub kind: EngineKind,
+}
+
 /// Pure: the unit that runs `profile` for `entry`, listening on `socket`, with the window the
 /// entry serves. See [`command_with_window`].
 pub fn command(
@@ -125,7 +101,7 @@ pub fn command(
     profile: &EngineProfile,
     paths: &EnginePaths,
     socket: &SocketPath,
-) -> UnitSpec {
+) -> Result<UnitSpec, MissingProgram> {
     command_with_window(entry, profile, paths, socket, Window::Serve)
 }
 
@@ -138,12 +114,12 @@ pub fn command(
 /// `{socket}` in a profile's args is replaced by the socket path wherever it appears. The weights
 /// are the entry's snapshot under `paths.hf_cache` (`models--<org>--<name>/snapshots/<revision>`):
 /// vLLM gets the directory as `--model`, llama-server the two GGUF files, the speech host
-/// `--model-dir`; the whole `models--<org>--<name>` directory (the snapshot's files are links into
-/// its `blobs/`) is the sandbox's only read-only bind, and the socket's directory its only
-/// writable one. An entry whose `vram.gpu_need()` is `Absent` gets `GpuAccess::Absent` in its
-/// sandbox; `SpeechHost` runs `paths.speech_host`, `KokoroFastApi` runs `paths.kokoro_python`
-/// (a uv environment's interpreter, like vLLM's) and `Strata` runs `paths.strata_python` (the
-/// interpreter in Strata's own folder; the profile's args name its server script and flags).
+/// `--model-dir` (each engine's own arguments are `Engine::command` in `engine-spec`); the whole
+/// `models--<org>--<name>` directory (the snapshot's files are links into its `blobs/`) is the
+/// sandbox's only read-only bind, and the socket's directory its only writable one. An entry whose `vram.gpu_need()` is `Absent` gets `GpuAccess::Absent` in its
+/// sandbox. The program is the one `paths` lists for the profile's engine (a uv environment's
+/// interpreter for vLLM and Kokoro, the interpreter in Strata's own folder, whose args name its
+/// server script and flags); an engine with none listed is [`MissingProgram`].
 /// Every engine starts offline (`HF_HUB_OFFLINE=1`) and serves the model under the catalog id, so
 /// a request's model name does not depend on the repository it came from.
 ///
@@ -155,76 +131,35 @@ pub fn command_with_window(
     paths: &EnginePaths,
     socket: &SocketPath,
     window: Window,
-) -> UnitSpec {
+) -> Result<UnitSpec, MissingProgram> {
     let repo_dir = repo_dir(&paths.hf_cache, &entry.source);
     let snapshot = snapshot_dir(&repo_dir, &entry.source);
     let socket_text = socket.0.to_string_lossy();
-    let own = |args: &[&str]| -> Vec<EngineArg> {
-        args.iter().map(|a| EngineArg((*a).to_owned())).collect()
-    };
     let listed = profile
         .args
         .iter()
         .map(|arg| EngineArg(arg.0.replace(SOCKET_PLACEHOLDER, &socket_text)));
-    let path_arg = |path: PathBuf| EngineArg(path.to_string_lossy().into_owned());
-    let (front, back) = match (profile.kind, &profile.weights) {
-        (EngineKind::Vllm, _) => (
-            own(&["-m", "vllm.entrypoints.openai.api_server", "--model"]),
-            vec![
-                path_arg(snapshot),
-                EngineArg("--served-model-name".into()),
-                EngineArg(entry.id.0.clone()),
-                EngineArg("--uds".into()),
-                EngineArg(socket_text.clone().into_owned()),
-            ],
-        ),
-        (EngineKind::LlamaServer, weights) => {
-            let files = match weights {
-                WeightFiles::Gguf { model, mmproj } => {
-                    let projector = mmproj
-                        .as_ref()
-                        .filter(|name| !name.0.is_empty())
-                        .map(|name| {
-                            [
-                                EngineArg("--mmproj".into()),
-                                path_arg(snapshot.join(file_name(&name.0))),
-                            ]
-                        });
-                    [
-                        EngineArg("--model".into()),
-                        path_arg(snapshot.join(file_name(&model.0))),
-                    ]
-                    .into_iter()
-                    .chain(projector.into_iter().flatten())
-                    .collect()
-                }
-                // Not GGUF files: the catalog should not pair them (the engine refuses to start
-                // with no model, which the supervisor reports as an exit).
-                WeightFiles::HfSnapshot | WeightFiles::SherpaDir => Vec::new(),
-            };
-            let serve = [
-                EngineArg("--alias".into()),
-                EngineArg(entry.id.0.clone()),
-                EngineArg("--host".into()),
-                EngineArg(socket_text.clone().into_owned()),
-            ];
-            (Vec::new(), files.into_iter().chain(serve).collect())
-        }
-        (EngineKind::SpeechHost, _) => (own(&["--model-dir"]), vec![path_arg(snapshot)]),
-        (EngineKind::KokoroFastApi, _) => (own(&["-m", "uvicorn", "api.src.main:app"]), Vec::new()),
-        (EngineKind::Strata, _) => (Vec::new(), Vec::new()),
-    };
+    let own = engine(profile.kind).command(&Launch {
+        entry,
+        weights: &profile.weights,
+        snapshot: &snapshot,
+        socket: &socket_text,
+    });
     let sized = match (&profile.context_arg, window.tokens(entry)) {
         (Some(ContextArg::Flag(flag)), Some(tokens)) => {
             vec![flag.clone(), EngineArg(tokens.0.to_string())]
         }
         _ => Vec::new(),
     };
-    UnitSpec {
-        program: paths.program(profile.kind).clone(),
-        args: front
+    let program = paths
+        .program(profile.kind)
+        .ok_or(MissingProgram { kind: profile.kind })?;
+    Ok(UnitSpec {
+        program: program.clone(),
+        args: own
+            .front
             .into_iter()
-            .chain(back)
+            .chain(own.back)
             .chain(listed)
             .chain(sized)
             .collect(),
@@ -245,49 +180,7 @@ pub fn command_with_window(
                 .saturating_add(entry.vram.weights.0)
                 .saturating_add(entry.vram.overhead.0)),
         },
-    }
+    })
 }
 
 const SOCKET_PLACEHOLDER: &str = "{socket}";
-
-/// One path component: the characters a repository or revision name is made of, nothing that
-/// could leave the directory it is joined to.
-fn component(text: &str) -> String {
-    text.chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect::<String>()
-        .trim_start_matches('.')
-        .to_owned()
-}
-
-/// A file name with any directory part dropped.
-fn file_name(name: &str) -> String {
-    component(name.rsplit(['/', '\\']).next().unwrap_or_default())
-}
-
-/// `<hf_cache>/models--<org>--<name>`: the cache's directory for one repository.
-fn repo_dir(hf_cache: &Path, source: &WeightSource) -> PathBuf {
-    // A hosted entry has no weights and no engine, so no unit is ever built for it; a directory
-    // that cannot exist keeps the function total.
-    let name = match source {
-        WeightSource::HuggingFace { repo, .. } => repo.0.as_str(),
-        WeightSource::Hosted => "hosted/none",
-    };
-    let parts: Vec<String> = name.split('/').map(component).collect();
-    hf_cache.join(format!("models--{}", parts.join("--")))
-}
-
-/// `<repo dir>/snapshots/<revision>`: one exact set of files.
-fn snapshot_dir(repo_dir: &Path, source: &WeightSource) -> PathBuf {
-    let revision = match source {
-        WeightSource::HuggingFace { revision, .. } => revision.0.as_str(),
-        WeightSource::Hosted => "none",
-    };
-    repo_dir.join("snapshots").join(component(revision))
-}

@@ -5,7 +5,6 @@
 
 use crate::host::{Arch, Backend};
 use crate::manifest::{Artifact, Delivery, PythonEnv, Row};
-use crate::release::{PackageManager, PackageSource, Releases, Unnumbered, Verified};
 use model_catalog::EngineKind;
 
 /// llama.cpp release b11669, the build of the project's stable v0.7.0 (its `nightly-tag.txt`
@@ -149,61 +148,6 @@ pub(crate) static ROWS: &[Row] = &[
         tree_seal: None,
     },
 ];
-
-/// The distro packages of each engine. A row is only ever offered on a release that was found
-/// to ship the package; the ones marked unverified were not checked down to the file list.
-pub fn packages(engine: EngineKind) -> &'static [PackageSource] {
-    match engine {
-        // Debian's `forky` and `sid` and Ubuntu's `resolute` (26.04) list it, and each package
-        // holds /usr/bin/llama-server (packages.debian.org, packages.ubuntu.com). Arch's
-        // `extra/llama-cpp` holds /usr/bin/llama-server (archlinux.org's file list). Fedora's
-        // `llama-cpp` is in releases 43 and rawhide (mdapi); its file list was not reachable.
-        EngineKind::LlamaServer => &[
-            PackageSource {
-                manager: PackageManager::Apt,
-                name: "llama.cpp-tools",
-                releases: Releases::From {
-                    id: "debian",
-                    version: (14, 0),
-                    unnumbered: Unnumbered::New,
-                },
-                verified: Verified::Yes,
-            },
-            PackageSource {
-                manager: PackageManager::Apt,
-                name: "llama.cpp-tools",
-                releases: Releases::From {
-                    id: "ubuntu",
-                    version: (26, 4),
-                    unnumbered: Unnumbered::Old,
-                },
-                verified: Verified::Yes,
-            },
-            PackageSource {
-                manager: PackageManager::Dnf,
-                name: "llama-cpp",
-                releases: Releases::From {
-                    id: "fedora",
-                    version: (43, 0),
-                    unnumbered: Unnumbered::Old,
-                },
-                verified: Verified::No,
-            },
-            PackageSource {
-                manager: PackageManager::Pacman,
-                name: "llama-cpp",
-                releases: Releases::Rolling { id: "arch" },
-                verified: Verified::Yes,
-            },
-        ],
-        // No distro packages vLLM or Strata (Arch's official repositories hold neither), and the
-        // speech engines are not fetched at all.
-        EngineKind::Vllm
-        | EngineKind::Strata
-        | EngineKind::SpeechHost
-        | EngineKind::KokoroFastApi => &[],
-    }
-}
 
 #[cfg(test)]
 mod tests {

@@ -9,6 +9,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+engine-spec = { workspace = true }
 model-catalog = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }

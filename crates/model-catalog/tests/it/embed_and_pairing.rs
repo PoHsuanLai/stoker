@@ -1,4 +1,5 @@
-//! The `embed` table (interface ask 98) and the llama-server weights pairing (ask 66).
+//! The `embed` table (interface ask 98). The llama-server weights pairing (ask 66) is checked by
+//! `engine_spec::check_entry`.
 
 use crate::support;
 
@@ -104,29 +105,6 @@ fn a_gguf_projector_is_optional_and_an_empty_name_is_one_spelling_of_none() {
         serde_json::to_string(&none).unwrap(),
         r#"{"kind":"gguf","v":{"model":"a.gguf"}}"#
     );
-}
-
-#[test]
-fn a_llama_server_profile_must_name_gguf_weights() {
-    let entry = parse_entry(EMBED_ONLY).unwrap();
-    assert!(matches!(entry.engines[0].weights, WeightFiles::Gguf { .. }));
-    for weights in [r#"{ kind = "hf_snapshot" }"#, r#"{ kind = "sherpa_dir" }"#] {
-        let bad = EMBED_ONLY.replace(
-            r#"{ kind = "gguf", v = { model = "nomic.gguf", mmproj = "" } }"#,
-            weights,
-        );
-        assert_eq!(
-            parse_entry(&bad),
-            Err(CatalogError::LlamaServerWithoutGguf),
-            "{weights}"
-        );
-    }
-    // vLLM keeps reading snapshots.
-    let vllm = EMBED_ONLY.replace("llama_server", "vllm").replace(
-        r#"{ kind = "gguf", v = { model = "nomic.gguf", mmproj = "" } }"#,
-        r#"{ kind = "hf_snapshot" }"#,
-    );
-    assert!(parse_entry(&vllm).is_ok());
 }
 
 #[test]

@@ -2,7 +2,8 @@
 //! its fixed path. Only the manifest names the package.
 
 use crate::progress::CancelToken;
-use engine_manifest::{Failure, PackageManager, PackageSource};
+use engine_manifest::Failure;
+use engine_spec::{PackageManager, PackageSource};
 use std::path::Path;
 use std::process::Stdio;
 use tokio::process::Command;

@@ -1,6 +1,7 @@
-//! Which distro this is and whether it packages an engine: the `os-release` file read for the
-//! few words a package choice needs. A package is only ever named for a release that was
-//! checked to ship it.
+//! Which distro this is: the `os-release` file read for the few words a package choice needs.
+//! Whether it ships a package is [`OsRelease::ships`]; the packages are `engine-spec`'s.
+
+use engine_spec::{PackageSource, Releases, Unnumbered};
 
 /// The words of `os-release` a package choice needs.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -40,100 +41,18 @@ impl OsRelease {
     }
 }
 
-/// The program that installs packages.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PackageManager {
-    /// Debian and Ubuntu.
-    Apt,
-    /// Fedora.
-    Dnf,
-    /// Arch.
-    Pacman,
-}
-
-impl PackageManager {
-    /// The program, by its fixed absolute path: nothing a caller or the environment names.
-    pub fn program(self) -> &'static str {
-        match self {
-            Self::Apt => "/usr/bin/apt-get",
-            Self::Dnf => "/usr/bin/dnf",
-            Self::Pacman => "/usr/bin/pacman",
-        }
-    }
-
-    /// The arguments before the package name: install without asking.
-    pub fn install_args(self) -> &'static [&'static str] {
-        match self {
-            Self::Apt => &["install", "-y"],
-            Self::Dnf => &["install", "-y"],
-            Self::Pacman => &["-S", "--noconfirm", "--needed"],
-        }
-    }
-}
-
-/// Which releases a package is known to be in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Releases {
-    /// Releases whose `ID` is this one, from this version on.
-    From {
-        /// `ID`.
-        id: &'static str,
-        /// The first release, (major, minor).
-        version: (u32, u32),
-        /// Whether a release with no version number (Debian testing) counts as new enough.
-        unnumbered: Unnumbered,
-    },
-    /// Any release whose `ID` or `ID_LIKE` is this one (a rolling distro and its derivatives).
-    Rolling {
-        /// `ID` or one word of `ID_LIKE`.
-        id: &'static str,
-    },
-}
-
-/// How a release with no `VERSION_ID` counts.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Unnumbered {
-    /// As new: Debian testing is ahead of every stable release.
-    New,
-    /// As old: no package can be promised.
-    Old,
-}
-
-/// One distro package that holds an engine, and the releases it was checked on.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PackageSource {
-    /// The manager that installs it.
-    pub manager: PackageManager,
-    /// The package's name.
-    pub name: &'static str,
-    /// Where it exists.
-    pub releases: Releases,
-    /// Whether the package's file list was checked to hold the engine's program at its usual
-    /// path. A row that is not is installed all the same and the program looked for after.
-    pub verified: Verified,
-}
-
-/// Whether a manifest row was checked against what it names.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Verified {
-    /// Checked on 2026-10-17 against the distro's own package listing.
-    Yes,
-    /// Not checked; see the row's comment.
-    No,
-}
-
-impl PackageSource {
-    /// Whether this package is known to exist on `release`.
-    pub fn exists_on(&self, release: &OsRelease) -> bool {
-        match self.releases {
-            Releases::Rolling { id } => release.id == id || release.like.iter().any(|l| l == id),
+impl OsRelease {
+    /// Whether `source` is known to exist on this release.
+    pub fn ships(&self, source: &PackageSource) -> bool {
+        match source.releases {
+            Releases::Rolling { id } => self.id == id || self.like.iter().any(|l| l == id),
             Releases::From {
                 id,
                 version,
                 unnumbered,
             } => {
-                release.id == id
-                    && match release.version {
+                self.id == id
+                    && match self.version {
                         Some(found) => found >= version,
                         None => unnumbered == Unnumbered::New,
                     }
@@ -145,6 +64,8 @@ impl PackageSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use engine_spec::PackageManager;
+    use engine_spec::Verified;
 
     const UBUNTU_24: &str = "NAME=\"Ubuntu\"\nID=ubuntu\nID_LIKE=debian\nVERSION_ID=\"24.04\"\n";
 
@@ -178,15 +99,13 @@ mod tests {
     #[test]
     fn a_versioned_package_exists_only_on_its_own_id_and_new_enough_releases() {
         let ubuntu_26 = from("ubuntu", (26, 4), Unnumbered::Old);
-        assert!(!ubuntu_26.exists_on(&OsRelease::parse(UBUNTU_24)));
-        assert!(ubuntu_26.exists_on(&OsRelease::parse("ID=ubuntu\nVERSION_ID=\"26.04\"\n")));
+        assert!(!OsRelease::parse(UBUNTU_24).ships(&ubuntu_26));
+        assert!(OsRelease::parse("ID=ubuntu\nVERSION_ID=\"26.04\"\n").ships(&ubuntu_26));
         // Ubuntu says it is like Debian; a Debian number means nothing for it.
         let debian_14 = from("debian", (14, 0), Unnumbered::New);
-        assert!(!debian_14.exists_on(&OsRelease::parse(UBUNTU_24)));
-        assert!(debian_14.exists_on(&OsRelease::parse("ID=debian\n")));
-        assert!(
-            !from("debian", (14, 0), Unnumbered::Old).exists_on(&OsRelease::parse("ID=debian\n"))
-        );
+        assert!(!OsRelease::parse(UBUNTU_24).ships(&debian_14));
+        assert!(OsRelease::parse("ID=debian\n").ships(&debian_14));
+        assert!(!OsRelease::parse("ID=debian\n").ships(&from("debian", (14, 0), Unnumbered::Old)));
     }
 
     #[test]
@@ -195,8 +114,8 @@ mod tests {
             releases: Releases::Rolling { id: "arch" },
             ..from("x", (0, 0), Unnumbered::Old)
         };
-        assert!(arch.exists_on(&OsRelease::parse("ID=arch\n")));
-        assert!(arch.exists_on(&OsRelease::parse("ID=manjaro\nID_LIKE=arch\n")));
-        assert!(!arch.exists_on(&OsRelease::parse(UBUNTU_24)));
+        assert!(OsRelease::parse("ID=arch\n").ships(&arch));
+        assert!(OsRelease::parse("ID=manjaro\nID_LIKE=arch\n").ships(&arch));
+        assert!(!OsRelease::parse(UBUNTU_24).ships(&arch));
     }
 }

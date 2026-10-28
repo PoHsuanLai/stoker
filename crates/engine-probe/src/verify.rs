@@ -15,7 +15,7 @@
 
 use crate::layout::{InstallDir, Record, Roots, Scope};
 use crate::seal::{SealError, file_digest, seal_of};
-use engine_manifest::{Delivery, Manifest, PythonEnv, Row, engine_slug};
+use engine_manifest::{Delivery, Manifest, PythonEnv, Row};
 use model_catalog::EngineKind;
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -57,7 +57,7 @@ impl Verifier {
         let row = self.manifest.row_in_dir(engine, &name).ok_or(changed)?;
         let dir = self.roots.dir(scope, row);
         let record = Record::read(&dir.record()).map_err(|_| changed)?;
-        let matches = record.engine == engine_slug(engine)
+        let matches = record.engine == engine_spec::engine(engine).disk_word()
             && record.version == row.version
             && record.backend == row.backend.slug();
         matches.then_some((row, dir, record)).ok_or(changed)
