@@ -42,6 +42,11 @@ LAYERS=(
   "model-http: P"
   "speech-host-client: C"
   "speech-host: C"
+  # The engines as data (engine-manifest), the reads of this computer (engine-probe) and the
+  # install (engine-install: downloads through model-http, child processes, the helper program).
+  "engine-manifest: P"
+  "engine-probe: C"
+  "engine-install: C"
   # Excluded from the workspace (they need a runtime outside the pinned block).
   "speech-vad-silero: C"
   "speech-host-sherpa: A"
@@ -88,6 +93,9 @@ EFFECTS="tokio hyper hyper-util rustls zbus zvariant reqwest ureq wayland-client
 AUDIO_DEVICES="pipewire libpulse-binding libpulse-simple-binding cpal"
 GPL_TTS="espeak-rs espeak-ng espeak-ng-sys piper-rs"
 IO_FORBIDDEN="zbus zvariant reqwest wayland-client wayland-backend reis atspi oo7 ort fastembed rusqlite notify cedar-policy rmcp"
+# engine-install fetches through model-http, so it reaches a runtime and an HTTP client; it never
+# reaches a bus, a compositor, a database or an inference runtime.
+IO_NO_BUS="zbus zvariant wayland-client wayland-backend reis atspi oo7 ort fastembed rusqlite notify cedar-policy rmcp"
 RULES=(
   "cua-action: $EFFECTS $PORTER"
   "vision-prep: $EFFECTS $PORTER image fast_image_resize"
@@ -107,6 +115,9 @@ RULES=(
   "speech-vad: $EFFECTS $PORTER $AUDIO_DEVICES $GPL_TTS"
   "speech-host-client: $IO_FORBIDDEN $PORTER $AUDIO_DEVICES $GPL_TTS"
   "speech-host: $EFFECTS $PORTER $AUDIO_DEVICES $GPL_TTS"
+  "engine-manifest: $EFFECTS $PORTER"
+  "engine-probe: $EFFECTS $PORTER"
+  "engine-install: $IO_NO_BUS $PORTER"
 )
 # The excluded crates may reach `ort` and `sherpa-onnx`, which is why they are excluded; they
 # reach no porter crate, no audio device crate and no GPL TTS stack.

@@ -375,6 +375,8 @@ fn response(status: u16, kind: BodyKind) -> ResponseHead {
         body: kind,
         retry_after: Some(WaitSeconds(3)),
         request_id: None,
+        location: None,
+        content_range: None,
     }
 }
 

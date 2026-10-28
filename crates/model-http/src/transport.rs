@@ -159,5 +159,7 @@ fn head_of(response: &Response) -> ResponseHead {
         body: BodyKind::of(&text(CONTENT_TYPE.as_str()).unwrap_or_default()),
         retry_after: text(RETRY_AFTER.as_str()).and_then(|v| WaitSeconds::from_header(&v)),
         request_id: text("x-request-id").and_then(|v| RequestId::new(v).ok()),
+        location: text("location"),
+        content_range: text("content-range"),
     }
 }

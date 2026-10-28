@@ -105,6 +105,13 @@ pub struct ResponseHead {
     pub body: BodyKind,
     pub retry_after: Option<WaitSeconds>,
     pub request_id: Option<RequestId>,
+    /// `Location`, for a client that follows a redirect itself (a download: the transport never
+    /// follows one). Cassettes written before the field existed read it as `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<String>,
+    /// `Content-Range`, for a client that resumes a download and must see where the bytes start.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_range: Option<String>,
 }
 
 /// A duration in milliseconds.

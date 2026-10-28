@@ -19,6 +19,9 @@ members = [
   "crates/speech-vad",
   "crates/speech-host-client",
   "crates/speech-host",
+  "crates/engine-manifest",
+  "crates/engine-probe",
+  "crates/engine-install",
 ]
 # Skeletons that need an inference runtime outside the pinned block. They are built on their own
 # (`cargo build --manifest-path crates/<name>/Cargo.toml`), the way almanac excludes
@@ -56,6 +59,9 @@ speech-provider     = { path = "crates/speech-provider" }
 speech-vad          = { path = "crates/speech-vad" }
 speech-host-client  = { path = "crates/speech-host-client" }
 speech-host         = { path = "crates/speech-host" }
+engine-manifest     = { path = "crates/engine-manifest" }
+engine-probe        = { path = "crates/engine-probe" }
+engine-install      = { path = "crates/engine-install" }
 
 # From quire's pinned block (`docs/workspace-deps.toml`) and the adopted lines of SPEC.md 1.4,
 # copied verbatim: only the lines stoker names itself.
@@ -86,6 +92,20 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "logging", "tls12"] }
 rustls-pki-types = "1"
 rcgen = { version = "0.13", default-features = false, features = ["ring", "pem"] }
+
+# engine-manifest and engine-probe: the SHA-256 of a file and of a tree seal (as porter pinned it).
+sha2 = "0.10"
+# engine-install unpacks the pinned engine archives (`tar.gz`) in process instead of running the
+# system's `tar` (both MIT OR Apache-2.0). flate2 is already in Cargo.lock through png; tar's
+# `xattr` default is off, nothing reads extended attributes.
+flate2 = "1.1.10"
+tar = { version = "0.4.46", default-features = false }
+# engine-install: free space on the file system holding an install (statvfs).
+rustix = { version = "1.1", default-features = false, features = ["std", "fs"] }
+# engine-install's `PinnedUrl` (https only) is parsed with url (already in Cargo.lock through reqwest).
+url = "2"
+# Scratch directories for tests.
+tempfile = "3"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

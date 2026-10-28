@@ -2,6 +2,25 @@
 
 Open items and standing facts. An entry names the condition that closes it.
 
+## Engine crates moved from porter (T1.1, T1.2; 2026-10-28)
+
+`engine-manifest` (pure), `engine-probe` and `engine-install` are `porter-engines` and
+`porter-engines-install` at porter `f0539103`, split by the layer rule. Changes callers must know:
+
+- `EngineId` is gone; the engine is `model_catalog::EngineKind`, and `EngineId::LlamaCpp` is
+  `EngineKind::LlamaServer`. Its slug is the serde one, so the install directory, the record's
+  `engine` field, the helper's argument and the bus word for llama.cpp are `llama_server`, not
+  `llama_cpp` (`vllm` and `strata` are unchanged). An install made under `llama_cpp/` is not found
+  until it is moved or reinstalled.
+- `Fetcher` runs on `model-http` (`client` and `tls` features); `Fetcher::new` takes `TlsRoots`.
+  `ResponseHead` gained `location` and `content_range` (skipped in JSON when absent) because a
+  download follows its own redirects and checks where a resumed range starts. The request carries
+  `Accept: application/json` (the `Framing::Whole` header) and no `User-Agent`.
+- `HelperProgram::system()` is gone: the caller passes the `pkexec` path and the helper's path.
+  The polkit policy file keeps naming the helper's path, so the installer keeps the two in step.
+- `Roots::SYSTEM` (`/usr/local/lib/porter/engines`) and the `porter/engines` folder under the data
+  home in `Roots::standard` are unchanged; a neutral name is a later change with a migration.
+
 ## Simplification by the new type rules (2026-10-28)
 
 Lane `esto` made the code match CONVENTIONS rules 11 to 14 (the old "no bool, never `dyn`" rules went).

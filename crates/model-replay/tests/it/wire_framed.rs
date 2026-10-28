@@ -43,6 +43,8 @@ impl Transport for Server {
             body: self.kind,
             retry_after: None,
             request_id: None,
+            location: None,
+            content_range: None,
         };
         let mut flow = sink.head(&head);
         for chunk in &self.chunks {

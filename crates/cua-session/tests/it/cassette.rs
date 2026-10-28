@@ -44,6 +44,8 @@ impl Transport for Canned {
             body: BodyKind::EventStream,
             retry_after: None,
             request_id: None,
+            location: None,
+            content_range: None,
         });
         for chunk in body.as_bytes().chunks(11) {
             if flow == ChunkFlow::Stop {

@@ -27,6 +27,9 @@ trait), section 6 (copy the recipe).
 | `model-catalog` | `ModelEntry` (`family`, `cold_start_estimate_s`, `Capabilities`: `Modality` inputs and outputs with the detail tables `text_out`, `image_in`, `audio_in`, `audio_out`, `vector_out`, `actions_out`), `EngineProfile` (may narrow inputs and outputs; `context_arg: ContextArg` says how the engine takes its window), `TextOut` (`context`/`max_output` are what one engine line serves; `context_max`, `max_output_max`, `context_min` are the model's own limits, all optional), `Locality` (`OnDevice`, or `Remote { reach }` with `Reach { provider, model, wire }` (no prices)), `Slot`, `fits`, `slot_members`, `reachable`, `parse_entry`, `merge_catalogs`; the shipped `catalog/*.toml`. The older view (`roles`, `caps`, `sampling`, `speech`, `embed`) is derived and deprecated: use `Slot` | none |
 | `engine-supervisor` | the pure `step` and `budget`; `command` and `command_with_window` (catalog entry and a `Window`, the served one or a chosen one, to `UnitSpec`); the seams `EngineHost`, `ReadyProbe`, `GpuProbe`; feature `testing`: fakes | none; the daemon fills the seams |
 | `model-http` | `HttpEndpoint` (with `Timeouts` and `ExtraHeader`s), `HttpTarget` (Tcp, Unix, Tls), `AuthHeader`, the pure `SseDecoder` and `NdjsonDecoder`, `ResponseHead`, `BodySink` (head, then chunks), `Exchange`, the `Transport` seam, `Upload` and `UploadTransport` (a POST of bytes), and `HttpClient: Transport + UploadTransport` (reqwest over TCP and Unix sockets, behind the `client` feature; TLS to a `Tls` target behind `tls`, with `TlsRoots` choosing the roots) | yes (the transport) |
+| `engine-manifest` | the engines as data: `Manifest` (pinned `Row`s by `EngineKind`, `Arch` and `Backend`: `Artifact`s with hashes and sizes, `Delivery`, `PythonEnv` and its lock, the tree seal), `Host` (`Arch`, `Gpus`, `OsRelease`, `BackendChoice`), `preference`, `packages` and `PackageSource`, `Failure` (the codes of an install), `TreeSeal` and `SealLine` (the seal's line format; `tools/seal.py` pins the rows with it), `engine_slug` and `engine_from_slug` (the serde slug of an `EngineKind` in a directory, a record and a helper's arguments) | none |
+| `engine-probe` | reading this computer for the manifest: `read_host`, `read_gpus` (the kernel's files and `os-release` under a given root), `Roots`, `InstallDir`, `Record` (where installs live and what one leaves), `Finder` (which engine is here, never running it), `Verifier` (the seal check before a person's own install starts), `seal_of`, `file_digest`, `entry_digests`. Every path and root is an argument | reads files |
+| `engine-install` | getting an engine from the manifest: `Fetcher` (an `https` download over `model-http`'s `HttpClient` that resumes, follows redirects as `PinnedUrl`s, can be stopped, is counted and kept only if its size and hash are the pinned ones), `Installer` (space checked, unpacked in process by `tar` and `flate2`, sealed, renamed into place whole; or a Python environment filled by the pinned `uv` from a hashed lock), `install_package`, `EngineInstalls` (the jobs a program offers and follows), `install_for_everyone` and `HelperProgram` (the caller names `pkexec` and the helper by path), and the `helper` module with the `engine-helper` program (`install <engine> <backend>`, nothing else) | HTTPS, files, child processes |
 | `model-wire` | the wire half of an endpoint: `ChatCodec`, `ChatDecoder`, `EmbedCodec`, `ErrorWire`, `CodecError`, and `Driver<C, T>`, the `Provider` (and `Embedder`) made of a codec and a transport | none (pure over the `Transport` trait) |
 | `model-extract` | structured extraction as a pure machine: `choose` (native constraint, synthetic tool call or prompted), `ExtractSession`, `Extracted`, `ExtractFailure` | none |
 | `genai-names` | the OpenTelemetry GenAI attribute, metric, operation and finish-reason names as constants; zero dependencies; no content attribute exists | none |
@@ -40,8 +43,8 @@ trait), section 6 (copy the recipe).
 `scripts/check-boundary.sh` holds a LAYERS table: every crate is **P** (pure: no `std::fs`/`env`/`process`/`net`,
 no clock reads, no sleeps, no `tokio`, `hyper`, `reqwest`, `zbus` or `rustix`, no UI words), **C** (client/IO: may
 do IO, no `Label`, `Help`, `Sheet` or `SettingRow`) or **A** (wiring). A crate depends on its own tier or below.
-Today every crate is P except `speech-host-client`, `speech-host` and `speech-vad-silero` (C) and
-`speech-host-sherpa` (A). `model-http` is P with KNOWN rows: its feature-gated reqwest client (reqwest and tokio in
+Today every crate is P except `engine-probe`, `engine-install`, `speech-host-client`, `speech-host` and
+`speech-vad-silero` (C) and `speech-host-sherpa` (A). `model-http` is P with KNOWN rows: its feature-gated reqwest client (reqwest and tokio in
 the source) is the one violation, removed when the client moves to its own crate (plan lane T1.2). `--self-test` seeds a `std::fs` call in a P crate and
 checks the script fails; `--long-files` reports source files over 500 lines.
 
@@ -60,6 +63,9 @@ The direct edges in use (documentation; dev-dependencies are outside it):
 | `model-replay` | `model-http`, `model-provider`, `speech-provider`, `vision-prep` |
 | `model-catalog` | `model-provider`, `speech-provider` |
 | `engine-supervisor` | `model-catalog` |
+| `engine-manifest` | `model-catalog` |
+| `engine-probe` | `engine-manifest`, `model-catalog` |
+| `engine-install` | `engine-manifest`, `engine-probe`, `model-catalog`, `model-http` (features `client`, `tls`) |
 | `model-openai-compat` | `model-http`, `model-provider`, `model-wire`, `speech-provider` |
 | `speech-provider` | `model-provider` |
 | `speech-vad` | `speech-provider` |
@@ -75,7 +81,9 @@ only through `pixels`. `model-wire`, `model-extract` and `model-openai-compat` a
 reach no HTTP stack and no runtime: `HttpClient`'s reqwest transport sits behind `model-http`'s
 `client` feature, which only a daemon (or a loopback test) turns on, and their rows keep checking
 default features. `model-http`
-never reaches the second half of that list (a bus, a compositor, a database, an inference runtime). No crate reaches a `porter-*` crate. No speech
+never reaches the second half of that list (a bus, a compositor, a database, an inference runtime);
+`engine-install` reaches a runtime and an HTTP client through it and nothing of that second half, and `engine-manifest` and
+`engine-probe` reach neither. No crate reaches a `porter-*` crate. No speech
 crate reaches an audio device crate (`pipewire`, `libpulse-binding`, `libpulse-simple-binding`,
 `cpal`: capture and playback belong to docket's `voiced`) or a TTS stack with a GPL grapheme
 step (`espeak-rs`, `espeak-ng`, `espeak-ng-sys`, `piper-rs`): text to speech is a separate engine
@@ -102,6 +110,9 @@ stoker.
 | `model-replay` | `print` < `cassette` < `sequence` < `provider`, `speech`, `wire` |
 | `model-catalog` | `modality`, `engine` < `capabilities` < `slot`, `view` < `entry` < `reach`, `file`, `check`, `legacy` < `parse` |
 | `engine-supervisor` | `state` < `unit`, `budget` < `step` < `host` < `fakes` (feature `testing`) |
+| `engine-manifest` | `engine`, `host`, `release`, `failure`, `seal` < `manifest` < `rows` |
+| `engine-probe` | `seal`, `host` < `layout` < `found`, `verify` |
+| `engine-install` | `progress`, `space`, `pinned_url`, `extract` < `fetch` < `installer` < `pyenv`, `package` < `elevated`, `helper` < `jobs` |
 | `model-http` | `target`, `auth`, `head` < `sse`, `ndjson` < `client` < `exchange` < `request`, `connect` < `transport` (feature `client`) |
 | `model-wire` | `codec` < `driver` |
 | `model-extract` | `mode` < `session` < `shaped` |
@@ -137,7 +148,13 @@ stoker.
 | engine lifecycle and the VRAM budget | `engine-supervisor::step`, `budget` (the only place) |
 | the SSE framing | `model-http::SseDecoder` |
 | the NDJSON framing | `model-http::NdjsonDecoder` |
-| a response's status and the few headers a codec reads | `model-http::ResponseHead` (delivered by `BodySink::head` before any chunk) |
+| a response's status and the few headers a codec reads (`Location` and `Content-Range` for a download) | `model-http::ResponseHead` (delivered by `BodySink::head` before any chunk) |
+| the pinned engine builds, their hashes, the distro packages | `engine-manifest::Manifest`, `packages` |
+| an engine's slug on disk, in a record and in the helper's arguments | `engine-manifest::engine_slug`, `engine_from_slug` (the serde slug of `EngineKind`) |
+| the tree seal's text | `engine-manifest::SealLine`, `TreeSeal` (made on disk by `engine-probe::seal_of`; pinned by `tools/seal.py`) |
+| where engine installs live, the record, which engine is here | `engine-probe::Roots`, `Record`, `Finder` |
+| downloading, unpacking and sealing an engine install | `engine-install::Installer`, `Fetcher` (the only place) |
+| the address a download may follow | `engine-install::PinnedUrl` (`https` with a host) |
 | delivery of one exchange (TCP, Unix, TLS, in process, record, replay) | `model-http::Transport` |
 | a wire's request, reply and error format | `model-wire::{ChatCodec, EmbedCodec}`; the OpenAI-compatible one is `model-openai-compat::OpenAiCodec` |
 | what differs between OpenAI-compatible servers | `model-openai-compat::Server` (picked by `Flavor`) |
@@ -285,6 +302,7 @@ on; a change is an edit of SPEC.md first. Every `todo!()` is listed in `FINDINGS
 | `model-catalog`: types, `parse_entry`, `merge_catalogs`, `VramEstimate::need`, `gpu_need`, `SamplingDefaults`, `holo-3.1-4b`, the five speech entries, `Modality`, `Capabilities::on_engine`, `Slot`, `fits`, `slot_members`, `reachable`, the eight hosted entries (Claude, Gemini, Kimi, GPT), older-shape files | built, tested |
 | `engine-supervisor`: types, `Supervisor::new`, config defaults, fakes, `step`, `budget`, `command` | built, tested (the lifecycle table, the budget table with the in-turn window, `command` for vLLM, llama-server, the speech host and Kokoro) |
 | `model-http`: types, `ResponseHead`, `BodySink::head`, `Exchange`, `Transport`, `Timeouts`, `ExtraHeader`, `HttpError`, the SSE and NDJSON decoders, `Transport for HttpClient` (feature `client`) | built; round-trip, pinned-JSON, proptest and loopback-socket tested (TLS is feature `tls`, tested against a scratch CA on loopback; the egress proxy answers `Connect`) |
+| `engine-manifest`, `engine-probe`, `engine-install`: moved from porter's `porter-engines` and `porter-engines-install` (porter `f0539103`) | built, tested (the rows, the seal against `tools/seal.py`'s vector, the Finder and Verifier on scratch directories, the fetcher, installer, jobs and helper against a loopback `https` host with a scratch CA); porter, detent and the installer scripts still use their own copies until they move over |
 | `model-wire`: `ChatCodec`, `ChatDecoder`, `EmbedCodec`, `ErrorWire`, `CodecError`, `Driver` | built, tested with a scripted transport and a line codec (head decides, framer, decoder fault, Retry-After, stop, every transport failure, embed checks) |
 | `model-extract`: `ExtractMode`, `ToolsPresent`, `ExtractSession`, `Extracted`, `ExtractFailure`, `choose`, `request`, `absorb` | built, tested |
 | `genai-names`: every name, `Operation`, `Finish` | built, tested (names are values, so there is no stub) |

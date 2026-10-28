@@ -34,6 +34,8 @@ pub fn head(status: u16, body: BodyKind) -> ResponseHead {
         body,
         retry_after: None,
         request_id: None,
+        location: None,
+        content_range: None,
     }
 }
 

@@ -1,0 +1,17 @@
+[package]
+name = "engine-manifest"
+description = "The engines that run models on this computer (llama.cpp, vLLM, Strata) as data: a pinned manifest of what to download for which hardware, the host value that picks a row, the distro packages, the tree seal's line format and the failure codes of an install. Pure: no disk, no network, no runtime."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+model-catalog = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+
+[lints]
+workspace = true

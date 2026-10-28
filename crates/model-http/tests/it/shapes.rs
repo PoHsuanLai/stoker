@@ -107,6 +107,8 @@ fn a_response_head_round_trips_with_pinned_json() {
         body: BodyKind::Json,
         retry_after: Some(WaitSeconds(7)),
         request_id: Some(RequestId::new("req_01HX").unwrap()),
+        location: None,
+        content_range: None,
     };
     let json = serde_json::to_string(&head).unwrap();
     assert_eq!(
@@ -114,6 +116,23 @@ fn a_response_head_round_trips_with_pinned_json() {
         r#"{"status":429,"body":"json","retry_after":7,"request_id":"req_01HX"}"#
     );
     assert_eq!(serde_json::from_str::<ResponseHead>(&json).unwrap(), head);
+}
+
+#[test]
+fn a_redirect_head_keeps_its_location_and_older_json_reads_without_it() {
+    let head = ResponseHead {
+        status: HttpStatus(206),
+        body: BodyKind::Other,
+        retry_after: None,
+        request_id: None,
+        location: Some("https://b.example/x".to_owned()),
+        content_range: Some("bytes 5-9/10".to_owned()),
+    };
+    let json = serde_json::to_string(&head).unwrap();
+    assert_eq!(serde_json::from_str::<ResponseHead>(&json).unwrap(), head);
+    let older = r#"{"status":200,"body":"json","retry_after":null,"request_id":null}"#;
+    let read = serde_json::from_str::<ResponseHead>(older).unwrap();
+    assert_eq!((read.location, read.content_range), (None, None));
 }
 
 #[test]
@@ -230,6 +249,8 @@ fn a_sink_sees_the_head_before_a_chunk() {
         body: BodyKind::EventStream,
         retry_after: None,
         request_id: None,
+        location: None,
+        content_range: None,
     };
     assert_eq!(sink.head(&head), ChunkFlow::Continue);
     assert_eq!(sink.chunk(b"data: x"), ChunkFlow::Stop);

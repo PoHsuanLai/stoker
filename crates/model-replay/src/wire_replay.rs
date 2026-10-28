@@ -117,6 +117,8 @@ fn deliver<K: BodySink>(
         body: reply.head.body,
         retry_after: reply.head.retry_after,
         request_id: None,
+        location: None,
+        content_range: None,
     };
     if sink.head(&head) == ChunkFlow::Stop {
         return finish(head.status, WireEnd::Complete);

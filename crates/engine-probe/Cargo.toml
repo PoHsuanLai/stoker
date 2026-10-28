@@ -1,0 +1,23 @@
+[package]
+name = "engine-probe"
+description = "Reads this computer for the engine manifest: the graphics cards and the distro, where installs live and the record each leaves, which engine is already here, and the seal check before a person's own install starts. Reads files and never runs what it finds; every path and root is passed in."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+engine-manifest = { workspace = true }
+model-catalog = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

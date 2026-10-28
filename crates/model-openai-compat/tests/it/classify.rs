@@ -11,6 +11,8 @@ fn head(status: u16, body: BodyKind, retry_after: Option<u32>) -> ResponseHead {
         body,
         retry_after: retry_after.map(WaitSeconds),
         request_id: None,
+        location: None,
+        content_range: None,
     }
 }
 

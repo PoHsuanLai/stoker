@@ -127,7 +127,7 @@ proptest! {
         let _ = decode_transcription(&body);
         for status in [200, 400, 429, 500] {
             for kind in [BodyKind::Json, BodyKind::Html] {
-                let head = ResponseHead { status: HttpStatus(status), body: kind, retry_after: None, request_id: None };
+                let head = ResponseHead { status: HttpStatus(status), body: kind, retry_after: None, request_id: None, location: None, content_range: None };
                 let _ = codec.classify(&head, &body);
             }
         }
